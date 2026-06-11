@@ -268,17 +268,22 @@ router.post('/chat/abort', async (req, res) => {
     // CRITICAL: Save partial response BEFORE returning to prevent race condition.
     // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
     // responseMessageId is generated at job creation and is stable across the entire lifecycle.
+    // For legacy jobs without responseMessageId, we derive one from the streamId/userMessage
+    // so saveMessage can still do an idempotent upsert (no temp ID regex fallback needed).
     if (
       abortResult.success &&
       abortResult.jobData?.userMessage?.messageId &&
-      abortResult.jobData?.responseMessageId &&
       hasPersistableAbortContent(abortResult.content)
     ) {
       const { jobData, content, text } = abortResult;
       const userMessageId = jobData.userMessage.messageId;
 
+      // Use stable responseMessageId from job metadata if available (new jobs).
+      // Fall back to streamId for legacy jobs — it's also unique and stable per job.
+      const responseMessageId = jobData.responseMessageId || jobStreamId;
+
       const responseMessage = {
-        messageId: jobData.responseMessageId,
+        messageId: responseMessageId,
         parentMessageId: userMessageId,
         conversationId: jobData.conversationId,
         content: content || [],
@@ -294,7 +299,7 @@ router.post('/chat/abort', async (req, res) => {
       };
 
       logger.debug(
-        `[AgentStream] Abort saving with stable ID ${jobData.responseMessageId} for ${jobStreamId}`,
+        `[AgentStream] Abort saving with ID ${responseMessageId} (stable: ${!!jobData.responseMessageId}) for ${jobStreamId}`,
       );
 
       try {

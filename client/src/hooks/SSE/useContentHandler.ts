@@ -33,6 +33,24 @@ export default function useContentHandler({ setMessages, getMessages }: TUseCont
     messageMap.clear();
   }, [messageMap]);
 
+  /**
+   * Atomically migrate a message ID in the content handler's internal map.
+   * Used when a temporary optimistic ID is replaced by a stable server-generated ID.
+   */
+  const migrateMessageId = useCallback(
+    (oldId: string, newId: string) => {
+      if (oldId === newId) {
+        return;
+      }
+      const entry = messageMap.get(oldId);
+      if (entry) {
+        messageMap.set(newId, { ...entry, messageId: newId });
+        messageMap.delete(oldId);
+      }
+    },
+    [messageMap],
+  );
+
   const handler = useCallback(
     ({ data, submission }: TContentHandler) => {
       const { type, messageId, thread_id, conversationId, index } = data;
@@ -92,5 +110,5 @@ export default function useContentHandler({ setMessages, getMessages }: TUseCont
     [queryClient, getMessages, messageMap, setMessages],
   );
 
-  return { contentHandler: handler, resetContentHandler: resetMessageMap };
+  return { contentHandler: handler, resetContentHandler: resetMessageMap, migrateContentMessageId: migrateMessageId };
 }

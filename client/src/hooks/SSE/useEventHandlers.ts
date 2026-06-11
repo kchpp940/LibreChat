@@ -344,14 +344,39 @@ export default function useEventHandlers({
   const { conversationId: paramId } = useParams();
   const { token } = useAuthContext();
 
-  const { contentHandler, resetContentHandler } = useContentHandler({ setMessages, getMessages });
-  const { stepHandler, clearStepMaps, resetSubagentAtoms, syncStepMessage } = useStepHandler({
+  const { contentHandler, resetContentHandler, migrateContentMessageId } = useContentHandler({
+    setMessages,
+    getMessages,
+  });
+  const {
+    stepHandler,
+    clearStepMaps,
+    resetSubagentAtoms,
+    syncStepMessage,
+    migrateStepMessageId,
+  } = useStepHandler({
     setMessages,
     getMessages,
     announcePolite,
     setIsSubmitting,
     lastAnnouncementTimeRef,
   });
+
+  /**
+   * Atomically migrate a message ID across all internal handler maps.
+   * Used when a temporary optimistic ID is replaced by a stable server-generated ID.
+   * Call this alongside any cache / state updates to keep everything in sync.
+   */
+  const migrateMessageId = useCallback(
+    (oldId: string, newId: string) => {
+      if (oldId === newId) {
+        return;
+      }
+      migrateContentMessageId(oldId, newId);
+      migrateStepMessageId(oldId, newId);
+    },
+    [migrateContentMessageId, migrateStepMessageId],
+  );
   const attachmentHandler = useAttachmentHandler(queryClient);
 
   /** Wipe the per-subagent Recoil atoms on conversation navigation.
@@ -1170,5 +1195,6 @@ export default function useEventHandlers({
     attachmentHandler,
     abortConversation,
     resetContentHandler,
+    migrateMessageId,
   };
 }
