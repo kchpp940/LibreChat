@@ -90,6 +90,12 @@ export interface AnthropicConfigOptions {
   vertexOptions?: VertexAIClientOptions;
   /** Full Vertex AI configuration including model mappings from YAML config */
   vertexConfig?: TVertexAISchema;
+  /** Resolved endpoint type for unified parameter filtering */
+  resolvedType?: import('librechat-data-provider').ResolvedEndpointType | null;
+  /** Custom parameter definitions from endpoint config */
+  paramDefinitions?: Partial<import('librechat-data-provider').SettingDefinition>[] | null;
+  /** defaultParamsEndpoint value from custom endpoint config */
+  defaultParamsEndpoint?: string | null;
 }
 
 /**

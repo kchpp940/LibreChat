@@ -7,7 +7,11 @@ import {
   removeNullishValues,
   ThinkingDisplay,
   AuthKeys,
+  resolveParamFilter,
+  ResolvedEndpointType,
+  getClientParamKeys,
 } from 'librechat-data-provider';
+import type { SettingDefinition } from 'librechat-data-provider';
 import type {
   AnthropicLLMConfigResult,
   AnthropicConfigOptions,
@@ -93,6 +97,19 @@ function getLLMConfig(
   credentials: string | AnthropicCredentials | undefined,
   options: AnthropicConfigOptions = {},
 ): AnthropicLLMConfigResult {
+  const paramFilter = resolveParamFilter({
+    resolvedType: options.resolvedType ?? ResolvedEndpointType.ANTHROPIC,
+    defaultParamsEndpoint: options.defaultParamsEndpoint,
+    paramDefinitions: options.paramDefinitions,
+    addParams: options.addParams,
+    dropParams: options.dropParams,
+  });
+
+  const clientKeys = new Set([
+    ...knownAnthropicParams,
+    ...getClientParamKeys(paramFilter.resolvedType),
+  ]);
+
   /**
    * Persisted agent `model_parameters` may round-trip `thinking` as the full
    * Anthropic object `{ type: 'adaptive', display: 'omitted' }` rather than a
@@ -250,7 +267,7 @@ function getLLMConfig(
         continue;
       }
 
-      if (knownAnthropicParams.has(key)) {
+      if (clientKeys.has(key)) {
         /** Route known Anthropic params to requestOptions only if undefined */
         applyDefaultParams(requestOptions as Record<string, unknown>, { [key]: value });
       }
@@ -269,7 +286,7 @@ function getLLMConfig(
         continue;
       }
 
-      if (knownAnthropicParams.has(key)) {
+      if (clientKeys.has(key)) {
         /** Route known Anthropic params to requestOptions */
         (requestOptions as Record<string, unknown>)[key] = value;
       }

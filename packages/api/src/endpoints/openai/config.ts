@@ -4,7 +4,7 @@ import {
   KnownEndpoints,
   EModelEndpoint,
   ReasoningParameterFormat,
-  resolveEndpointType,
+  resolveParamEndpointType,
   ResolvedEndpointType,
 } from 'librechat-data-provider';
 import type * as t from '~/types';
@@ -102,7 +102,7 @@ export function getOpenAIConfig(
   let llmConfig: t.OAIClientOptions;
   let tools: t.LLMConfigResult['tools'];
 
-  const resolvedType = resolveEndpointType(options.customParams?.defaultParamsEndpoint);
+  const resolvedType = resolveParamEndpointType(options.customParams?.defaultParamsEndpoint) ?? null;
   const isAnthropic = resolvedType === ResolvedEndpointType.ANTHROPIC;
   const isGoogle = resolvedType === ResolvedEndpointType.GOOGLE;
   const isOpenRouter =
@@ -133,6 +133,9 @@ export function getOpenAIConfig(
       addParams,
       dropParams,
       defaultParams,
+      resolvedType,
+      paramDefinitions: options.customParams?.paramDefinitions,
+      defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
     });
     /** Transform handles addParams/dropParams - it knows about OpenAI params */
     const transformed = transformToOpenAIConfig({
@@ -160,6 +163,9 @@ export function getOpenAIConfig(
         addParams,
         dropParams,
         defaultParams,
+        resolvedType,
+        paramDefinitions: options.customParams?.paramDefinitions,
+        defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
       },
       true,
     );

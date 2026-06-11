@@ -26,6 +26,9 @@ import {
   extractParamDefinitionKeys,
   getBaseParamKeys,
   type ResolvedParamFilter,
+  sanitizeModelParams,
+  mergeSanitizedParams,
+  type ParamFilterConfig,
 } from './paramFilter';
 
 type EndpointSchema =
@@ -92,7 +95,7 @@ export function resolveSchemaLookupKey(
   return bedrockProviderToSchema[defaultParamsEndpoint];
 }
 
-export function resolveEndpointType(defaultParamsEndpoint?: string | null): ResolvedEndpointType | undefined {
+export function resolveParamEndpointType(defaultParamsEndpoint?: string | null): ResolvedEndpointType | undefined {
   const schemaKey = resolveSchemaLookupKey(defaultParamsEndpoint);
   if (!schemaKey) {
     return undefined;
@@ -432,54 +435,34 @@ export const parseCompactConvo = ({
     throw new Error(`Unknown endpointType: ${endpointType}`);
   }
 
-  const resolvedType = resolveEndpointType(defaultParamsEndpoint ?? null) ??
-    (endpointType && resolveEndpointType(endpointType));
+  const resolvedType = resolveParamEndpointType(defaultParamsEndpoint ?? null) ??
+    (endpointType && resolveParamEndpointType(endpointType));
 
-  const filter = resolveParamFilter({
+  const filterConfig: ParamFilterConfig = {
     resolvedType,
     defaultParamsEndpoint,
     paramDefinitions,
     addParams,
     dropParams,
-  });
+  };
 
-  // Strip iconURL from input before parsing - it should only be derived server-side
-  // from model spec configuration, not accepted from client requests
   const { iconURL: _clientIconURL, ...conversationWithoutIconURL } = conversation;
 
-  const rawFields: Record<string, unknown> = { ...conversationWithoutIconURL };
-  const convo = schema.parse(conversationWithoutIconURL) as s.TConversation | null;
+  const sanitized = sanitizeModelParams({
+    rawParams: conversationWithoutIconURL as Record<string, unknown>,
+    schema: schema as any,
+    filterConfig,
+  });
+
+  if (sanitized.parseErrors) {
+    throw sanitized.parseErrors;
+  }
+
+  const convo = mergeSanitizedParams(sanitized) as s.TConversation;
   const { models } = possibleValues ?? {};
 
   if (models && convo) {
     convo.model = getFirstDefinedValue(models) ?? convo.model;
-  }
-
-  if (convo) {
-    const convoRecord = convo as Record<string, unknown>;
-    for (const key of filter.customKeys) {
-      if (filter.droppedKeys.has(key)) {
-        continue;
-      }
-      if (key in rawFields && !(key in convoRecord)) {
-        convoRecord[key] = rawFields[key];
-      }
-    }
-    if (addParams && typeof addParams === 'object') {
-      for (const [key, value] of Object.entries(addParams)) {
-        if (filter.droppedKeys.has(key)) {
-          continue;
-        }
-        convoRecord[key] = value;
-      }
-    }
-    if (dropParams && Array.isArray(dropParams)) {
-      for (const key of dropParams) {
-        if (key in convoRecord) {
-          delete convoRecord[key];
-        }
-      }
-    }
   }
 
   return convo;
