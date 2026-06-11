@@ -140,6 +140,7 @@ export function getOpenAIConfig(
       dropParams,
       llmConfig: anthropicResult.llmConfig,
       fromEndpoint: EModelEndpoint.anthropic,
+      resolvedType,
     });
     llmConfig = transformed.llmConfig;
     tools = anthropicResult.tools;
@@ -170,6 +171,7 @@ export function getOpenAIConfig(
       tools: googleResult.tools,
       llmConfig: googleResult.llmConfig,
       fromEndpoint: EModelEndpoint.google,
+      resolvedType,
     });
     llmConfig = transformed.llmConfig;
     tools = transformed.tools;
@@ -185,6 +187,9 @@ export function getOpenAIConfig(
       defaultParams,
       modelOptions,
       useOpenRouter,
+      resolvedType,
+      paramDefinitions: options.customParams?.paramDefinitions,
+      defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
       reasoningFormat: getReasoningFormat({
         customFormat: options.customParams?.reasoningFormat,
         isVercel: Boolean(isVercel),

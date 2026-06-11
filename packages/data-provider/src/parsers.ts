@@ -4,6 +4,7 @@ import type * as a from './types/assistants';
 import type * as s from './schemas';
 import type * as t from './types';
 import { ContentTypes } from './types/runs';
+import type { SettingDefinition } from './generate';
 import {
   openAISchema,
   openRouterSchema,
@@ -20,6 +21,12 @@ import {
 } from './schemas';
 import { bedrockInputSchema } from './bedrock';
 import { alternateName } from './config';
+import {
+  resolveParamFilter,
+  extractParamDefinitionKeys,
+  getBaseParamKeys,
+  type ResolvedParamFilter,
+} from './paramFilter';
 
 type EndpointSchema =
   | typeof openAISchema
@@ -394,12 +401,18 @@ export const parseCompactConvo = ({
   conversation,
   possibleValues,
   defaultParamsEndpoint,
+  paramDefinitions,
+  addParams,
+  dropParams,
 }: {
   endpoint?: EndpointSchemaKey;
   endpointType?: EndpointSchemaKey | null;
   conversation: Partial<s.TConversation | s.TPreset>;
   possibleValues?: TPossibleValues;
   defaultParamsEndpoint?: string | null;
+  paramDefinitions?: Partial<SettingDefinition>[] | null;
+  addParams?: Record<string, unknown> | null;
+  dropParams?: string[] | null;
 }): Omit<s.TConversation, 'iconURL'> | null => {
   if (!endpoint) {
     throw new Error(`undefined endpoint: ${endpoint}`);
@@ -419,15 +432,54 @@ export const parseCompactConvo = ({
     throw new Error(`Unknown endpointType: ${endpointType}`);
   }
 
+  const resolvedType = resolveEndpointType(defaultParamsEndpoint ?? null) ??
+    (endpointType && resolveEndpointType(endpointType));
+
+  const filter = resolveParamFilter({
+    resolvedType,
+    defaultParamsEndpoint,
+    paramDefinitions,
+    addParams,
+    dropParams,
+  });
+
   // Strip iconURL from input before parsing - it should only be derived server-side
   // from model spec configuration, not accepted from client requests
   const { iconURL: _clientIconURL, ...conversationWithoutIconURL } = conversation;
 
+  const rawFields: Record<string, unknown> = { ...conversationWithoutIconURL };
   const convo = schema.parse(conversationWithoutIconURL) as s.TConversation | null;
   const { models } = possibleValues ?? {};
 
   if (models && convo) {
     convo.model = getFirstDefinedValue(models) ?? convo.model;
+  }
+
+  if (convo) {
+    const convoRecord = convo as Record<string, unknown>;
+    for (const key of filter.customKeys) {
+      if (filter.droppedKeys.has(key)) {
+        continue;
+      }
+      if (key in rawFields && !(key in convoRecord)) {
+        convoRecord[key] = rawFields[key];
+      }
+    }
+    if (addParams && typeof addParams === 'object') {
+      for (const [key, value] of Object.entries(addParams)) {
+        if (filter.droppedKeys.has(key)) {
+          continue;
+        }
+        convoRecord[key] = value;
+      }
+    }
+    if (dropParams && Array.isArray(dropParams)) {
+      for (const key of dropParams) {
+        if (key in convoRecord) {
+          delete convoRecord[key];
+        }
+      }
+    }
   }
 
   return convo;

@@ -8,6 +8,7 @@ import {
   type TPreset,
   type TSpecsConfig,
   type TUser,
+  type SettingDefinition,
 } from 'librechat-data-provider';
 
 export const PRIVATE_MODEL_SPEC_PRESET_FIELDS: readonly [
@@ -41,6 +42,9 @@ export type ApplyModelSpecPresetParams = {
   endpointType?: string | null;
   defaultParamsEndpoint?: string | null;
   includePresetDefaults?: boolean;
+  paramDefinitions?: Partial<SettingDefinition>[] | null;
+  addParams?: Record<string, unknown> | null;
+  dropParams?: string[] | null;
 };
 
 export type ApplyModelSpecPresetResult = {
@@ -140,6 +144,9 @@ export function applyModelSpecPreset({
   endpointType,
   defaultParamsEndpoint,
   includePresetDefaults,
+  paramDefinitions,
+  addParams,
+  dropParams,
 }: ApplyModelSpecPresetParams): ApplyModelSpecPresetResult {
   const { parsedBody: conversation, appliedPrivateFields } = mergeModelSpecPreset(
     modelSpec,
@@ -153,6 +160,9 @@ export function applyModelSpecPreset({
     endpointType: endpointType as EModelEndpoint | null | undefined,
     conversation,
     defaultParamsEndpoint,
+    paramDefinitions,
+    addParams,
+    dropParams,
   });
 
   if (!reparsedBody) {

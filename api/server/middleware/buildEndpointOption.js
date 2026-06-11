@@ -38,6 +38,11 @@ async function buildEndpointOption(req, res, next) {
   }
 
   const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, endpoint);
+  const endpointConfig = endpointsConfig?.[endpoint];
+  const customParams = endpointConfig?.customParams;
+  const paramDefinitions = customParams?.paramDefinitions;
+  const addParams = endpointConfig?.addParams;
+  const dropParams = endpointConfig?.dropParams;
 
   let parsedBody;
   try {
@@ -46,6 +51,9 @@ async function buildEndpointOption(req, res, next) {
       endpointType,
       conversation: req.body,
       defaultParamsEndpoint,
+      paramDefinitions,
+      addParams,
+      dropParams,
     });
   } catch (error) {
     logger.error(`Error parsing compact conversation for endpoint ${endpoint}`, error);
@@ -83,6 +91,9 @@ async function buildEndpointOption(req, res, next) {
         endpointType,
         defaultParamsEndpoint,
         includePresetDefaults: true,
+        paramDefinitions,
+        addParams,
+        dropParams,
       });
       parsedBody = result.parsedBody;
       appliedModelSpecPrivateFields = result.appliedPrivateFields;
@@ -104,6 +115,9 @@ async function buildEndpointOption(req, res, next) {
           endpoint,
           endpointType,
           defaultParamsEndpoint,
+          paramDefinitions,
+          addParams,
+          dropParams,
         });
         parsedBody = result.parsedBody;
         appliedModelSpecPrivateFields = result.appliedPrivateFields;

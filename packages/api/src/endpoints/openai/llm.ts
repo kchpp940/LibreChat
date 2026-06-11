@@ -3,6 +3,9 @@ import {
   ReasoningParameterFormat,
   removeNullishValues,
   supportsAdaptiveThinking,
+  resolveParamFilter,
+  ResolvedEndpointType,
+  getClientParamKeys,
 } from 'librechat-data-provider';
 import type { BindToolsInput } from '@librechat/agents/langchain/language_models/chat_models';
 import type { AzureOpenAIInput } from '@librechat/agents/langchain/openai';
@@ -427,6 +430,9 @@ export function getOpenAILLMConfig({
   useOpenRouter,
   reasoningFormat = ReasoningParameterFormat.reasoningEffort,
   modelOptions: _modelOptions,
+  resolvedType,
+  paramDefinitions,
+  defaultParamsEndpoint,
 }: {
   apiKey: string;
   streaming: boolean;
@@ -439,9 +445,25 @@ export function getOpenAILLMConfig({
   useOpenRouter?: boolean;
   reasoningFormat?: ReasoningParameterFormat;
   azure?: false | t.AzureOptions;
+  resolvedType?: ResolvedEndpointType | null;
+  paramDefinitions?: Partial<SettingDefinition>[] | null;
+  defaultParamsEndpoint?: string | null;
 }): Pick<t.LLMConfigResult, 'llmConfig' | 'tools'> & {
   azure?: t.AzureOptions;
 } {
+  const paramFilter = resolveParamFilter({
+    resolvedType: resolvedType ?? (useOpenRouter ? ResolvedEndpointType.OPENROUTER : ResolvedEndpointType.OPENAI),
+    defaultParamsEndpoint,
+    paramDefinitions,
+    addParams,
+    dropParams,
+  });
+
+  const clientKeys = new Set([
+    ...knownOpenAIParams,
+    ...getClientParamKeys(paramFilter.resolvedType),
+  ]);
+
   /** Clean empty strings from model options (e.g., temperature: "" should be removed) */
   const cleanedModelOptions = removeNullishValues(
     _modelOptions,
@@ -528,7 +550,7 @@ export function getOpenAILLMConfig({
         continue;
       }
 
-      if (knownOpenAIParams.has(key)) {
+      if (clientKeys.has(key)) {
         applyDefaultParams(llmConfig as Record<string, unknown>, { [key]: value });
       } else {
         /** Apply to modelKwargs if not a known param */
@@ -578,7 +600,7 @@ export function getOpenAILLMConfig({
           }) || hasModelKwargs;
         continue;
       }
-      if (knownOpenAIParams.has(key)) {
+      if (clientKeys.has(key)) {
         (llmConfig as Record<string, unknown>)[key] = value;
       } else {
         hasModelKwargs = true;

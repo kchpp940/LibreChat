@@ -1,4 +1,8 @@
-import { EModelEndpoint } from 'librechat-data-provider';
+import {
+  EModelEndpoint,
+  ResolvedEndpointType,
+  getClientParamKeys,
+} from 'librechat-data-provider';
 import type { GoogleAIToolType } from '@librechat/agents/langchain/google-common';
 import type { ClientOptions } from '@librechat/agents';
 import type * as t from '~/types';
@@ -34,6 +38,7 @@ export function transformToOpenAIConfig({
   defaultParams,
   llmConfig,
   fromEndpoint,
+  resolvedType,
 }: {
   tools?: ConfigTools;
   addParams?: Record<string, unknown>;
@@ -41,6 +46,7 @@ export function transformToOpenAIConfig({
   defaultParams?: Record<string, unknown>;
   llmConfig: ClientOptions;
   fromEndpoint: string;
+  resolvedType?: ResolvedEndpointType | null;
 }): {
   tools: ConfigTools;
   llmConfig: t.OAIClientOptions;
@@ -51,8 +57,15 @@ export function transformToOpenAIConfig({
   let modelKwargs: Record<string, unknown> = {};
   let hasModelKwargs = false;
 
-  const isAnthropic = fromEndpoint === EModelEndpoint.anthropic;
-  const isGoogle = fromEndpoint === EModelEndpoint.google;
+  const isAnthropic = resolvedType === ResolvedEndpointType.ANTHROPIC
+    || fromEndpoint === EModelEndpoint.anthropic;
+  const isGoogle = resolvedType === ResolvedEndpointType.GOOGLE
+    || fromEndpoint === EModelEndpoint.google;
+
+  const clientKeys = new Set([
+    ...knownOpenAIParams,
+    ...getClientParamKeys(isAnthropic ? ResolvedEndpointType.ANTHROPIC : (isGoogle ? ResolvedEndpointType.GOOGLE : ResolvedEndpointType.OPENAI)),
+  ]);
 
   let excludeParams = new Set<string>();
   if (isAnthropic) {
@@ -83,7 +96,7 @@ export function transformToOpenAIConfig({
       continue;
     }
 
-    if (knownOpenAIParams.has(key)) {
+    if (clientKeys.has(key)) {
       (openAIConfig as Record<string, unknown>)[key] = value;
     } else {
       modelKwargs[key] = value;
@@ -98,7 +111,7 @@ export function transformToOpenAIConfig({
         continue;
       }
 
-      if (knownOpenAIParams.has(key)) {
+      if (clientKeys.has(key)) {
         (openAIConfig as Record<string, unknown>)[key] = value;
       } else {
         modelKwargs[key] = value;
