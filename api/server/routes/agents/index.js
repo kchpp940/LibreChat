@@ -247,60 +247,61 @@ router.post('/chat/abort', async (req, res) => {
 
   logger.debug(`[AgentStream] Computed jobStreamId: ${jobStreamId}`);
 
-  if (job && jobStreamId) {
-    if (job.metadata?.userId && job.metadata.userId !== userId) {
-      logger.warn(`[AgentStream] Unauthorized abort attempt for ${jobStreamId} by user ${userId}`);
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+    if (job && jobStreamId) {
+      if (job.metadata?.userId && job.metadata.userId !== userId) {
+        logger.warn(`[AgentStream] Unauthorized abort attempt for ${jobStreamId} by user ${userId}`);
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
 
-    if (hasTenantMismatch(job, req.user)) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+      if (hasTenantMismatch(job, req.user)) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
 
-    logger.debug(`[AgentStream] Job found, aborting: ${jobStreamId}`);
-    const abortResult = await GenerationJobManager.abortJob(jobStreamId);
-    logger.debug(`[AgentStream] Job aborted successfully: ${jobStreamId}`, {
-      abortResultSuccess: abortResult.success,
-      abortResultUserMessageId: abortResult.jobData?.userMessage?.messageId,
-      abortResultResponseMessageId: abortResult.jobData?.responseMessageId,
-    });
+      // CRITICAL: Ensure the job has a stable responseMessageId BEFORE any operation.
+      // This backfills legacy jobs and guarantees that abort save and any subsequent
+      // operations use the SAME message identity — no streamId fallback, no guessing.
+      await GenerationJobManager.ensureResponseMessageId(jobStreamId);
 
-    // CRITICAL: Save partial response BEFORE returning to prevent race condition.
-    // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
-    // responseMessageId is generated at job creation and is stable across the entire lifecycle.
-    // For legacy jobs without responseMessageId, we derive one from the streamId/userMessage
-    // so saveMessage can still do an idempotent upsert (no temp ID regex fallback needed).
-    if (
-      abortResult.success &&
-      abortResult.jobData?.userMessage?.messageId &&
-      hasPersistableAbortContent(abortResult.content)
-    ) {
-      const { jobData, content, text } = abortResult;
-      const userMessageId = jobData.userMessage.messageId;
+      logger.debug(`[AgentStream] Job found, aborting: ${jobStreamId}`);
+      const abortResult = await GenerationJobManager.abortJob(jobStreamId);
+      logger.debug(`[AgentStream] Job aborted successfully: ${jobStreamId}`, {
+        abortResultSuccess: abortResult.success,
+        abortResultUserMessageId: abortResult.jobData?.userMessage?.messageId,
+        abortResultResponseMessageId: abortResult.jobData?.responseMessageId,
+      });
 
-      // Use stable responseMessageId from job metadata if available (new jobs).
-      // Fall back to streamId for legacy jobs — it's also unique and stable per job.
-      const responseMessageId = jobData.responseMessageId || jobStreamId;
+      // CRITICAL: Save partial response BEFORE returning to prevent race condition.
+      // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
+      // responseMessageId is guaranteed to exist here (either from job creation or backfill above).
+      if (
+        abortResult.success &&
+        abortResult.jobData?.userMessage?.messageId &&
+        abortResult.jobData?.responseMessageId &&
+        hasPersistableAbortContent(abortResult.content)
+      ) {
+        const { jobData, content, text } = abortResult;
+        const userMessageId = jobData.userMessage.messageId;
+        const responseMessageId = jobData.responseMessageId;
 
-      const responseMessage = {
-        messageId: responseMessageId,
-        parentMessageId: userMessageId,
-        conversationId: jobData.conversationId,
-        content: content || [],
-        text: text || '',
-        sender: jobData.sender || 'AI',
-        endpoint: jobData.endpoint,
-        iconURL: jobData.iconURL,
-        model: jobData.model,
-        unfinished: true,
-        error: false,
-        isCreatedByUser: false,
-        user: userId,
-      };
+        const responseMessage = {
+          messageId: responseMessageId,
+          parentMessageId: userMessageId,
+          conversationId: jobData.conversationId,
+          content: content || [],
+          text: text || '',
+          sender: jobData.sender || 'AI',
+          endpoint: jobData.endpoint,
+          iconURL: jobData.iconURL,
+          model: jobData.model,
+          unfinished: true,
+          error: false,
+          isCreatedByUser: false,
+          user: userId,
+        };
 
-      logger.debug(
-        `[AgentStream] Abort saving with ID ${responseMessageId} (stable: ${!!jobData.responseMessageId}) for ${jobStreamId}`,
-      );
+        logger.debug(
+          `[AgentStream] Abort saving with stable ID ${responseMessageId} for ${jobStreamId}`,
+        );
 
       try {
         await saveMessage(

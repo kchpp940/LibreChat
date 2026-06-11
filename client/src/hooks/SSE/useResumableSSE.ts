@@ -286,10 +286,9 @@ const buildResumeEventSubmission = (
     isCreatedByUser: true,
   } as TMessage;
 
-  const responseMessageId =
-    resumeState.responseMessageId ??
-    currentSubmission.initialResponse?.messageId ??
-    `${userMessage.messageId}_`;
+  // responseMessageId is guaranteed by backend ensureResponseMessageId() —
+  // either from job creation or backfilled for legacy jobs. No fallback needed.
+  const responseMessageId = resumeState.responseMessageId!;
 
   const initialResponse = {
     ...(currentSubmission.initialResponse as TMessage),
@@ -727,19 +726,12 @@ export default function useResumableSSE(
               const userMsgId = userMessage.messageId;
               const serverResponseId = data.resumeState.responseMessageId;
 
-              // Find the response message index.
-              // Prefer exact match by responseMessageId (stable ID from job creation — new jobs).
-              // Fall back to parentMessageId match for legacy jobs without responseMessageId.
-              let responseIdx = -1;
-              if (serverResponseId) {
-                responseIdx = messages.findIndex((m) => m.messageId === serverResponseId);
-              }
-              // Legacy fallback: if no stable ID or not found, match by parentMessageId
-              if (responseIdx < 0) {
-                responseIdx = messages.findIndex(
-                  (m) => !m.isCreatedByUser && m.parentMessageId === userMsgId,
-                );
-              }
+              // With ensureResponseMessageId() on the backend, responseMessageId is
+              // ALWAYS present — either from job creation or backfilled for legacy jobs.
+              // No more parentMessageId guessing, no more streamId fallback.
+              const responseIdx = serverResponseId
+                ? messages.findIndex((m) => m.messageId === serverResponseId)
+                : -1;
 
               console.log('[ResumableSSE] SYNC update', {
                 userMsgId,
@@ -748,13 +740,13 @@ export default function useResumableSSE(
                 foundMessageId: responseIdx >= 0 ? messages[responseIdx]?.messageId : null,
                 messagesCount: messages.length,
                 aggregatedContentLength: data.resumeState.aggregatedContent?.length,
-                isLegacyJob: !serverResponseId,
               });
 
               if (responseIdx >= 0) {
                 const oldContent = messages[responseIdx]?.content;
                 const responseMessage = {
                   ...messages[responseIdx],
+                  messageId: serverResponseId,
                   content: data.resumeState.aggregatedContent,
                   iconURL: preferDefinedString(
                     messages[responseIdx]?.iconURL,
@@ -762,18 +754,6 @@ export default function useResumableSSE(
                   ),
                   model: preferDefinedString(messages[responseIdx]?.model, data.resumeState.model),
                 } as TMessage;
-
-                // For legacy jobs (no stable responseMessageId), also update the message ID
-                // to match what the resume submission expects, so subsequent stream events
-                // target the correct message.
-                if (
-                  !serverResponseId &&
-                  resumeSubmission.initialResponse?.messageId &&
-                  responseMessage.messageId !== resumeSubmission.initialResponse.messageId
-                ) {
-                  responseMessage.messageId = resumeSubmission.initialResponse.messageId;
-                }
-
                 const updated = mergeResumeMessages(messages, userMessage, responseMessage);
                 console.log('[ResumableSSE] SYNC updating message', {
                   messageId: responseMessage.messageId,
@@ -784,24 +764,20 @@ export default function useResumableSSE(
                 resetContentHandler();
                 syncStepMessage(responseMessage);
                 console.log('[ResumableSSE] SYNC complete, handlers synced');
-              } else {
-                // No existing message found — create a new one
-                const responseId = serverResponseId ?? resumeSubmission.initialResponse?.messageId;
-                if (responseId) {
-                  const newMessage = {
-                    messageId: responseId,
-                    parentMessageId: userMsgId,
-                    conversationId: currentSubmission.conversation?.conversationId ?? '',
-                    text: '',
-                    content: data.resumeState.aggregatedContent,
-                    isCreatedByUser: false,
-                    iconURL: data.resumeState.iconURL,
-                    model: data.resumeState.model,
-                  } as TMessage;
-                  setMessages(mergeResumeMessages(messages, userMessage, newMessage));
-                  resetContentHandler();
-                  syncStepMessage(newMessage);
-                }
+              } else if (serverResponseId) {
+                const newMessage = {
+                  messageId: serverResponseId,
+                  parentMessageId: userMsgId,
+                  conversationId: currentSubmission.conversation?.conversationId ?? '',
+                  text: '',
+                  content: data.resumeState.aggregatedContent,
+                  isCreatedByUser: false,
+                  iconURL: data.resumeState.iconURL,
+                  model: data.resumeState.model,
+                } as TMessage;
+                setMessages(mergeResumeMessages(messages, userMessage, newMessage));
+                resetContentHandler();
+                syncStepMessage(newMessage);
               }
             }
 

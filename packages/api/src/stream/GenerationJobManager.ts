@@ -622,6 +622,37 @@ class GenerationJobManagerClass {
   }
 
   /**
+   * Ensure a job has a stable responseMessageId.
+   * For legacy jobs created before responseMessageId was introduced, generate one
+   * and persist it to the job metadata. This ensures that ALL operations (sync,
+   * abort save, final save) use the same message identity, and we never fall back
+   * to streamId as a messageId (which would conflate stream identity with message identity).
+   *
+   * @param streamId - The stream/job ID
+   * @returns The responseMessageId (either existing or newly generated)
+   */
+  async ensureResponseMessageId(streamId: string): Promise<string | undefined> {
+    const jobData = await this.jobStore.getJob(streamId);
+    if (!jobData) {
+      return undefined;
+    }
+
+    if (jobData.responseMessageId) {
+      return jobData.responseMessageId;
+    }
+
+    // Legacy job - generate and persist a stable responseMessageId
+    const responseMessageId = randomUUID();
+    await this.jobStore.updateJob(streamId, { responseMessageId });
+
+    logger.debug(
+      `[GenerationJobManager] Backfilled responseMessageId for legacy job ${streamId}: ${responseMessageId}`,
+    );
+
+    return responseMessageId;
+  }
+
+  /**
    * Check if a job exists.
    */
   async hasJob(streamId: string): Promise<boolean> {
@@ -729,6 +760,16 @@ class GenerationJobManagerClass {
       };
     }
 
+    // Ensure job has a stable responseMessageId before building abort response.
+    // This guarantees that abort final event, abort save, and any subsequent
+    // operations ALL use the SAME message identity.
+    await this.ensureResponseMessageId(streamId);
+    // Re-fetch to get the updated jobData with responseMessageId
+    const updatedJobData = await this.jobStore.getJob(streamId);
+    if (updatedJobData) {
+      Object.assign(jobData, updatedJobData);
+    }
+
     // Emit abort signal for cross-replica support (Redis mode)
     // This ensures the generating replica receives the abort signal
     if (this.eventTransport.emitAbort) {
@@ -775,10 +816,11 @@ class GenerationJobManagerClass {
             isCreatedByUser: true,
           }
         : null,
+      // responseMessageId is guaranteed by ensureResponseMessageId() above
       responseMessage: isEarlyAbort
         ? null
         : {
-            messageId: jobData.responseMessageId ?? `${userMessageId ?? 'aborted'}_`,
+            messageId: jobData.responseMessageId!,
             parentMessageId: userMessageId,
             conversationId: jobData.conversationId,
             content: abortContent,
@@ -1331,6 +1373,11 @@ class GenerationJobManagerClass {
       return null;
     }
 
+    // CRITICAL: Ensure job has a stable responseMessageId BEFORE building resume state.
+    // This backfills legacy jobs and guarantees that the SYNC event, abort save,
+    // and final save ALL use the SAME message identity.
+    const responseMessageId = await this.ensureResponseMessageId(streamId);
+
     const result = await this.jobStore.getContentParts(streamId);
     const aggregatedContent = result?.content ?? [];
     const runSteps = await this.jobStore.getRunSteps(streamId);
@@ -1353,6 +1400,7 @@ class GenerationJobManagerClass {
 
     logger.debug(`[GenerationJobManager] getResumeState:`, {
       streamId,
+      responseMessageId,
       runStepsLength: runSteps.length,
       aggregatedContentLength: aggregatedContent.length,
     });
@@ -1361,7 +1409,7 @@ class GenerationJobManagerClass {
       runSteps,
       aggregatedContent,
       userMessage: jobData.userMessage,
-      responseMessageId: jobData.responseMessageId,
+      responseMessageId,
       conversationId: jobData.conversationId,
       sender: jobData.sender,
       iconURL: jobData.iconURL,
