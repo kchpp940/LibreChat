@@ -10,6 +10,7 @@ import {
   googleSettings,
 } from './types';
 import { ResolvedEndpointType, resolveParamEndpointType } from './parsers';
+import { paramSettings } from './parameterSettings';
 
 type ParamKeySource =
   | 'schema'
@@ -26,21 +27,23 @@ export interface ParamFilterConfig {
   dropParams?: string[] | null;
 }
 
-export interface ResolvedParamFilter {
+export interface ParamPolicy {
   resolvedType: ResolvedEndpointType;
-  allowedKeys: Set<string>;
-  knownClientKeys: Set<string>;
+  schemaKeys: Set<string>;
+  settingsKeys: Set<string>;
+  definitionKeys: Set<string>;
+  addKeys: Set<string>;
   droppedKeys: Set<string>;
   customKeys: Set<string>;
-  schemaKeys: Set<string>;
+  allowedKeys: Set<string>;
+  clientKeys: Set<string>;
   keySources: Map<string, ParamKeySource[]>;
 }
 
 export interface SanitizeResult<T = Record<string, unknown>> {
-  schemaParams: T;
-  customParams: Record<string, unknown>;
+  verifiedParams: T;
   parseErrors?: ZodError;
-  filter: ResolvedParamFilter;
+  policy: ParamPolicy;
 }
 
 export const BASE_OPENAI_KEYS = new Set([
@@ -211,6 +214,9 @@ export const BASE_BEDROCK_KEYS = new Set([
   'guardrailConfig',
   'additionalModelRequestFields',
   'additionalModelResponseFieldPaths',
+  'region',
+  'system',
+  'maxTokens',
 ]);
 
 const BASE_KEYS_BY_TYPE: Record<ResolvedEndpointType, Set<string>> = {
@@ -426,6 +432,53 @@ const CLIENT_KEYS_BY_TYPE: Record<ResolvedEndpointType, Set<string>> = {
   ]),
 };
 
+const PARAM_SETTINGS_KEY: Record<ResolvedEndpointType, string> = {
+  [ResolvedEndpointType.OPENAI]: EModelEndpoint.openAI,
+  [ResolvedEndpointType.ANTHROPIC]: EModelEndpoint.anthropic,
+  [ResolvedEndpointType.GOOGLE]: EModelEndpoint.google,
+  [ResolvedEndpointType.OPENROUTER]: Providers.OPENROUTER,
+  [ResolvedEndpointType.BEDROCK]: EModelEndpoint.bedrock,
+};
+
+export function extractSettingsKeys(
+  resolvedType: ResolvedEndpointType | null | undefined,
+  defaultParamsEndpoint?: string | null,
+): Set<string> {
+  const keys = new Set<string>();
+  if (!resolvedType) {
+    return keys;
+  }
+
+  let settingsKey: string | undefined = PARAM_SETTINGS_KEY[resolvedType];
+
+  if (
+    defaultParamsEndpoint &&
+    Object.prototype.hasOwnProperty.call(paramSettings, defaultParamsEndpoint)
+  ) {
+    settingsKey = defaultParamsEndpoint;
+  }
+
+  if (resolvedType === ResolvedEndpointType.BEDROCK && defaultParamsEndpoint) {
+    const bedrockKey = defaultParamsEndpoint.startsWith(EModelEndpoint.bedrock)
+      ? defaultParamsEndpoint
+      : `${EModelEndpoint.bedrock}-${defaultParamsEndpoint}`;
+    if (Object.prototype.hasOwnProperty.call(paramSettings, bedrockKey)) {
+      settingsKey = bedrockKey;
+    }
+  }
+
+  const settings = settingsKey ? paramSettings[settingsKey] : undefined;
+  if (settings && Array.isArray(settings)) {
+    for (const def of settings) {
+      if (def && def.key) {
+        keys.add(def.key);
+      }
+    }
+  }
+
+  return keys;
+}
+
 export function getBaseParamKeys(
   resolvedType: ResolvedEndpointType | null | undefined,
 ): Set<string> {
@@ -459,7 +512,7 @@ export function extractParamDefinitionKeys(
   return keys;
 }
 
-export function resolveParamFilter(config: ParamFilterConfig): ResolvedParamFilter {
+export function resolveParamPolicy(config: ParamFilterConfig): ParamPolicy {
   const {
     resolvedType: explicitType,
     defaultParamsEndpoint,
@@ -468,12 +521,17 @@ export function resolveParamFilter(config: ParamFilterConfig): ResolvedParamFilt
     dropParams,
   } = config;
 
-  const resolvedType = explicitType ?? resolveParamEndpointType(defaultParamsEndpoint ?? null);
+  const resolvedType = explicitType ?? resolveParamEndpointType(defaultParamsEndpoint ?? null) ?? ResolvedEndpointType.OPENAI;
+
+  const schemaKeys = getBaseParamKeys(resolvedType);
+  const settingsKeys = extractSettingsKeys(resolvedType, defaultParamsEndpoint);
+  const definitionKeys = extractParamDefinitionKeys(paramDefinitions);
+  const clientKeys = getClientParamKeys(resolvedType);
 
   const allowedKeys = new Set<string>();
   const keySources = new Map<string, ParamKeySource[]>();
-  const knownClientKeys = getClientParamKeys(resolvedType);
   const customKeys = new Set<string>();
+  const addKeys = new Set<string>();
 
   const addKey = (key: string, source: ParamKeySource) => {
     allowedKeys.add(key);
@@ -482,21 +540,35 @@ export function resolveParamFilter(config: ParamFilterConfig): ResolvedParamFilt
     keySources.set(key, sources);
   };
 
-  const schemaKeys = getBaseParamKeys(resolvedType);
   schemaKeys.forEach((key) => {
     addKey(key, 'schema');
   });
 
-  const definitionKeys = extractParamDefinitionKeys(paramDefinitions);
+  settingsKeys.forEach((key) => {
+    if (!schemaKeys.has(key)) {
+      addKey(key, 'paramSettings');
+      customKeys.add(key);
+    } else {
+      const sources = keySources.get(key) ?? [];
+      sources.push('paramSettings');
+      keySources.set(key, sources);
+    }
+  });
+
   definitionKeys.forEach((key) => {
+    if (!allowedKeys.has(key)) {
+      customKeys.add(key);
+    }
     addKey(key, 'paramDefinitions');
-    customKeys.add(key);
   });
 
   if (addParams && typeof addParams === 'object') {
     for (const key of Object.keys(addParams)) {
+      addKeys.add(key);
+      if (!allowedKeys.has(key)) {
+        customKeys.add(key);
+      }
       addKey(key, 'addParams');
-      customKeys.add(key);
     }
   }
 
@@ -512,12 +584,15 @@ export function resolveParamFilter(config: ParamFilterConfig): ResolvedParamFilt
   }
 
   return {
-    resolvedType: resolvedType ?? ResolvedEndpointType.OPENAI,
-    allowedKeys,
-    knownClientKeys,
+    resolvedType,
+    schemaKeys,
+    settingsKeys,
+    definitionKeys,
+    addKeys,
     droppedKeys,
     customKeys,
-    schemaKeys,
+    allowedKeys,
+    clientKeys,
     keySources,
   };
 }
@@ -560,19 +635,32 @@ export function sanitizeModelParams<T extends Record<string, unknown>>({
   schema: ZodSchema<T>;
   filterConfig: ParamFilterConfig;
 }): SanitizeResult<T> {
-  const filter = resolveParamFilter(filterConfig);
+  const policy = resolveParamPolicy(filterConfig);
+
+  const mergedRaw: Record<string, unknown> = {};
+  if (filterConfig.addParams && typeof filterConfig.addParams === 'object') {
+    for (const [key, value] of Object.entries(filterConfig.addParams)) {
+      mergedRaw[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(rawParams)) {
+    mergedRaw[key] = value;
+  }
 
   const schemaParams: Record<string, unknown> = {};
   const customParams: Record<string, unknown> = {};
 
-  for (const [key, value] of Object.entries(rawParams)) {
-    if (filter.droppedKeys.has(key)) {
+  for (const [key, value] of Object.entries(mergedRaw)) {
+    if (policy.droppedKeys.has(key)) {
+      continue;
+    }
+    if (!policy.allowedKeys.has(key)) {
       continue;
     }
 
-    if (filter.schemaKeys.has(key)) {
+    if (policy.schemaKeys.has(key)) {
       schemaParams[key] = value;
-    } else if (filter.customKeys.has(key)) {
+    } else {
       customParams[key] = value;
     }
   }
@@ -586,17 +674,33 @@ export function sanitizeModelParams<T extends Record<string, unknown>>({
     parsedSchemaParams = schemaParams as T;
   }
 
-  if (filterConfig.paramDefinitions && filterConfig.paramDefinitions.length > 0) {
-    const customSchema = generateDynamicSchema(
-      filterConfig.paramDefinitions as SettingDefinition[],
-    );
+  const settingsPlusDefs: SettingDefinition[] = [];
+  const settingsKey = PARAM_SETTINGS_KEY[policy.resolvedType];
+  const settingsConfig = settingsKey ? paramSettings[settingsKey] : undefined;
+  if (settingsConfig && Array.isArray(settingsConfig)) {
+    for (const def of settingsConfig) {
+      if (def && def.key && !policy.schemaKeys.has(def.key)) {
+        settingsPlusDefs.push(def as SettingDefinition);
+      }
+    }
+  }
+  if (filterConfig.paramDefinitions && Array.isArray(filterConfig.paramDefinitions)) {
+    for (const def of filterConfig.paramDefinitions) {
+      if (def && def.key) {
+        settingsPlusDefs.push(def as SettingDefinition);
+      }
+    }
+  }
+
+  if (settingsPlusDefs.length > 0) {
+    const customSchema = generateDynamicSchema(settingsPlusDefs);
 
     const customKeysToValidate: Record<string, unknown> = {};
-    for (const def of filterConfig.paramDefinitions) {
+    for (const def of settingsPlusDefs) {
       if (!def || !def.key) {
         continue;
       }
-      if (filter.droppedKeys.has(def.key)) {
+      if (policy.droppedKeys.has(def.key)) {
         continue;
       }
       if (def.key in customParams) {
@@ -620,21 +724,16 @@ export function sanitizeModelParams<T extends Record<string, unknown>>({
     }
   }
 
-  return {
-    schemaParams: parsedSchemaParams,
-    customParams,
-    parseErrors,
-    filter,
-  };
-}
-
-export function mergeSanitizedParams<T extends Record<string, unknown>>(
-  sanitized: SanitizeResult<T>,
-): T {
-  return {
-    ...sanitized.schemaParams,
-    ...sanitized.customParams,
+  const verifiedParams = {
+    ...parsedSchemaParams,
+    ...customParams,
   } as T;
+
+  return {
+    verifiedParams,
+    parseErrors,
+    policy,
+  };
 }
 
 export { ResolvedEndpointType };

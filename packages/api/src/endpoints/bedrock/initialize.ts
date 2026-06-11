@@ -10,11 +10,10 @@ import {
   bedrockInputParser,
   bedrockOutputParser,
   removeNullishValues,
-  resolveParamFilter,
+  resolveParamPolicy,
   ResolvedEndpointType,
   getClientParamKeys,
   sanitizeModelParams,
-  mergeSanitizedParams,
   type ParamFilterConfig,
 } from 'librechat-data-provider';
 import type { SettingDefinition } from 'librechat-data-provider';
@@ -251,7 +250,7 @@ export async function initializeBedrock({
   });
 
   const llmConfig = bedrockOutputParser(
-    mergeSanitizedParams(sanitized),
+    sanitized.verifiedParams,
   ) as InitializeResultBase['llmConfig'] & {
     model?: string;
     region?: string;

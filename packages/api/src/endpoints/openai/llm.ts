@@ -3,7 +3,7 @@ import {
   ReasoningParameterFormat,
   removeNullishValues,
   supportsAdaptiveThinking,
-  resolveParamFilter,
+  resolveParamPolicy,
   ResolvedEndpointType,
   getClientParamKeys,
 } from 'librechat-data-provider';
@@ -451,7 +451,7 @@ export function getOpenAILLMConfig({
 }): Pick<t.LLMConfigResult, 'llmConfig' | 'tools'> & {
   azure?: t.AzureOptions;
 } {
-  const paramFilter = resolveParamFilter({
+  const policy = resolveParamPolicy({
     resolvedType: resolvedType ?? (useOpenRouter ? ResolvedEndpointType.OPENROUTER : ResolvedEndpointType.OPENAI),
     defaultParamsEndpoint,
     paramDefinitions,
@@ -461,7 +461,7 @@ export function getOpenAILLMConfig({
 
   const clientKeys = new Set([
     ...knownOpenAIParams,
-    ...getClientParamKeys(paramFilter.resolvedType),
+    ...policy.clientKeys,
   ]);
 
   /** Clean empty strings from model options (e.g., temperature: "" should be removed) */
@@ -633,10 +633,10 @@ export function getOpenAILLMConfig({
   const tools: BindToolsInput[] = [];
 
   /** Check if web_search should be disabled via dropParams */
-  if (dropParams && dropParams.includes('web_search')) {
+  if (policy.droppedKeys.has('web_search')) {
     enableWebSearch = false;
   }
-  if (dropParams && dropParams.includes('promptCache')) {
+  if (policy.droppedKeys.has('promptCache')) {
     enablePromptCache = false;
   }
 
@@ -691,8 +691,10 @@ export function getOpenAILLMConfig({
       'logprobs',
     ];
 
-    const updatedDropParams = dropParams || [];
-    const combinedDropParams = [...new Set([...updatedDropParams, ...reasoningExcludeParams])];
+    const combinedDropParams = [
+      ...Array.from(policy.droppedKeys),
+      ...reasoningExcludeParams,
+    ];
 
     combinedDropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
   } else if (modelOptions.model && /gpt-4o.*search/.test(modelOptions.model as string)) {
@@ -716,12 +718,14 @@ export function getOpenAILLMConfig({
       'user',
     ];
 
-    const updatedDropParams = dropParams || [];
-    const combinedDropParams = [...new Set([...updatedDropParams, ...searchExcludeParams])];
+    const combinedDropParams = [
+      ...Array.from(policy.droppedKeys),
+      ...searchExcludeParams,
+    ];
 
     combinedDropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
-  } else if (dropParams && Array.isArray(dropParams)) {
-    dropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
+  } else if (policy.droppedKeys.size > 0) {
+    policy.droppedKeys.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
   }
 
   hasModelKwargs =

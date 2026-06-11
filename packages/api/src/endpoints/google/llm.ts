@@ -3,7 +3,7 @@ import {
   googleSettings,
   AuthKeys,
   removeNullishValues,
-  resolveParamFilter,
+  resolveParamPolicy,
   ResolvedEndpointType,
   getClientParamKeys,
 } from 'librechat-data-provider';
@@ -336,7 +336,7 @@ export function getGoogleConfig(
   /** @type {GoogleClientOptions | VertexAIClientOptions} */
   llmConfig: VertexAIClientOptions | GoogleClientOptions;
 } {
-  const paramFilter = resolveParamFilter({
+  const policy = resolveParamPolicy({
     resolvedType: options.resolvedType ?? ResolvedEndpointType.GOOGLE,
     defaultParamsEndpoint: options.defaultParamsEndpoint,
     paramDefinitions: options.paramDefinitions,
@@ -346,7 +346,7 @@ export function getGoogleConfig(
 
   const clientKeys = new Set([
     ...knownGoogleParams,
-    ...getClientParamKeys(paramFilter.resolvedType),
+    ...policy.clientKeys,
   ]);
 
   let creds: t.GoogleCredentials = {};
@@ -555,8 +555,8 @@ export function getGoogleConfig(
   }
 
   /** Handle dropParams - only drop from Google config */
-  if (options.dropParams && Array.isArray(options.dropParams)) {
-    options.dropParams.forEach((param) => {
+  if (policy.droppedKeys.size > 0) {
+    policy.droppedKeys.forEach((param) => {
       if (param === 'web_search') {
         enableWebSearch = false;
         return;
@@ -581,8 +581,7 @@ export function getGoogleConfig(
    * this, current Gemini models would inherit the legacy 8K default instead of their
    * documented limit.
    */
-  const maxOutputDropped =
-    Array.isArray(options.dropParams) && options.dropParams.includes('maxOutputTokens');
+  const maxOutputDropped = policy.droppedKeys.has('maxOutputTokens');
   if (
     !maxOutputDropped &&
     modelOptions?.maxOutputTokens == null &&
@@ -597,7 +596,7 @@ export function getGoogleConfig(
     config: llmConfig,
     provider,
     thinking,
-    dropParams: Array.isArray(options.dropParams) ? options.dropParams : undefined,
+    dropParams: Array.from(policy.droppedKeys),
   });
 
   if (provider === Providers.VERTEXAI && shouldSyncVertexEndpoint && !hasCustomVertexEndpoint) {

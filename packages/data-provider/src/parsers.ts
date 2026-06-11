@@ -22,12 +22,11 @@ import {
 import { bedrockInputSchema } from './bedrock';
 import { alternateName } from './config';
 import {
-  resolveParamFilter,
+  resolveParamPolicy,
   extractParamDefinitionKeys,
   getBaseParamKeys,
-  type ResolvedParamFilter,
+  type ParamPolicy,
   sanitizeModelParams,
-  mergeSanitizedParams,
   type ParamFilterConfig,
 } from './paramFilter';
 
@@ -458,7 +457,7 @@ export const parseCompactConvo = ({
     throw sanitized.parseErrors;
   }
 
-  const convo = mergeSanitizedParams(sanitized) as s.TConversation;
+  const convo = sanitized.verifiedParams as s.TConversation;
   const { models } = possibleValues ?? {};
 
   if (models && convo) {

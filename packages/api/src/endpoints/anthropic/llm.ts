@@ -7,7 +7,7 @@ import {
   removeNullishValues,
   ThinkingDisplay,
   AuthKeys,
-  resolveParamFilter,
+  resolveParamPolicy,
   ResolvedEndpointType,
   getClientParamKeys,
 } from 'librechat-data-provider';
@@ -97,7 +97,7 @@ function getLLMConfig(
   credentials: string | AnthropicCredentials | undefined,
   options: AnthropicConfigOptions = {},
 ): AnthropicLLMConfigResult {
-  const paramFilter = resolveParamFilter({
+  const policy = resolveParamPolicy({
     resolvedType: options.resolvedType ?? ResolvedEndpointType.ANTHROPIC,
     defaultParamsEndpoint: options.defaultParamsEndpoint,
     paramDefinitions: options.paramDefinitions,
@@ -107,7 +107,7 @@ function getLLMConfig(
 
   const clientKeys = new Set([
     ...knownAnthropicParams,
-    ...getClientParamKeys(paramFilter.resolvedType),
+    ...policy.clientKeys,
   ]);
 
   /**
@@ -295,11 +295,10 @@ function getLLMConfig(
   }
 
   /** Handle dropParams - only drop from Anthropic config */
-  const shouldDropClientOptions =
-    Array.isArray(options.dropParams) && options.dropParams.includes('clientOptions');
+  const shouldDropClientOptions = policy.droppedKeys.has('clientOptions');
 
-  if (options.dropParams && Array.isArray(options.dropParams)) {
-    options.dropParams.forEach((param) => {
+  if (policy.droppedKeys.size > 0) {
+    policy.droppedKeys.forEach((param) => {
       if (param === 'web_search') {
         enableWebSearch = false;
         return;
