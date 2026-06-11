@@ -314,6 +314,30 @@ const buildResumeEventSubmission = (
   } as EventSubmission;
 };
 
+const isTemporaryResponseId = (messageId: string, userMessageId: string): boolean => {
+  return messageId === `${userMessageId.replace(/_+$/, '')}_`;
+};
+
+const findResponseMessageIndex = (messages: TMessage[], userMessageId: string, responseMessageId?: string): number => {
+  const cleanUserMsgId = userMessageId.replace(/_+$/, '');
+  
+  if (responseMessageId) {
+    const exactMatch = messages.findIndex((m) => m.messageId === responseMessageId);
+    if (exactMatch >= 0) {
+      return exactMatch;
+    }
+  }
+  
+  return messages.findIndex(
+    (m) =>
+      !m.isCreatedByUser &&
+      (m.messageId === `${cleanUserMsgId}_` ||
+        m.parentMessageId === userMessageId ||
+        m.parentMessageId === cleanUserMsgId ||
+        (responseMessageId && isTemporaryResponseId(m.messageId, responseMessageId))),
+  );
+};
+
 const mergeResumeMessages = (
   messages: TMessage[],
   userMessage: TMessage,
@@ -323,8 +347,11 @@ const mergeResumeMessages = (
   const userIndex = nextMessages.findIndex(
     (message) => message.messageId === userMessage.messageId,
   );
-  const responseIndex = nextMessages.findIndex(
-    (message) => message.messageId === responseMessage.messageId,
+  
+  const responseIndex = findResponseMessageIndex(
+    nextMessages,
+    userMessage.messageId,
+    responseMessage.messageId,
   );
 
   if (userIndex >= 0) {
@@ -332,7 +359,13 @@ const mergeResumeMessages = (
   }
 
   if (responseIndex >= 0) {
-    nextMessages[responseIndex] = { ...nextMessages[responseIndex], ...responseMessage };
+    const existingMessage = nextMessages[responseIndex];
+    const mergedMessage = {
+      ...existingMessage,
+      ...responseMessage,
+      messageId: responseMessage.messageId,
+    };
+    nextMessages[responseIndex] = mergedMessage;
   }
 
   if (userIndex >= 0 && responseIndex >= 0) {
@@ -341,12 +374,19 @@ const mergeResumeMessages = (
 
   if (userIndex >= 0) {
     const insertAt = userIndex + 1;
-    nextMessages.splice(insertAt, 0, responseMessage);
+    if (responseIndex >= 0 && responseIndex !== insertAt) {
+      const [removed] = nextMessages.splice(responseIndex, 1);
+      nextMessages.splice(insertAt, 0, { ...removed, ...responseMessage, messageId: responseMessage.messageId });
+    } else if (responseIndex < 0) {
+      nextMessages.splice(insertAt, 0, responseMessage);
+    }
     return nextMessages;
   }
 
   if (responseIndex >= 0) {
-    nextMessages.splice(responseIndex, 0, userMessage);
+    nextMessages[responseIndex] = { ...nextMessages[responseIndex], ...responseMessage, messageId: responseMessage.messageId };
+    const insertAt = responseIndex;
+    nextMessages.splice(insertAt, 0, userMessage);
     return nextMessages;
   }
 
@@ -631,17 +671,7 @@ export default function useResumableSSE(
               const userMsgId = userMessage.messageId;
               const serverResponseId = data.resumeState.responseMessageId;
 
-              let responseIdx = -1;
-              if (serverResponseId) {
-                responseIdx = messages.findIndex((m) => m.messageId === serverResponseId);
-              }
-              if (responseIdx < 0) {
-                responseIdx = messages.findIndex(
-                  (m) =>
-                    !m.isCreatedByUser &&
-                    (m.messageId === `${userMsgId}_` || m.parentMessageId === userMsgId),
-                );
-              }
+              const responseIdx = findResponseMessageIndex(messages, userMsgId, serverResponseId);
 
               console.log('[ResumableSSE] SYNC update', {
                 userMsgId,

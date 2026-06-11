@@ -60,6 +60,10 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
   /**
    * Saves a message in the database.
    */
+  const isTemporaryResponseId = (messageId: string, parentMessageId: string): boolean => {
+    return messageId === `${parentMessageId.replace(/_+$/, '')}_`;
+  };
+
   async function saveMessage(
     {
       userId,
@@ -87,10 +91,11 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
 
     try {
       const Message = mongoose.models.Message as Model<IMessage>;
+      const newMessageId = params.newMessageId || params.messageId;
       const update: Record<string, unknown> = {
         ...params,
         user: userId,
-        messageId: params.newMessageId || params.messageId,
+        messageId: newMessageId,
       };
 
       if (interfaceConfig?.retentionMode === RetentionMode.ALL) {
@@ -125,11 +130,58 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
         logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
         update.tokenCount = 0;
       }
-      const message = await Message.findOneAndUpdate(
-        { messageId: params.messageId, user: userId },
-        update,
-        { upsert: true, new: true },
-      );
+
+      let query: Record<string, unknown> = { messageId: params.messageId, user: userId };
+      let shouldTryFallbackQuery = false;
+      let cleanParentId = '';
+
+      if (
+        !params.isCreatedByUser &&
+        params.parentMessageId &&
+        params.messageId &&
+        newMessageId !== params.messageId
+      ) {
+        cleanParentId = (params.parentMessageId as string).replace(/_+$/, '');
+        if (isTemporaryResponseId(params.messageId, cleanParentId)) {
+          logger.debug(
+            `[saveMessage] Detected temporary ID ${params.messageId} → ${newMessageId}, checking for existing temp message`,
+          );
+          shouldTryFallbackQuery = true;
+        }
+      }
+
+      let message = await Message.findOneAndUpdate(query, update, {
+        upsert: true,
+        new: true,
+      });
+
+      if (shouldTryFallbackQuery && message?.messageId !== newMessageId) {
+        const fallbackQuery = {
+          user: userId,
+          conversationId: params.conversationId,
+          parentMessageId: { $in: [params.parentMessageId, cleanParentId] },
+          isCreatedByUser: false,
+          $or: [
+            { messageId: `${cleanParentId}_` },
+            { messageId: { $regex: `^${cleanParentId}_` } },
+          ],
+        };
+
+        const existingTempMessage = await Message.findOne(fallbackQuery);
+        if (existingTempMessage && existingTempMessage.messageId !== newMessageId) {
+          logger.debug(
+            `[saveMessage] Found existing temp message ${existingTempMessage.messageId}, updating to ${newMessageId}`,
+          );
+          message = await Message.findOneAndUpdate(
+            { _id: existingTempMessage._id, user: userId },
+            update,
+            { new: true },
+          );
+          if (params.messageId && params.messageId !== newMessageId) {
+            await Message.deleteOne({ messageId: params.messageId, user: userId });
+          }
+        }
+      }
 
       if (
         interfaceConfig?.retentionMode === RetentionMode.ALL &&
@@ -156,7 +208,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
         try {
           const Message = mongoose.models.Message as Model<IMessage>;
           const existingMessage = await Message.findOne({
-            messageId: params.messageId,
+            messageId: params.newMessageId || params.messageId,
             user: userId,
           });
 

@@ -90,24 +90,63 @@ export const isInitialNewConversationSubmission = ({
 }: Pick<EventSubmission, 'userMessage'>): boolean =>
   userMessage?.parentMessageId === Constants.NO_PARENT;
 
+const isTemporaryResponseId = (messageId: string, userMessageId: string): boolean => {
+  return messageId === `${userMessageId.replace(/_+$/, '')}_`;
+};
+
+const findResponseMessageIndex = (
+  messages: TMessage[],
+  userMessageId: string,
+  responseMessageId?: string,
+): number => {
+  const cleanUserMsgId = userMessageId.replace(/_+$/, '');
+
+  if (responseMessageId) {
+    const exactMatch = messages.findIndex((m) => m.messageId === responseMessageId);
+    if (exactMatch >= 0) {
+      return exactMatch;
+    }
+  }
+
+  return messages.findIndex(
+    (m) =>
+      !m.isCreatedByUser &&
+      (m.messageId === `${cleanUserMsgId}_` ||
+        m.parentMessageId === userMessageId ||
+        m.parentMessageId === cleanUserMsgId ||
+        (responseMessageId && isTemporaryResponseId(m.messageId, responseMessageId))),
+  );
+};
+
 export const mergeRegenerateFinalMessages = ({
   messages,
   responseMessage,
   initialResponseId,
+  requestMessageId,
 }: {
   messages: TMessage[];
   responseMessage: TMessage;
   initialResponseId?: string | null;
+  requestMessageId?: string;
 }): TMessage[] => {
   const finalMessages: TMessage[] = [];
   let inserted = false;
 
-  for (const message of messages) {
-    if (!message?.messageId || message.messageId === initialResponseId) {
+  const responseIdx = requestMessageId
+    ? findResponseMessageIndex(messages, requestMessageId, responseMessage.messageId)
+    : -1;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (!message?.messageId) {
       continue;
     }
 
-    if (message.messageId === responseMessage.messageId) {
+    if (message.messageId === initialResponseId) {
+      continue;
+    }
+
+    if (i === responseIdx || message.messageId === responseMessage.messageId) {
       finalMessages.push(responseMessage);
       inserted = true;
       continue;
@@ -118,6 +157,81 @@ export const mergeRegenerateFinalMessages = ({
 
   if (!inserted) {
     finalMessages.push(responseMessage);
+  }
+
+  return finalMessages;
+};
+
+export const mergeFinalMessages = ({
+  messages,
+  requestMessage,
+  responseMessage,
+  initialResponseId,
+}: {
+  messages: TMessage[];
+  requestMessage?: TMessage;
+  responseMessage?: TMessage;
+  initialResponseId?: string | null;
+}): TMessage[] => {
+  if (!requestMessage || !responseMessage) {
+    return messages;
+  }
+
+  const requestMsgId = requestMessage.messageId;
+  const responseMsgId = responseMessage.messageId;
+  const cleanRequestId = requestMsgId.replace(/_+$/, '');
+
+  const finalMessages: TMessage[] = [];
+  let requestInserted = false;
+  let responseInserted = false;
+  let lastUserMsgIndex = -1;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (!message?.messageId) {
+      continue;
+    }
+
+    if (message.isCreatedByUser) {
+      lastUserMsgIndex = i;
+    }
+
+    if (message.messageId === initialResponseId) {
+      continue;
+    }
+
+    if (message.messageId === requestMsgId) {
+      finalMessages.push(requestMessage);
+      requestInserted = true;
+      continue;
+    }
+
+    if (
+      !message.isCreatedByUser &&
+      (message.messageId === responseMsgId ||
+        message.messageId === `${cleanRequestId}_` ||
+        message.parentMessageId === requestMsgId ||
+        message.parentMessageId === cleanRequestId)
+    ) {
+      finalMessages.push(responseMessage);
+      responseInserted = true;
+      continue;
+    }
+
+    finalMessages.push(message);
+  }
+
+  if (!requestInserted) {
+    const insertIdx = lastUserMsgIndex >= 0 ? lastUserMsgIndex + 1 : finalMessages.length;
+    finalMessages.splice(insertIdx, 0, requestMessage);
+    if (!responseInserted) {
+      finalMessages.splice(insertIdx + 1, 0, responseMessage);
+      responseInserted = true;
+    }
+  } else if (!responseInserted) {
+    const requestIdx = finalMessages.findIndex((m) => m.messageId === requestMsgId);
+    const insertIdx = requestIdx >= 0 ? requestIdx + 1 : finalMessages.length;
+    finalMessages.splice(insertIdx, 0, responseMessage);
   }
 
   return finalMessages;
@@ -688,7 +802,25 @@ export default function useEventHandlers({
 
         const setFinalMessages = (id: string | null, _messages: TMessage[]) => {
           setMessages(_messages);
-          queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
+          if (id) {
+            queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
+            updateConvoInAllQueries(queryClient, id, (convo) => {
+              if (!convo) {
+                return convo;
+              }
+              const lastMessage = _messages[_messages.length - 1];
+              if (!lastMessage) {
+                return convo;
+              }
+              const lastMessageText = getAllContentText(lastMessage);
+              return {
+                ...convo,
+                lastMessageId: lastMessage.messageId,
+                lastMessageText,
+                updatedAt: new Date().toISOString(),
+              };
+            });
+          }
         };
 
         const hasNoResponse =
@@ -725,9 +857,15 @@ export default function useEventHandlers({
             messages: submission.regenerateMessages ?? currentMessages ?? messages,
             responseMessage,
             initialResponseId: submission.initialResponse.messageId,
+            requestMessageId: requestMessage?.messageId,
           });
         } else if (requestMessage != null && responseMessage != null) {
-          finalMessages = [...messages, requestMessage, responseMessage];
+          finalMessages = mergeFinalMessages({
+            messages: currentMessages ?? messages,
+            requestMessage,
+            responseMessage,
+            initialResponseId: submission.initialResponse.messageId,
+          });
         }
 
         /* Preserve files from current messages when server response lacks them */

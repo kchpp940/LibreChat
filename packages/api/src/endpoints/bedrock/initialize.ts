@@ -10,13 +10,7 @@ import {
   bedrockInputParser,
   bedrockOutputParser,
   removeNullishValues,
-  resolveParamPolicy,
-  ResolvedEndpointType,
-  getClientParamKeys,
-  sanitizeModelParams,
-  type ParamFilterConfig,
 } from 'librechat-data-provider';
-import type { SettingDefinition } from 'librechat-data-provider';
 import type {
   BaseInitializeParams,
   InitializeResultBase,
@@ -112,27 +106,15 @@ export async function initializeBedrock({
     | ({
         guardrailConfig?: GuardrailConfiguration;
         inferenceProfiles?: InferenceProfileConfig;
-        addParams?: Record<string, unknown>;
-        dropParams?: string[];
-        customParams?: {
-          defaultParamsEndpoint?: string;
-          paramDefinitions?: Partial<SettingDefinition>[];
-        };
       } & Record<string, unknown>)
     | undefined;
-
-  const addParams = bedrockConfig?.addParams;
-  const dropParams = bedrockConfig?.dropParams;
-  const customParams = bedrockConfig?.customParams;
-  const defaultParamsEndpoint = customParams?.defaultParamsEndpoint;
-  const paramDefinitions = customParams?.paramDefinitions;
 
   const {
     BEDROCK_AWS_SECRET_ACCESS_KEY,
     BEDROCK_AWS_ACCESS_KEY_ID,
     BEDROCK_AWS_SESSION_TOKEN,
-    BEDROCK_AWS_BEARER_TOKEN,
     BEDROCK_AWS_PROFILE,
+    BEDROCK_AWS_BEARER_TOKEN,
     BEDROCK_REVERSE_PROXY,
     BEDROCK_AWS_DEFAULT_REGION,
     PROXY,
@@ -230,27 +212,15 @@ export async function initializeBedrock({
     region: BEDROCK_AWS_DEFAULT_REGION,
   };
 
-  const filterConfig: ParamFilterConfig = {
-    resolvedType: ResolvedEndpointType.BEDROCK,
-    defaultParamsEndpoint,
-    paramDefinitions,
-    addParams,
-    dropParams,
-  };
-
-  const rawModelParams = removeNullishValues({
-    ...requestOptions,
-    ...(model_parameters ?? {}),
-  });
-
-  const sanitized = sanitizeModelParams({
-    rawParams: rawModelParams as Record<string, unknown>,
-    schema: bedrockInputParser as any,
-    filterConfig,
-  });
+  const configOptions: Record<string, unknown> = {};
 
   const llmConfig = bedrockOutputParser(
-    sanitized.verifiedParams,
+    bedrockInputParser.parse(
+      removeNullishValues({
+        ...requestOptions,
+        ...(model_parameters ?? {}),
+      }),
+    ),
   ) as InitializeResultBase['llmConfig'] & {
     model?: string;
     region?: string;
@@ -345,6 +315,6 @@ export async function initializeBedrock({
 
   return {
     llmConfig,
-    configOptions: {},
+    configOptions,
   };
 }

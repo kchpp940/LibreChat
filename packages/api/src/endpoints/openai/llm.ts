@@ -3,9 +3,6 @@ import {
   ReasoningParameterFormat,
   removeNullishValues,
   supportsAdaptiveThinking,
-  resolveParamPolicy,
-  ResolvedEndpointType,
-  getClientParamKeys,
 } from 'librechat-data-provider';
 import type { BindToolsInput } from '@librechat/agents/langchain/language_models/chat_models';
 import type { AzureOpenAIInput } from '@librechat/agents/langchain/openai';
@@ -430,9 +427,6 @@ export function getOpenAILLMConfig({
   useOpenRouter,
   reasoningFormat = ReasoningParameterFormat.reasoningEffort,
   modelOptions: _modelOptions,
-  resolvedType,
-  paramDefinitions,
-  defaultParamsEndpoint,
 }: {
   apiKey: string;
   streaming: boolean;
@@ -445,25 +439,9 @@ export function getOpenAILLMConfig({
   useOpenRouter?: boolean;
   reasoningFormat?: ReasoningParameterFormat;
   azure?: false | t.AzureOptions;
-  resolvedType?: ResolvedEndpointType | null;
-  paramDefinitions?: Partial<SettingDefinition>[] | null;
-  defaultParamsEndpoint?: string | null;
 }): Pick<t.LLMConfigResult, 'llmConfig' | 'tools'> & {
   azure?: t.AzureOptions;
 } {
-  const policy = resolveParamPolicy({
-    resolvedType: resolvedType ?? (useOpenRouter ? ResolvedEndpointType.OPENROUTER : ResolvedEndpointType.OPENAI),
-    defaultParamsEndpoint,
-    paramDefinitions,
-    addParams,
-    dropParams,
-  });
-
-  const clientKeys = new Set([
-    ...knownOpenAIParams,
-    ...policy.clientKeys,
-  ]);
-
   /** Clean empty strings from model options (e.g., temperature: "" should be removed) */
   const cleanedModelOptions = removeNullishValues(
     _modelOptions,
@@ -550,7 +528,7 @@ export function getOpenAILLMConfig({
         continue;
       }
 
-      if (clientKeys.has(key)) {
+      if (knownOpenAIParams.has(key)) {
         applyDefaultParams(llmConfig as Record<string, unknown>, { [key]: value });
       } else {
         /** Apply to modelKwargs if not a known param */
@@ -600,7 +578,7 @@ export function getOpenAILLMConfig({
           }) || hasModelKwargs;
         continue;
       }
-      if (clientKeys.has(key)) {
+      if (knownOpenAIParams.has(key)) {
         (llmConfig as Record<string, unknown>)[key] = value;
       } else {
         hasModelKwargs = true;
@@ -633,10 +611,10 @@ export function getOpenAILLMConfig({
   const tools: BindToolsInput[] = [];
 
   /** Check if web_search should be disabled via dropParams */
-  if (policy.droppedKeys.has('web_search')) {
+  if (dropParams && dropParams.includes('web_search')) {
     enableWebSearch = false;
   }
-  if (policy.droppedKeys.has('promptCache')) {
+  if (dropParams && dropParams.includes('promptCache')) {
     enablePromptCache = false;
   }
 
@@ -691,10 +669,8 @@ export function getOpenAILLMConfig({
       'logprobs',
     ];
 
-    const combinedDropParams = [
-      ...Array.from(policy.droppedKeys),
-      ...reasoningExcludeParams,
-    ];
+    const updatedDropParams = dropParams || [];
+    const combinedDropParams = [...new Set([...updatedDropParams, ...reasoningExcludeParams])];
 
     combinedDropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
   } else if (modelOptions.model && /gpt-4o.*search/.test(modelOptions.model as string)) {
@@ -718,14 +694,12 @@ export function getOpenAILLMConfig({
       'user',
     ];
 
-    const combinedDropParams = [
-      ...Array.from(policy.droppedKeys),
-      ...searchExcludeParams,
-    ];
+    const updatedDropParams = dropParams || [];
+    const combinedDropParams = [...new Set([...updatedDropParams, ...searchExcludeParams])];
 
     combinedDropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
-  } else if (policy.droppedKeys.size > 0) {
-    policy.droppedKeys.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
+  } else if (dropParams && Array.isArray(dropParams)) {
+    dropParams.forEach((param) => deleteConfigParam({ param, llmConfig, modelKwargs }));
   }
 
   hasModelKwargs =

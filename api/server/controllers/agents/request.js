@@ -264,12 +264,16 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 
       partialResponseSaved = true;
       const responseConversationId = resumeState.conversationId || conversationId;
+      const userMessageId = resumeState.userMessage.messageId;
+      const tempResponseId = `${userMessageId.replace(/_+$/, '')}_`;
+      const currentResponseId = resumeState.responseMessageId || tempResponseId;
+      const hasTempId = currentResponseId === tempResponseId;
 
       try {
         const partialMessage = {
-          messageId: resumeState.responseMessageId || `${resumeState.userMessage.messageId}_`,
+          messageId: hasTempId ? tempResponseId : currentResponseId,
           conversationId: responseConversationId,
-          parentMessageId: resumeState.userMessage.messageId,
+          parentMessageId: userMessageId,
           sender: client?.sender ?? 'AI',
           content: persistableContent,
           unfinished: true,
@@ -284,6 +288,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         if (req.body?.agent_id) {
           partialMessage.agent_id = req.body.agent_id;
         }
+
+        logger.debug(
+          `[ResumableAgentController] Saving partial response with ${hasTempId ? 'temp' : 'formal'} ID ${partialMessage.messageId} for ${streamId}`,
+        );
 
         await saveMessage(
           {
@@ -525,9 +533,26 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         // This prevents race conditions where the client sends a follow-up message
         // before the response is saved to the database, causing orphaned parentMessageIds.
         if (client.savedMessageIds && !client.savedMessageIds.has(messageId)) {
+          const preliminaryResponseMessageId = getPreliminaryResponseMessageId({
+            messageId: userMessage?.messageId,
+            responseMessageId: editedResponseMessageId,
+          });
+          const saveParams = {
+            ...response,
+            user: userId,
+            unfinished: wasAbortedBeforeComplete,
+          };
+          if (
+            preliminaryResponseMessageId &&
+            preliminaryResponseMessageId !== messageId &&
+            userMessage?.messageId
+          ) {
+            saveParams.messageId = preliminaryResponseMessageId;
+            saveParams.newMessageId = messageId;
+          }
           await saveMessage(
             reqCtx,
-            { ...response, user: userId, unfinished: wasAbortedBeforeComplete },
+            saveParams,
             { context: 'api/server/controllers/agents/request.js - resumable response end' },
           );
         }

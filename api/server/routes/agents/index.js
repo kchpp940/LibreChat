@@ -275,9 +275,13 @@ router.post('/chat/abort', async (req, res) => {
       hasPersistableAbortContent(abortResult.content)
     ) {
       const { jobData, content, text } = abortResult;
+      const userMessageId = jobData.userMessage.messageId;
+      const tempResponseId = `${userMessageId.replace(/_+$/, '')}_`;
+      const hasTempId = jobData.responseMessageId === tempResponseId;
+      
       const responseMessage = {
         messageId: jobData.responseMessageId,
-        parentMessageId: jobData.userMessage.messageId,
+        parentMessageId: userMessageId,
         conversationId: jobData.conversationId,
         content: content || [],
         text: text || '',
@@ -290,6 +294,13 @@ router.post('/chat/abort', async (req, res) => {
         isCreatedByUser: false,
         user: userId,
       };
+
+      if (hasTempId) {
+        responseMessage.messageId = tempResponseId;
+        logger.debug(
+          `[AgentStream] Abort saving with temp ID ${tempResponseId} for user message ${userMessageId}`,
+        );
+      }
 
       try {
         await saveMessage(

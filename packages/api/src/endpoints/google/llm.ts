@@ -1,13 +1,5 @@
 import { Providers } from '@librechat/agents';
-import {
-  googleSettings,
-  AuthKeys,
-  removeNullishValues,
-  resolveParamPolicy,
-  ResolvedEndpointType,
-  getClientParamKeys,
-} from 'librechat-data-provider';
-import type { SettingDefinition } from 'librechat-data-provider';
+import { googleSettings, AuthKeys, removeNullishValues } from 'librechat-data-provider';
 import type { GoogleClientOptions, VertexAIClientOptions } from '@librechat/agents';
 import type { GoogleAIToolType } from '@librechat/agents/langchain/google-common';
 import type * as t from '~/types';
@@ -336,19 +328,6 @@ export function getGoogleConfig(
   /** @type {GoogleClientOptions | VertexAIClientOptions} */
   llmConfig: VertexAIClientOptions | GoogleClientOptions;
 } {
-  const policy = resolveParamPolicy({
-    resolvedType: options.resolvedType ?? ResolvedEndpointType.GOOGLE,
-    defaultParamsEndpoint: options.defaultParamsEndpoint,
-    paramDefinitions: options.paramDefinitions,
-    addParams: options.addParams,
-    dropParams: options.dropParams,
-  });
-
-  const clientKeys = new Set([
-    ...knownGoogleParams,
-    ...policy.clientKeys,
-  ]);
-
   let creds: t.GoogleCredentials = {};
   if (acceptRawApiKey && typeof credentials === 'string') {
     creds[AuthKeys.GOOGLE_API_KEY] = credentials;
@@ -521,7 +500,7 @@ export function getGoogleConfig(
         continue;
       }
 
-      if (clientKeys.has(key)) {
+      if (knownGoogleParams.has(key)) {
         /** Route known Google params to llmConfig only if undefined */
         applyDefaultParams(llmConfig as Record<string, unknown>, { [key]: value });
         if (key === 'endpoint') {
@@ -543,7 +522,7 @@ export function getGoogleConfig(
         continue;
       }
 
-      if (clientKeys.has(key)) {
+      if (knownGoogleParams.has(key)) {
         /** Route known Google params to llmConfig */
         (llmConfig as Record<string, unknown>)[key] = value;
         if (key === 'endpoint') {
@@ -555,8 +534,8 @@ export function getGoogleConfig(
   }
 
   /** Handle dropParams - only drop from Google config */
-  if (policy.droppedKeys.size > 0) {
-    policy.droppedKeys.forEach((param) => {
+  if (options.dropParams && Array.isArray(options.dropParams)) {
+    options.dropParams.forEach((param) => {
       if (param === 'web_search') {
         enableWebSearch = false;
         return;
@@ -581,7 +560,8 @@ export function getGoogleConfig(
    * this, current Gemini models would inherit the legacy 8K default instead of their
    * documented limit.
    */
-  const maxOutputDropped = policy.droppedKeys.has('maxOutputTokens');
+  const maxOutputDropped =
+    Array.isArray(options.dropParams) && options.dropParams.includes('maxOutputTokens');
   if (
     !maxOutputDropped &&
     modelOptions?.maxOutputTokens == null &&
@@ -596,7 +576,7 @@ export function getGoogleConfig(
     config: llmConfig,
     provider,
     thinking,
-    dropParams: Array.from(policy.droppedKeys),
+    dropParams: Array.isArray(options.dropParams) ? options.dropParams : undefined,
   });
 
   if (provider === Providers.VERTEXAI && shouldSyncVertexEndpoint && !hasCustomVertexEndpoint) {

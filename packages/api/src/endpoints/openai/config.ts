@@ -1,12 +1,6 @@
 import { ProxyAgent } from 'undici';
 import { Providers } from '@librechat/agents';
-import {
-  KnownEndpoints,
-  EModelEndpoint,
-  ReasoningParameterFormat,
-  resolveParamEndpointType,
-  ResolvedEndpointType,
-} from 'librechat-data-provider';
+import { KnownEndpoints, EModelEndpoint, ReasoningParameterFormat } from 'librechat-data-provider';
 import type * as t from '~/types';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
 import { getOpenAILLMConfig, extractDefaultParams } from './llm';
@@ -101,13 +95,9 @@ export function getOpenAIConfig(
 
   let llmConfig: t.OAIClientOptions;
   let tools: t.LLMConfigResult['tools'];
-
-  const resolvedType = resolveParamEndpointType(options.customParams?.defaultParamsEndpoint) ?? null;
-  const isAnthropic = resolvedType === ResolvedEndpointType.ANTHROPIC;
-  const isGoogle = resolvedType === ResolvedEndpointType.GOOGLE;
-  const isOpenRouter =
-    resolvedType === ResolvedEndpointType.OPENROUTER ||
-    options.customParams?.defaultParamsEndpoint === KnownEndpoints.openrouter;
+  const isAnthropic = options.customParams?.defaultParamsEndpoint === EModelEndpoint.anthropic;
+  const isGoogle = options.customParams?.defaultParamsEndpoint === EModelEndpoint.google;
+  const isOpenRouter = options.customParams?.defaultParamsEndpoint === KnownEndpoints.openrouter;
 
   const useOpenRouter =
     !isAnthropic &&
@@ -133,9 +123,6 @@ export function getOpenAIConfig(
       addParams,
       dropParams,
       defaultParams,
-      resolvedType,
-      paramDefinitions: options.customParams?.paramDefinitions,
-      defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
     });
     /** Transform handles addParams/dropParams - it knows about OpenAI params */
     const transformed = transformToOpenAIConfig({
@@ -143,7 +130,6 @@ export function getOpenAIConfig(
       dropParams,
       llmConfig: anthropicResult.llmConfig,
       fromEndpoint: EModelEndpoint.anthropic,
-      resolvedType,
     });
     llmConfig = transformed.llmConfig;
     tools = anthropicResult.tools;
@@ -163,9 +149,6 @@ export function getOpenAIConfig(
         addParams,
         dropParams,
         defaultParams,
-        resolvedType,
-        paramDefinitions: options.customParams?.paramDefinitions,
-        defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
       },
       true,
     );
@@ -177,7 +160,6 @@ export function getOpenAIConfig(
       tools: googleResult.tools,
       llmConfig: googleResult.llmConfig,
       fromEndpoint: EModelEndpoint.google,
-      resolvedType,
     });
     llmConfig = transformed.llmConfig;
     tools = transformed.tools;
@@ -193,9 +175,6 @@ export function getOpenAIConfig(
       defaultParams,
       modelOptions,
       useOpenRouter,
-      resolvedType,
-      paramDefinitions: options.customParams?.paramDefinitions,
-      defaultParamsEndpoint: options.customParams?.defaultParamsEndpoint,
       reasoningFormat: getReasoningFormat({
         customFormat: options.customParams?.reasoningFormat,
         isVercel: Boolean(isVercel),

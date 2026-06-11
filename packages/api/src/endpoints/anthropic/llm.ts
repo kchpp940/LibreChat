@@ -7,11 +7,7 @@ import {
   removeNullishValues,
   ThinkingDisplay,
   AuthKeys,
-  resolveParamPolicy,
-  ResolvedEndpointType,
-  getClientParamKeys,
 } from 'librechat-data-provider';
-import type { SettingDefinition } from 'librechat-data-provider';
 import type {
   AnthropicLLMConfigResult,
   AnthropicConfigOptions,
@@ -97,19 +93,6 @@ function getLLMConfig(
   credentials: string | AnthropicCredentials | undefined,
   options: AnthropicConfigOptions = {},
 ): AnthropicLLMConfigResult {
-  const policy = resolveParamPolicy({
-    resolvedType: options.resolvedType ?? ResolvedEndpointType.ANTHROPIC,
-    defaultParamsEndpoint: options.defaultParamsEndpoint,
-    paramDefinitions: options.paramDefinitions,
-    addParams: options.addParams,
-    dropParams: options.dropParams,
-  });
-
-  const clientKeys = new Set([
-    ...knownAnthropicParams,
-    ...policy.clientKeys,
-  ]);
-
   /**
    * Persisted agent `model_parameters` may round-trip `thinking` as the full
    * Anthropic object `{ type: 'adaptive', display: 'omitted' }` rather than a
@@ -267,7 +250,7 @@ function getLLMConfig(
         continue;
       }
 
-      if (clientKeys.has(key)) {
+      if (knownAnthropicParams.has(key)) {
         /** Route known Anthropic params to requestOptions only if undefined */
         applyDefaultParams(requestOptions as Record<string, unknown>, { [key]: value });
       }
@@ -286,7 +269,7 @@ function getLLMConfig(
         continue;
       }
 
-      if (clientKeys.has(key)) {
+      if (knownAnthropicParams.has(key)) {
         /** Route known Anthropic params to requestOptions */
         (requestOptions as Record<string, unknown>)[key] = value;
       }
@@ -295,10 +278,11 @@ function getLLMConfig(
   }
 
   /** Handle dropParams - only drop from Anthropic config */
-  const shouldDropClientOptions = policy.droppedKeys.has('clientOptions');
+  const shouldDropClientOptions =
+    Array.isArray(options.dropParams) && options.dropParams.includes('clientOptions');
 
-  if (policy.droppedKeys.size > 0) {
-    policy.droppedKeys.forEach((param) => {
+  if (options.dropParams && Array.isArray(options.dropParams)) {
+    options.dropParams.forEach((param) => {
       if (param === 'web_search') {
         enableWebSearch = false;
         return;

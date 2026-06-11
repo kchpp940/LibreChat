@@ -31,10 +31,4 @@ export interface GoogleConfigOptions {
   forceVertex?: boolean;
   /** GCP project id for Vertex AI ADC/service-account authentication */
   projectId?: string;
-  /** Resolved endpoint type for unified parameter filtering */
-  resolvedType?: import('librechat-data-provider').ResolvedEndpointType | null;
-  /** Custom parameter definitions from endpoint config */
-  paramDefinitions?: Partial<import('librechat-data-provider').SettingDefinition>[] | null;
-  /** defaultParamsEndpoint value from custom endpoint config */
-  defaultParamsEndpoint?: string | null;
 }
