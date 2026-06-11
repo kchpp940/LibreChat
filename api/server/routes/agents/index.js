@@ -10,7 +10,7 @@ const {
   configMiddleware,
   messageUserLimiter,
 } = require('~/server/middleware');
-const { saveMessage } = require('~/models');
+const { saveMessage, getMessages } = require('~/models');
 const responses = require('./responses');
 const openai = require('./openai');
 const { v1 } = require('./v1');
@@ -21,6 +21,68 @@ const { LIMIT_MESSAGE_IP, LIMIT_MESSAGE_USER } = process.env ?? {};
 /** Untenanted jobs (pre-multi-tenancy) remain accessible if the userId check passes. */
 function hasTenantMismatch(job, user) {
   return job.metadata?.tenantId != null && job.metadata.tenantId !== user.tenantId;
+}
+
+/**
+ * Build a lookupExistingId callback for GenerationJobManager.
+ * Tries to find an already-persisted assistant message for a legacy job by:
+ * 1. Using userMessage.messageId as parentMessageId to find the assistant response
+ * 2. Looking for the most recent assistant message in that conversation
+ *
+ * This avoids generating a new random UUID and breaking the chain to any
+ * half-saved message from before responseMessageId was introduced.
+ */
+function buildLookupExistingId(userId) {
+  return async (jobData) => {
+    try {
+      const userMessageId = jobData.userMessage?.messageId;
+      const conversationId = jobData.conversationId;
+
+      if (!userMessageId && !conversationId) {
+        return undefined;
+      }
+
+      // Try 1: Find assistant message whose parentMessageId matches the user message ID
+      if (userMessageId) {
+        const messages = await getMessages({
+          user: userId,
+          parentMessageId: userMessageId,
+          isCreatedByUser: false,
+        }, 'messageId');
+        if (messages && messages.length > 0) {
+          logger.debug(
+            `[AgentStream] Found existing assistant message via parentMessageId: ${messages[0].messageId}`,
+          );
+          return messages[0].messageId;
+        }
+      }
+
+      // Try 2: Find the most recent assistant message in the conversation
+      if (conversationId) {
+        const messages = await getMessages(
+          {
+            user: userId,
+            conversationId,
+            isCreatedByUser: false,
+          },
+          'messageId',
+        );
+        if (messages && messages.length > 0) {
+          // Return the last (most recent) assistant message
+          const lastMessage = messages[messages.length - 1];
+          logger.debug(
+            `[AgentStream] Found existing assistant message via conversation lookup: ${lastMessage.messageId}`,
+          );
+          return lastMessage.messageId;
+        }
+      }
+
+      return undefined;
+    } catch (err) {
+      logger.warn('[AgentStream] lookupExistingId failed, will generate new UUID:', err);
+      return undefined;
+    }
+  };
 }
 
 const router = express.Router();
@@ -87,6 +149,9 @@ router.get('/chat/stream/:streamId', async (req, res) => {
 
   logger.debug(`[AgentStream] Client subscribed to ${streamId}, resume: ${isResume}`);
 
+  // Build lookup callback for reconnecting legacy jobs to their existing assistant messages
+  const lookupExistingId = buildLookupExistingId(req.user.id);
+
   const writeEvent = (event, options = {}) => {
     if (!res.writableEnded) {
       const eventName = options.eventName ?? 'message';
@@ -120,7 +185,7 @@ router.get('/chat/stream/:streamId', async (req, res) => {
 
   if (isResume) {
     const { subscription, resumeState, pendingEvents } =
-      await GenerationJobManager.subscribeWithResume(streamId, writeEvent, onDone, onError);
+      await GenerationJobManager.subscribeWithResume(streamId, writeEvent, onDone, onError, lookupExistingId);
 
     if (!res.writableEnded) {
       if (resumeState) {
@@ -196,7 +261,9 @@ router.get('/chat/status/:conversationId', async (req, res) => {
 
   // Get resume state which contains aggregatedContent
   // Avoid calling both getStreamInfo and getResumeState (both fetch content)
-  const resumeState = await GenerationJobManager.getResumeState(conversationId);
+  // Pass lookupExistingId to reconnect legacy jobs to their existing assistant messages
+  const lookupExistingId = buildLookupExistingId(req.user.id);
+  const resumeState = await GenerationJobManager.getResumeState(conversationId, lookupExistingId);
   const isActive = job.status === 'running';
 
   res.json({
@@ -247,61 +314,60 @@ router.post('/chat/abort', async (req, res) => {
 
   logger.debug(`[AgentStream] Computed jobStreamId: ${jobStreamId}`);
 
-    if (job && jobStreamId) {
-      if (job.metadata?.userId && job.metadata.userId !== userId) {
-        logger.warn(`[AgentStream] Unauthorized abort attempt for ${jobStreamId} by user ${userId}`);
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
+  if (job && jobStreamId) {
+    if (job.metadata?.userId && job.metadata.userId !== userId) {
+      logger.warn(`[AgentStream] Unauthorized abort attempt for ${jobStreamId} by user ${userId}`);
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
 
-      if (hasTenantMismatch(job, req.user)) {
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
+    if (hasTenantMismatch(job, req.user)) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
 
-      // CRITICAL: Ensure the job has a stable responseMessageId BEFORE any operation.
-      // This backfills legacy jobs and guarantees that abort save and any subsequent
-      // operations use the SAME message identity — no streamId fallback, no guessing.
-      await GenerationJobManager.ensureResponseMessageId(jobStreamId);
+    // Build lookup callback for legacy jobs to find their already-saved assistant message
+    const lookupExistingId = buildLookupExistingId(userId);
 
-      logger.debug(`[AgentStream] Job found, aborting: ${jobStreamId}`);
-      const abortResult = await GenerationJobManager.abortJob(jobStreamId);
-      logger.debug(`[AgentStream] Job aborted successfully: ${jobStreamId}`, {
-        abortResultSuccess: abortResult.success,
-        abortResultUserMessageId: abortResult.jobData?.userMessage?.messageId,
-        abortResultResponseMessageId: abortResult.jobData?.responseMessageId,
-      });
+    logger.debug(`[AgentStream] Job found, aborting: ${jobStreamId}`);
+    // abortJob internally calls ensureResponseMessageId with lookupExistingId
+    const abortResult = await GenerationJobManager.abortJob(jobStreamId, lookupExistingId);
+    logger.debug(`[AgentStream] Job aborted successfully: ${jobStreamId}`, {
+      abortResultSuccess: abortResult.success,
+      abortResultUserMessageId: abortResult.jobData?.userMessage?.messageId,
+      abortResultResponseMessageId: abortResult.jobData?.responseMessageId,
+    });
 
-      // CRITICAL: Save partial response BEFORE returning to prevent race condition.
-      // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
-      // responseMessageId is guaranteed to exist here (either from job creation or backfill above).
-      if (
-        abortResult.success &&
-        abortResult.jobData?.userMessage?.messageId &&
-        abortResult.jobData?.responseMessageId &&
-        hasPersistableAbortContent(abortResult.content)
-      ) {
-        const { jobData, content, text } = abortResult;
-        const userMessageId = jobData.userMessage.messageId;
-        const responseMessageId = jobData.responseMessageId;
+    // CRITICAL: Save partial response BEFORE returning to prevent race condition.
+    // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
+    // responseMessageId is guaranteed to exist here (either from job creation or backfill above).
+    if (
+      abortResult.success &&
+      abortResult.jobData?.userMessage?.messageId &&
+      abortResult.jobData?.responseMessageId &&
+      hasPersistableAbortContent(abortResult.content)
+    ) {
+      const { jobData, content, text } = abortResult;
+      const userMessageId = jobData.userMessage.messageId;
+      const responseMessageId = jobData.responseMessageId;
 
-        const responseMessage = {
-          messageId: responseMessageId,
-          parentMessageId: userMessageId,
-          conversationId: jobData.conversationId,
-          content: content || [],
-          text: text || '',
-          sender: jobData.sender || 'AI',
-          endpoint: jobData.endpoint,
-          iconURL: jobData.iconURL,
-          model: jobData.model,
-          unfinished: true,
-          error: false,
-          isCreatedByUser: false,
-          user: userId,
-        };
+      const responseMessage = {
+        messageId: responseMessageId,
+        parentMessageId: userMessageId,
+        conversationId: jobData.conversationId,
+        content: content || [],
+        text: text || '',
+        sender: jobData.sender || 'AI',
+        endpoint: jobData.endpoint,
+        iconURL: jobData.iconURL,
+        model: jobData.model,
+        unfinished: true,
+        error: false,
+        isCreatedByUser: false,
+        user: userId,
+      };
 
-        logger.debug(
-          `[AgentStream] Abort saving with stable ID ${responseMessageId} for ${jobStreamId}`,
-        );
+      logger.debug(
+        `[AgentStream] Abort saving with stable ID ${responseMessageId} for ${jobStreamId}`,
+      );
 
       try {
         await saveMessage(
