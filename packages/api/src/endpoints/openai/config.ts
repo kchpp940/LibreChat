@@ -1,6 +1,12 @@
 import { ProxyAgent } from 'undici';
 import { Providers } from '@librechat/agents';
-import { KnownEndpoints, EModelEndpoint, ReasoningParameterFormat } from 'librechat-data-provider';
+import {
+  KnownEndpoints,
+  EModelEndpoint,
+  ReasoningParameterFormat,
+  resolveEndpointType,
+  ResolvedEndpointType,
+} from 'librechat-data-provider';
 import type * as t from '~/types';
 import { getLLMConfig as getAnthropicLLMConfig } from '~/endpoints/anthropic/llm';
 import { getOpenAILLMConfig, extractDefaultParams } from './llm';
@@ -95,9 +101,13 @@ export function getOpenAIConfig(
 
   let llmConfig: t.OAIClientOptions;
   let tools: t.LLMConfigResult['tools'];
-  const isAnthropic = options.customParams?.defaultParamsEndpoint === EModelEndpoint.anthropic;
-  const isGoogle = options.customParams?.defaultParamsEndpoint === EModelEndpoint.google;
-  const isOpenRouter = options.customParams?.defaultParamsEndpoint === KnownEndpoints.openrouter;
+
+  const resolvedType = resolveEndpointType(options.customParams?.defaultParamsEndpoint);
+  const isAnthropic = resolvedType === ResolvedEndpointType.ANTHROPIC;
+  const isGoogle = resolvedType === ResolvedEndpointType.GOOGLE;
+  const isOpenRouter =
+    resolvedType === ResolvedEndpointType.OPENROUTER ||
+    options.customParams?.defaultParamsEndpoint === KnownEndpoints.openrouter;
 
   const useOpenRouter =
     !isAnthropic &&

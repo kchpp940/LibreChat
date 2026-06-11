@@ -10,6 +10,7 @@ import {
   googleSchema,
   EModelEndpoint,
   Providers,
+  BedrockProviders,
   anthropicSchema,
   assistantSchema,
   // agentsSchema,
@@ -48,19 +49,79 @@ const endpointSchemas: Record<EndpointSchemaLookupKey, EndpointSchema> = {
 const isEndpointSchemaLookupKey = (value?: string | null): value is EndpointSchemaLookupKey =>
   value != null && Object.prototype.hasOwnProperty.call(endpointSchemas, value);
 
+export enum ResolvedEndpointType {
+  OPENAI = 'openAI',
+  ANTHROPIC = 'anthropic',
+  GOOGLE = 'google',
+  OPENROUTER = 'openrouter',
+  BEDROCK = 'bedrock',
+}
+
+const bedrockProviderToSchema: Record<string, EndpointSchemaLookupKey> = {
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.Anthropic}`]: EModelEndpoint.anthropic,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.MistralAI}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.Moonshot}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.MoonshotAI}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.Cohere}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.Meta}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.AI21}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.Amazon}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.DeepSeek}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.OpenAI}`]: EModelEndpoint.openAI,
+  [`${EModelEndpoint.bedrock}-${BedrockProviders.ZAI}`]: EModelEndpoint.openAI,
+};
+
+export function resolveSchemaLookupKey(
+  defaultParamsEndpoint?: string | null,
+): EndpointSchemaLookupKey | undefined {
+  if (!defaultParamsEndpoint) {
+    return undefined;
+  }
+
+  if (isEndpointSchemaLookupKey(defaultParamsEndpoint)) {
+    return defaultParamsEndpoint;
+  }
+
+  return bedrockProviderToSchema[defaultParamsEndpoint];
+}
+
+export function resolveEndpointType(defaultParamsEndpoint?: string | null): ResolvedEndpointType | undefined {
+  const schemaKey = resolveSchemaLookupKey(defaultParamsEndpoint);
+  if (!schemaKey) {
+    return undefined;
+  }
+
+  if (schemaKey === EModelEndpoint.anthropic) {
+    return ResolvedEndpointType.ANTHROPIC;
+  }
+  if (schemaKey === EModelEndpoint.google) {
+    return ResolvedEndpointType.GOOGLE;
+  }
+  if (schemaKey === Providers.OPENROUTER) {
+    return ResolvedEndpointType.OPENROUTER;
+  }
+  if (schemaKey === EModelEndpoint.bedrock) {
+    return ResolvedEndpointType.BEDROCK;
+  }
+
+  return ResolvedEndpointType.OPENAI;
+}
+
 const getFallbackEndpointSchema = <TSchema>(
   schemas: Record<EndpointSchemaLookupKey, TSchema>,
   endpointType?: EndpointSchemaKey | null,
   defaultParamsEndpoint?: string | null,
 ): TSchema | undefined => {
+  const resolvedKey = resolveSchemaLookupKey(defaultParamsEndpoint);
+  if (resolvedKey) {
+    return schemas[resolvedKey];
+  }
+
   if (!endpointType) {
     return undefined;
   }
 
-  const overrideSchema = isEndpointSchemaLookupKey(defaultParamsEndpoint)
-    ? schemas[defaultParamsEndpoint]
-    : undefined;
-  return overrideSchema ?? schemas[endpointType];
+  return schemas[endpointType];
 };
 
 // const schemaCreators: Record<EModelEndpoint, (customSchema: DefaultSchemaValues) => EndpointSchema> = {
