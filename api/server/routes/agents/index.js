@@ -267,7 +267,7 @@ router.post('/chat/abort', async (req, res) => {
 
     // CRITICAL: Save partial response BEFORE returning to prevent race condition.
     // If user sends a follow-up immediately after abort, the parentMessageId must exist in DB.
-    // Only save if we have a valid responseMessageId (skip early aborts before generation started)
+    // responseMessageId is generated at job creation and is stable across the entire lifecycle.
     if (
       abortResult.success &&
       abortResult.jobData?.userMessage?.messageId &&
@@ -276,9 +276,7 @@ router.post('/chat/abort', async (req, res) => {
     ) {
       const { jobData, content, text } = abortResult;
       const userMessageId = jobData.userMessage.messageId;
-      const tempResponseId = `${userMessageId.replace(/_+$/, '')}_`;
-      const hasTempId = jobData.responseMessageId === tempResponseId;
-      
+
       const responseMessage = {
         messageId: jobData.responseMessageId,
         parentMessageId: userMessageId,
@@ -295,12 +293,9 @@ router.post('/chat/abort', async (req, res) => {
         user: userId,
       };
 
-      if (hasTempId) {
-        responseMessage.messageId = tempResponseId;
-        logger.debug(
-          `[AgentStream] Abort saving with temp ID ${tempResponseId} for user message ${userMessageId}`,
-        );
-      }
+      logger.debug(
+        `[AgentStream] Abort saving with stable ID ${jobData.responseMessageId} for ${jobStreamId}`,
+      );
 
       try {
         await saveMessage(

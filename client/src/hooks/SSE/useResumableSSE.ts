@@ -314,58 +314,21 @@ const buildResumeEventSubmission = (
   } as EventSubmission;
 };
 
-const isTemporaryResponseId = (messageId: string, userMessageId: string): boolean => {
-  return messageId === `${userMessageId.replace(/_+$/, '')}_`;
-};
-
-const findResponseMessageIndex = (messages: TMessage[], userMessageId: string, responseMessageId?: string): number => {
-  const cleanUserMsgId = userMessageId.replace(/_+$/, '');
-  
-  if (responseMessageId) {
-    const exactMatch = messages.findIndex((m) => m.messageId === responseMessageId);
-    if (exactMatch >= 0) {
-      return exactMatch;
-    }
-  }
-  
-  return messages.findIndex(
-    (m) =>
-      !m.isCreatedByUser &&
-      (m.messageId === `${cleanUserMsgId}_` ||
-        m.parentMessageId === userMessageId ||
-        m.parentMessageId === cleanUserMsgId ||
-        (responseMessageId && isTemporaryResponseId(m.messageId, responseMessageId))),
-  );
-};
-
 const mergeResumeMessages = (
   messages: TMessage[],
   userMessage: TMessage,
   responseMessage: TMessage,
 ): TMessage[] => {
   const nextMessages = [...messages];
-  const userIndex = nextMessages.findIndex(
-    (message) => message.messageId === userMessage.messageId,
-  );
-  
-  const responseIndex = findResponseMessageIndex(
-    nextMessages,
-    userMessage.messageId,
-    responseMessage.messageId,
-  );
+  const userIndex = nextMessages.findIndex((m) => m.messageId === userMessage.messageId);
+  const responseIndex = nextMessages.findIndex((m) => m.messageId === responseMessage.messageId);
 
   if (userIndex >= 0) {
     nextMessages[userIndex] = { ...nextMessages[userIndex], ...userMessage };
   }
 
   if (responseIndex >= 0) {
-    const existingMessage = nextMessages[responseIndex];
-    const mergedMessage = {
-      ...existingMessage,
-      ...responseMessage,
-      messageId: responseMessage.messageId,
-    };
-    nextMessages[responseIndex] = mergedMessage;
+    nextMessages[responseIndex] = { ...nextMessages[responseIndex], ...responseMessage };
   }
 
   if (userIndex >= 0 && responseIndex >= 0) {
@@ -374,19 +337,12 @@ const mergeResumeMessages = (
 
   if (userIndex >= 0) {
     const insertAt = userIndex + 1;
-    if (responseIndex >= 0 && responseIndex !== insertAt) {
-      const [removed] = nextMessages.splice(responseIndex, 1);
-      nextMessages.splice(insertAt, 0, { ...removed, ...responseMessage, messageId: responseMessage.messageId });
-    } else if (responseIndex < 0) {
-      nextMessages.splice(insertAt, 0, responseMessage);
-    }
+    nextMessages.splice(insertAt, 0, responseMessage);
     return nextMessages;
   }
 
   if (responseIndex >= 0) {
-    nextMessages[responseIndex] = { ...nextMessages[responseIndex], ...responseMessage, messageId: responseMessage.messageId };
-    const insertAt = responseIndex;
-    nextMessages.splice(insertAt, 0, userMessage);
+    nextMessages.splice(responseIndex, 0, userMessage);
     return nextMessages;
   }
 
@@ -671,7 +627,11 @@ export default function useResumableSSE(
               const userMsgId = userMessage.messageId;
               const serverResponseId = data.resumeState.responseMessageId;
 
-              const responseIdx = findResponseMessageIndex(messages, userMsgId, serverResponseId);
+              // With stable responseMessageId generated at job creation, we can do exact match.
+              // No more guessing based on parentMessageId or temp ID patterns.
+              const responseIdx = serverResponseId
+                ? messages.findIndex((m) => m.messageId === serverResponseId)
+                : -1;
 
               console.log('[ResumableSSE] SYNC update', {
                 userMsgId,
@@ -703,10 +663,9 @@ export default function useResumableSSE(
                 resetContentHandler();
                 syncStepMessage(responseMessage);
                 console.log('[ResumableSSE] SYNC complete, handlers synced');
-              } else {
-                const responseId = serverResponseId ?? `${userMsgId}_`;
+              } else if (serverResponseId) {
                 const newMessage = {
-                  messageId: responseId,
+                  messageId: serverResponseId,
                   parentMessageId: userMsgId,
                   conversationId: currentSubmission.conversation?.conversationId ?? '',
                   text: '',
@@ -1034,7 +993,10 @@ export default function useResumableSSE(
    * Readiness retries honor Retry-After until cleanup or the readiness window expires.
    */
   const startGeneration = useCallback(
-    async (currentSubmission: TSubmission, signal?: AbortSignal): Promise<string | null> => {
+    async (
+      currentSubmission: TSubmission,
+      signal?: AbortSignal,
+    ): Promise<{ streamId: string; responseMessageId: string } | null> => {
       const payloadData = createPayload(currentSubmission);
       let { payload } = payloadData;
       payload = removeNullishValues(payload) as TPayload;
@@ -1053,12 +1015,18 @@ export default function useResumableSSE(
         requestAttempts += 1;
         try {
           // Use request.post which handles auth token refresh via axios interceptors
-          const data = (await request.post(url, payload)) as { streamId: string };
+          const data = (await request.post(url, payload)) as {
+            streamId: string;
+            responseMessageId: string;
+          };
           if (signal?.aborted) {
             return null;
           }
-          console.log('[ResumableSSE] Generation started:', { streamId: data.streamId });
-          return data.streamId;
+          console.log('[ResumableSSE] Generation started:', {
+            streamId: data.streamId,
+            responseMessageId: data.responseMessageId,
+          });
+          return { streamId: data.streamId, responseMessageId: data.responseMessageId };
         } catch (error) {
           if (signal?.aborted) {
             return null;
@@ -1171,11 +1139,12 @@ export default function useResumableSSE(
       } else {
         // New generation: start and then subscribe
         console.log('[ResumableSSE] Starting NEW generation');
-        const newStreamId = await startGeneration(submission, signal);
+        const result = await startGeneration(submission, signal);
         if (signal.aborted) {
           return;
         }
-        if (newStreamId) {
+        if (result) {
+          const { streamId: newStreamId, responseMessageId: stableResponseId } = result;
           setStreamId(newStreamId);
           // Optimistically add to active jobs
           addActiveJob(newStreamId);
@@ -1190,9 +1159,36 @@ export default function useResumableSSE(
             optimisticStreamIdsRef.current.add(newStreamId);
             replaceNewConversationUrl(newStreamId);
           }
-          const streamSubmission = addOptimisticConversation(newStreamId, submission);
-          submissionRef.current = streamSubmission;
-          subscribeToStream(newStreamId, streamSubmission);
+
+          // Replace temporary response message ID with stable server-generated ID.
+          // The stable ID is generated at job creation and used consistently across
+          // SSE events, saveMessage, abort, and resume — no more ID guessing.
+          const currentMessages = getMessages() ?? [];
+          const tempResponseId = submission.initialResponse?.messageId;
+          if (tempResponseId && stableResponseId && tempResponseId !== stableResponseId) {
+            const updatedMessages = currentMessages.map((msg) =>
+              msg.messageId === tempResponseId
+                ? { ...msg, messageId: stableResponseId }
+                : msg,
+            );
+            setMessages(updatedMessages);
+
+            // Update submission with the stable ID for downstream handlers
+            const updatedSubmission = {
+              ...submission,
+              initialResponse: {
+                ...submission.initialResponse,
+                messageId: stableResponseId,
+              },
+            };
+            const streamSubmission = addOptimisticConversation(newStreamId, updatedSubmission);
+            submissionRef.current = streamSubmission;
+            subscribeToStream(newStreamId, streamSubmission);
+          } else {
+            const streamSubmission = addOptimisticConversation(newStreamId, submission);
+            submissionRef.current = streamSubmission;
+            subscribeToStream(newStreamId, streamSubmission);
+          }
         } else {
           console.error('[ResumableSSE] Failed to get streamId from startGeneration');
         }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Constants, parseTextParts } from 'librechat-data-provider';
 import { logger, getTenantId, SYSTEM_TENANT_ID } from '@librechat/data-schemas';
 import type { Agents, TMessageContentParts } from 'librechat-data-provider';
@@ -302,7 +303,15 @@ class GenerationJobManagerClass {
   ): Promise<t.GenerationJob> {
     const tenantId = getTenantId();
     const safeTenantId = tenantId && tenantId !== SYSTEM_TENANT_ID ? tenantId : undefined;
-    const jobData = await this.jobStore.createJob(streamId, userId, conversationId, safeTenantId);
+    const responseMessageId = randomUUID();
+    const jobData = await this.jobStore.createJob(
+      streamId,
+      userId,
+      conversationId,
+      safeTenantId,
+    );
+
+    await this.jobStore.updateJob(streamId, { responseMessageId });
 
     /**
      * Create runtime state with readyPromise.

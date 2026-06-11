@@ -90,65 +90,37 @@ export const isInitialNewConversationSubmission = ({
 }: Pick<EventSubmission, 'userMessage'>): boolean =>
   userMessage?.parentMessageId === Constants.NO_PARENT;
 
-const isTemporaryResponseId = (messageId: string, userMessageId: string): boolean => {
-  return messageId === `${userMessageId.replace(/_+$/, '')}_`;
-};
-
-const findResponseMessageIndex = (
-  messages: TMessage[],
-  userMessageId: string,
-  responseMessageId?: string,
-): number => {
-  const cleanUserMsgId = userMessageId.replace(/_+$/, '');
-
-  if (responseMessageId) {
-    const exactMatch = messages.findIndex((m) => m.messageId === responseMessageId);
-    if (exactMatch >= 0) {
-      return exactMatch;
-    }
-  }
-
-  return messages.findIndex(
-    (m) =>
-      !m.isCreatedByUser &&
-      (m.messageId === `${cleanUserMsgId}_` ||
-        m.parentMessageId === userMessageId ||
-        m.parentMessageId === cleanUserMsgId ||
-        (responseMessageId && isTemporaryResponseId(m.messageId, responseMessageId))),
-  );
-};
-
 export const mergeRegenerateFinalMessages = ({
   messages,
   responseMessage,
   initialResponseId,
-  requestMessageId,
 }: {
   messages: TMessage[];
   responseMessage: TMessage;
   initialResponseId?: string | null;
-  requestMessageId?: string;
 }): TMessage[] => {
   const finalMessages: TMessage[] = [];
   let inserted = false;
 
-  const responseIdx = requestMessageId
-    ? findResponseMessageIndex(messages, requestMessageId, responseMessage.messageId)
-    : -1;
-
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
+  for (const message of messages) {
     if (!message?.messageId) {
       continue;
     }
 
-    if (message.messageId === initialResponseId) {
+    // If this is the response message (by exact ID match), replace with final version
+    if (message.messageId === responseMessage.messageId) {
+      finalMessages.push(responseMessage);
+      inserted = true;
       continue;
     }
 
-    if (i === responseIdx || message.messageId === responseMessage.messageId) {
-      finalMessages.push(responseMessage);
-      inserted = true;
+    // Skip old initial response placeholder if it has a different ID
+    // (only happens if the ID hasn't been replaced yet, e.g. fast final before ID swap)
+    if (
+      initialResponseId &&
+      message.messageId === initialResponseId &&
+      initialResponseId !== responseMessage.messageId
+    ) {
       continue;
     }
 
@@ -177,42 +149,26 @@ export const mergeFinalMessages = ({
     return messages;
   }
 
-  const requestMsgId = requestMessage.messageId;
-  const responseMsgId = responseMessage.messageId;
-  const cleanRequestId = requestMsgId.replace(/_+$/, '');
-
   const finalMessages: TMessage[] = [];
   let requestInserted = false;
   let responseInserted = false;
-  let lastUserMsgIndex = -1;
 
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
+  for (const message of messages) {
     if (!message?.messageId) {
       continue;
-    }
-
-    if (message.isCreatedByUser) {
-      lastUserMsgIndex = i;
     }
 
     if (message.messageId === initialResponseId) {
       continue;
     }
 
-    if (message.messageId === requestMsgId) {
+    if (message.messageId === requestMessage.messageId) {
       finalMessages.push(requestMessage);
       requestInserted = true;
       continue;
     }
 
-    if (
-      !message.isCreatedByUser &&
-      (message.messageId === responseMsgId ||
-        message.messageId === `${cleanRequestId}_` ||
-        message.parentMessageId === requestMsgId ||
-        message.parentMessageId === cleanRequestId)
-    ) {
+    if (message.messageId === responseMessage.messageId) {
       finalMessages.push(responseMessage);
       responseInserted = true;
       continue;
@@ -221,17 +177,15 @@ export const mergeFinalMessages = ({
     finalMessages.push(message);
   }
 
-  if (!requestInserted) {
-    const insertIdx = lastUserMsgIndex >= 0 ? lastUserMsgIndex + 1 : finalMessages.length;
-    finalMessages.splice(insertIdx, 0, requestMessage);
-    if (!responseInserted) {
-      finalMessages.splice(insertIdx + 1, 0, responseMessage);
-      responseInserted = true;
+  if (!requestInserted || !responseInserted) {
+    const result = [...finalMessages];
+    if (!requestInserted) {
+      result.push(requestMessage);
     }
-  } else if (!responseInserted) {
-    const requestIdx = finalMessages.findIndex((m) => m.messageId === requestMsgId);
-    const insertIdx = requestIdx >= 0 ? requestIdx + 1 : finalMessages.length;
-    finalMessages.splice(insertIdx, 0, responseMessage);
+    if (!responseInserted) {
+      result.push(responseMessage);
+    }
+    return result;
   }
 
   return finalMessages;
@@ -857,7 +811,6 @@ export default function useEventHandlers({
             messages: submission.regenerateMessages ?? currentMessages ?? messages,
             responseMessage,
             initialResponseId: submission.initialResponse.messageId,
-            requestMessageId: requestMessage?.messageId,
           });
         } else if (requestMessage != null && responseMessage != null) {
           finalMessages = mergeFinalMessages({
