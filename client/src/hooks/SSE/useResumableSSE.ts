@@ -29,9 +29,7 @@ import {
   clearAllDrafts,
   removeConvoFromAllQueries,
   upsertConvoInAllQueries,
-  updateConvoInAllQueries,
   markStreamStartFailedMetadata,
-  getAllContentText,
 } from '~/utils';
 import {
   useGetUserBalance,
@@ -286,9 +284,10 @@ const buildResumeEventSubmission = (
     isCreatedByUser: true,
   } as TMessage;
 
-  // responseMessageId is guaranteed by backend ensureResponseMessageId() —
-  // either from job creation or backfilled for legacy jobs. No fallback needed.
-  const responseMessageId = resumeState.responseMessageId!;
+  const responseMessageId =
+    resumeState.responseMessageId ??
+    currentSubmission.initialResponse?.messageId ??
+    `${userMessage.messageId}_`;
 
   const initialResponse = {
     ...(currentSubmission.initialResponse as TMessage),
@@ -321,8 +320,12 @@ const mergeResumeMessages = (
   responseMessage: TMessage,
 ): TMessage[] => {
   const nextMessages = [...messages];
-  const userIndex = nextMessages.findIndex((m) => m.messageId === userMessage.messageId);
-  const responseIndex = nextMessages.findIndex((m) => m.messageId === responseMessage.messageId);
+  const userIndex = nextMessages.findIndex(
+    (message) => message.messageId === userMessage.messageId,
+  );
+  const responseIndex = nextMessages.findIndex(
+    (message) => message.messageId === responseMessage.messageId,
+  );
 
   if (userIndex >= 0) {
     nextMessages[userIndex] = { ...nextMessages[userIndex], ...userMessage };
@@ -430,103 +433,6 @@ export default function useResumableSSE(
     },
     [getMessages, queryClient],
   );
-
-  /**
-   * Atomically migrate a temporary response message ID to a stable server-generated ID.
-   * Updates ALL relevant state and caches in one pass to prevent ID divergence:
-   * - Local messages state
-   * - React Query messages cache (both conversationId and NEW_CONVO keys)
-   * - React Query conversation cache (lastMessageId, lastMessageText)
-   * - All conversations list cache (lastMessageId, lastMessageText)
-   * - Internal handler maps (content handler, step handler)
-   * - Submission reference
-   */
-  const migrateResponseMessageId = useCallback(
-    (
-      oldId: string,
-      newId: string,
-      currentSubmission: TSubmission,
-    ): TSubmission => {
-      if (oldId === newId) {
-        return currentSubmission;
-      }
-
-      const conversationId =
-        currentSubmission.conversation?.conversationId ?? Constants.NEW_CONVO;
-      const currentMessages = getMessages() ?? [];
-
-      // 1. Migrate message ID in local messages state
-      const updatedMessages = currentMessages.map((msg) =>
-        msg.messageId === oldId ? { ...msg, messageId: newId } : msg,
-      );
-      setMessages(updatedMessages);
-
-      // 2. Migrate message ID in React Query messages cache
-      const migrateMessagesInCache = (cacheKey: string) => {
-        queryClient.setQueryData<TMessage[]>([QueryKeys.messages, cacheKey], (old) => {
-          if (!old) {
-            return old;
-          }
-          return old.map((msg) => (msg.messageId === oldId ? { ...msg, messageId: newId } : msg));
-        });
-      };
-      if (hasConcreteConversationId(conversationId)) {
-        migrateMessagesInCache(conversationId);
-      }
-      migrateMessagesInCache(Constants.NEW_CONVO);
-
-      // 3. Migrate message ID in conversation cache and conversations list
-      const isLastMessage =
-        updatedMessages.length > 0 &&
-        updatedMessages[updatedMessages.length - 1].messageId === newId;
-
-      if (isLastMessage && hasConcreteConversationId(conversationId)) {
-        const lastMessage = updatedMessages[updatedMessages.length - 1];
-        const lastMessageText = getAllContentText(lastMessage);
-
-        // Update individual conversation cache
-        queryClient.setQueryData<TConversation>(
-          [QueryKeys.conversation, conversationId],
-          (old) => {
-            if (!old) {
-              return old;
-            }
-            return {
-              ...old,
-              lastMessageId: newId,
-              lastMessageText,
-            };
-          },
-        );
-
-        // Update all conversations list cache
-        updateConvoInAllQueries(queryClient, conversationId, (convo) => {
-          if (!convo) {
-            return convo;
-          }
-          return {
-            ...convo,
-            lastMessageId: newId,
-            lastMessageText,
-          };
-        });
-      }
-
-      // 4. Migrate message ID in internal handler maps
-      migrateMessageId(oldId, newId);
-
-      // 5. Update submission with new stable ID
-      const updatedSubmission = {
-        ...currentSubmission,
-        initialResponse: currentSubmission.initialResponse
-          ? { ...currentSubmission.initialResponse, messageId: newId }
-          : currentSubmission.initialResponse,
-      };
-
-      return updatedSubmission;
-    },
-    [getMessages, queryClient, migrateMessageId],
-  );
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);
   const setAbortScroll = useSetRecoilState(store.abortScrollFamily(runIndex));
@@ -552,7 +458,6 @@ export default function useResumableSSE(
     syncStepMessage,
     attachmentHandler,
     resetContentHandler,
-    migrateMessageId,
   } = useEventHandlers({
     setMessages,
     getMessages,
@@ -726,12 +631,17 @@ export default function useResumableSSE(
               const userMsgId = userMessage.messageId;
               const serverResponseId = data.resumeState.responseMessageId;
 
-              // With ensureResponseMessageId() on the backend, responseMessageId is
-              // ALWAYS present — either from job creation or backfilled for legacy jobs.
-              // No more parentMessageId guessing, no more streamId fallback.
-              const responseIdx = serverResponseId
-                ? messages.findIndex((m) => m.messageId === serverResponseId)
-                : -1;
+              let responseIdx = -1;
+              if (serverResponseId) {
+                responseIdx = messages.findIndex((m) => m.messageId === serverResponseId);
+              }
+              if (responseIdx < 0) {
+                responseIdx = messages.findIndex(
+                  (m) =>
+                    !m.isCreatedByUser &&
+                    (m.messageId === `${userMsgId}_` || m.parentMessageId === userMsgId),
+                );
+              }
 
               console.log('[ResumableSSE] SYNC update', {
                 userMsgId,
@@ -746,7 +656,6 @@ export default function useResumableSSE(
                 const oldContent = messages[responseIdx]?.content;
                 const responseMessage = {
                   ...messages[responseIdx],
-                  messageId: serverResponseId,
                   content: data.resumeState.aggregatedContent,
                   iconURL: preferDefinedString(
                     messages[responseIdx]?.iconURL,
@@ -764,9 +673,10 @@ export default function useResumableSSE(
                 resetContentHandler();
                 syncStepMessage(responseMessage);
                 console.log('[ResumableSSE] SYNC complete, handlers synced');
-              } else if (serverResponseId) {
+              } else {
+                const responseId = serverResponseId ?? `${userMsgId}_`;
                 const newMessage = {
-                  messageId: serverResponseId,
+                  messageId: responseId,
                   parentMessageId: userMsgId,
                   conversationId: currentSubmission.conversation?.conversationId ?? '',
                   text: '',
@@ -1094,10 +1004,7 @@ export default function useResumableSSE(
    * Readiness retries honor Retry-After until cleanup or the readiness window expires.
    */
   const startGeneration = useCallback(
-    async (
-      currentSubmission: TSubmission,
-      signal?: AbortSignal,
-    ): Promise<{ streamId: string; responseMessageId: string } | null> => {
+    async (currentSubmission: TSubmission, signal?: AbortSignal): Promise<string | null> => {
       const payloadData = createPayload(currentSubmission);
       let { payload } = payloadData;
       payload = removeNullishValues(payload) as TPayload;
@@ -1116,18 +1023,12 @@ export default function useResumableSSE(
         requestAttempts += 1;
         try {
           // Use request.post which handles auth token refresh via axios interceptors
-          const data = (await request.post(url, payload)) as {
-            streamId: string;
-            responseMessageId: string;
-          };
+          const data = (await request.post(url, payload)) as { streamId: string };
           if (signal?.aborted) {
             return null;
           }
-          console.log('[ResumableSSE] Generation started:', {
-            streamId: data.streamId,
-            responseMessageId: data.responseMessageId,
-          });
-          return { streamId: data.streamId, responseMessageId: data.responseMessageId };
+          console.log('[ResumableSSE] Generation started:', { streamId: data.streamId });
+          return data.streamId;
         } catch (error) {
           if (signal?.aborted) {
             return null;
@@ -1240,12 +1141,11 @@ export default function useResumableSSE(
       } else {
         // New generation: start and then subscribe
         console.log('[ResumableSSE] Starting NEW generation');
-        const result = await startGeneration(submission, signal);
+        const newStreamId = await startGeneration(submission, signal);
         if (signal.aborted) {
           return;
         }
-        if (result) {
-          const { streamId: newStreamId, responseMessageId: stableResponseId } = result;
+        if (newStreamId) {
           setStreamId(newStreamId);
           // Optimistically add to active jobs
           addActiveJob(newStreamId);
@@ -1260,32 +1160,7 @@ export default function useResumableSSE(
             optimisticStreamIdsRef.current.add(newStreamId);
             replaceNewConversationUrl(newStreamId);
           }
-
-          // Step 1: Set up optimistic conversation (for new conversations).
-          // This creates the conversation cache entry with the initial (potentially temporary) IDs.
-          let streamSubmission = addOptimisticConversation(newStreamId, submission);
-
-          // Step 2: Atomically migrate temporary response message ID → stable server-generated ID.
-          // Updates ALL relevant state and caches in one pass to prevent ID divergence:
-          // - Local messages state
-          // - React Query messages cache (conversationId + NEW_CONVO keys)
-          // - React Query conversation cache (lastMessageId, lastMessageText)
-          // - All conversations list cache
-          // - Internal handler maps (content handler, step handler)
-          // - Submission reference
-          const tempResponseId = submission.initialResponse?.messageId;
-          if (tempResponseId && stableResponseId && tempResponseId !== stableResponseId) {
-            console.log('[ResumableSSE] Migrating temp ID → stable ID', {
-              tempId: tempResponseId,
-              stableId: stableResponseId,
-            });
-            streamSubmission = migrateResponseMessageId(
-              tempResponseId,
-              stableResponseId,
-              streamSubmission,
-            );
-          }
-
+          const streamSubmission = addOptimisticConversation(newStreamId, submission);
           submissionRef.current = streamSubmission;
           subscribeToStream(newStreamId, streamSubmission);
         } else {

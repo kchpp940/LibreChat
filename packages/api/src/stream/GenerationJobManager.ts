@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Constants, parseTextParts } from 'librechat-data-provider';
 import { logger, getTenantId, SYSTEM_TENANT_ID } from '@librechat/data-schemas';
 import type { Agents, TMessageContentParts } from 'librechat-data-provider';
@@ -303,15 +302,7 @@ class GenerationJobManagerClass {
   ): Promise<t.GenerationJob> {
     const tenantId = getTenantId();
     const safeTenantId = tenantId && tenantId !== SYSTEM_TENANT_ID ? tenantId : undefined;
-    const responseMessageId = randomUUID();
-    const jobData = await this.jobStore.createJob(
-      streamId,
-      userId,
-      conversationId,
-      safeTenantId,
-    );
-
-    await this.jobStore.updateJob(streamId, { responseMessageId });
+    const jobData = await this.jobStore.createJob(streamId, userId, conversationId, safeTenantId);
 
     /**
      * Create runtime state with readyPromise.
@@ -622,68 +613,6 @@ class GenerationJobManagerClass {
   }
 
   /**
-   * Ensure a job has a stable responseMessageId.
-   *
-   * Resolution order to find the correct message identity (highest priority first):
-   * 1. Already stored in jobData.responseMessageId (new jobs or previously backfilled)
-   * 2. Provided via lookupExistingId callback — looks up an already-saved assistant
-   *    message in the DB (e.g. by parentMessageId/userMessageId) to avoid breaking
-   *    the link to a pre-existing half-saved message
-   * 3. Generate a fresh UUID as the final fallback
-   *
-   * This guarantees that ALL operations (SYNC, abort save, final save) use the
-   * SAME message identity, and we never fall back to streamId (which would
-   * conflate stream identity with message identity).
-   *
-   * @param streamId - The stream/job ID
-   * @param lookupExistingId - Optional callback to look up an already-persisted
-   *   assistant message ID from the DB. Receives the jobData so callers can use
-   *   userMessage.messageId (parentMessageId) or conversationId for lookup.
-   *   Should return the existing messageId or undefined if none was found.
-   * @returns The responseMessageId (existing, looked-up, or newly generated)
-   */
-  async ensureResponseMessageId(
-    streamId: string,
-    lookupExistingId?: (jobData: SerializableJobData) => Promise<string | undefined> | string | undefined,
-  ): Promise<string | undefined> {
-    const jobData = await this.jobStore.getJob(streamId);
-    if (!jobData) {
-      return undefined;
-    }
-
-    if (jobData.responseMessageId) {
-      return jobData.responseMessageId;
-    }
-
-    // Legacy job — try to find an already-saved assistant message before generating a new ID.
-    // This avoids breaking the chain to a half-saved message (e.g. abort save happened
-    // before responseMessageId was introduced).
-    let responseMessageId: string | undefined;
-    if (lookupExistingId) {
-      try {
-        responseMessageId = await lookupExistingId(jobData);
-      } catch (err) {
-        logger.warn(
-          `[GenerationJobManager] lookupExistingId failed for ${streamId}, falling back to new UUID:`,
-          err,
-        );
-      }
-    }
-
-    if (!responseMessageId) {
-      responseMessageId = randomUUID();
-    }
-
-    await this.jobStore.updateJob(streamId, { responseMessageId });
-
-    logger.debug(
-      `[GenerationJobManager] Backfilled responseMessageId for legacy job ${streamId}: ${responseMessageId} (source: ${lookupExistingId ? 'lookup-or-uuid' : 'uuid'})`,
-    );
-
-    return responseMessageId;
-  }
-
-  /**
    * Check if a job exists.
    */
   async hasJob(streamId: string): Promise<boolean> {
@@ -773,15 +702,8 @@ class GenerationJobManagerClass {
    * Cross-replica support (Redis mode):
    * - Emits abort signal via Redis pub/sub
    * - The replica running generation receives signal and aborts its AbortController
-   *
-   * @param streamId - The stream/job ID
-   * @param lookupExistingId - Optional callback to look up an already-persisted
-   *   assistant message ID from the DB (see ensureResponseMessageId for details)
    */
-  async abortJob(
-    streamId: string,
-    lookupExistingId?: (jobData: SerializableJobData) => Promise<string | undefined> | string | undefined,
-  ): Promise<AbortResult> {
+  async abortJob(streamId: string): Promise<AbortResult> {
     const jobData = await this.jobStore.getJob(streamId);
     const runtime = this.runtimeState.get(streamId);
 
@@ -796,15 +718,6 @@ class GenerationJobManagerClass {
         finalEvent: null,
         collectedUsage: [],
       };
-    }
-
-    // Ensure job has a stable responseMessageId before building abort response.
-    // Pass lookupExistingId so we can reconnect to any half-saved assistant message.
-    await this.ensureResponseMessageId(streamId, lookupExistingId);
-    // Re-fetch to get the updated jobData with responseMessageId
-    const updatedJobData = await this.jobStore.getJob(streamId);
-    if (updatedJobData) {
-      Object.assign(jobData, updatedJobData);
     }
 
     // Emit abort signal for cross-replica support (Redis mode)
@@ -853,11 +766,10 @@ class GenerationJobManagerClass {
             isCreatedByUser: true,
           }
         : null,
-      // responseMessageId is guaranteed by ensureResponseMessageId() above
       responseMessage: isEarlyAbort
         ? null
         : {
-            messageId: jobData.responseMessageId!,
+            messageId: jobData.responseMessageId ?? `${userMessageId ?? 'aborted'}_`,
             parentMessageId: userMessageId,
             conversationId: jobData.conversationId,
             content: abortContent,
@@ -1077,26 +989,18 @@ class GenerationJobManagerClass {
    * they exist nowhere else. The caller must deliver them after the sync payload.
    * Redis mode: `pendingEvents` is empty — chunks are persisted via appendChunk
    * and will appear in aggregatedContent on the next resume.
-   *
-   * @param streamId - The stream/job ID
-   * @param onChunk - Handler for stream chunk events
-   * @param onDone - Handler for stream done events
-   * @param onError - Handler for stream error events
-   * @param lookupExistingId - Optional callback to look up an already-persisted
-   *   assistant message ID from the DB (see ensureResponseMessageId for details)
    */
   async subscribeWithResume(
     streamId: string,
     onChunk: t.ChunkHandler,
     onDone?: t.DoneHandler,
     onError?: t.ErrorHandler,
-    lookupExistingId?: (jobData: SerializableJobData) => Promise<string | undefined> | string | undefined,
   ): Promise<t.SubscribeWithResumeResult> {
     const bufferLengthAtSnapshot = !this._isRedis
       ? (this.runtimeState.get(streamId)?.earlyEventBuffer.length ?? 0)
       : 0;
 
-    const resumeState = await this.getResumeState(streamId, lookupExistingId);
+    const resumeState = await this.getResumeState(streamId);
     recordGenerationStreamSubscription(
       this.storeLabel,
       'resume_state',
@@ -1411,24 +1315,12 @@ class GenerationJobManagerClass {
 
   /**
    * Get resume state for reconnecting clients.
-   *
-   * @param streamId - The stream/job ID
-   * @param lookupExistingId - Optional callback to look up an already-persisted
-   *   assistant message ID from the DB (see ensureResponseMessageId for details)
    */
-  async getResumeState(
-    streamId: string,
-    lookupExistingId?: (jobData: SerializableJobData) => Promise<string | undefined> | string | undefined,
-  ): Promise<t.ResumeState | null> {
+  async getResumeState(streamId: string): Promise<t.ResumeState | null> {
     const jobData = await this.jobStore.getJob(streamId);
     if (!jobData) {
       return null;
     }
-
-    // CRITICAL: Ensure job has a stable responseMessageId BEFORE building resume state.
-    // Pass lookupExistingId so we can reconnect to any half-saved assistant message
-    // from before responseMessageId was introduced.
-    const responseMessageId = await this.ensureResponseMessageId(streamId, lookupExistingId);
 
     const result = await this.jobStore.getContentParts(streamId);
     const aggregatedContent = result?.content ?? [];
@@ -1452,7 +1344,6 @@ class GenerationJobManagerClass {
 
     logger.debug(`[GenerationJobManager] getResumeState:`, {
       streamId,
-      responseMessageId,
       runStepsLength: runSteps.length,
       aggregatedContentLength: aggregatedContent.length,
     });
@@ -1461,7 +1352,7 @@ class GenerationJobManagerClass {
       runSteps,
       aggregatedContent,
       userMessage: jobData.userMessage,
-      responseMessageId,
+      responseMessageId: jobData.responseMessageId,
       conversationId: jobData.conversationId,
       sender: jobData.sender,
       iconURL: jobData.iconURL,

@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useToastContext } from '@librechat/client';
-import { EToolResources } from 'librechat-data-provider';
+import { EToolResources, FileIndexingStatus } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/data-provider';
 import { logger, getCachedPreview } from '~/utils';
@@ -57,6 +57,11 @@ export default function FileRow({
 
   const { deleteFile } = useFileDeletion({ mutateAsync, agent_id, assistant_id, tool_resource });
 
+  const isFileProcessing = (file: ExtendedFile): boolean => {
+    if (file.progress < 1) return true;
+    return file.indexingStatus === FileIndexingStatus.PENDING;
+  };
+
   useEffect(() => {
     if (!setFilesLoading) return;
     if (files.length === 0) {
@@ -64,12 +69,12 @@ export default function FileRow({
       return;
     }
 
-    if (files.some((file) => file.progress < 1)) {
+    if (files.some(isFileProcessing)) {
       setFilesLoading(true);
       return;
     }
 
-    if (files.every((file) => file.progress === 1)) {
+    if (files.every((file) => !isFileProcessing(file))) {
       setFilesLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,6 +83,34 @@ export default function FileRow({
   if (files.length === 0) {
     return null;
   }
+
+  const getFileSubtitle = (file: ExtendedFile): React.ReactNode => {
+    if (file.progress < 1) {
+      return undefined;
+    }
+    if (file.indexingStatus === FileIndexingStatus.PENDING) {
+      return (
+        <div className="truncate text-amber-500" title={localize('com_ui_file_indexing')}>
+          {localize('com_ui_file_indexing')}
+        </div>
+      );
+    }
+    if (file.indexingStatus === FileIndexingStatus.FAILED) {
+      return (
+        <div className="truncate text-red-500" title={localize('com_ui_file_index_failed')}>
+          {localize('com_ui_file_index_failed')}
+        </div>
+      );
+    }
+    if (file.indexingStatus === FileIndexingStatus.INDEXED) {
+      return (
+        <div className="truncate text-green-500" title={localize('com_ui_file_searchable')}>
+          {localize('com_ui_file_searchable')}
+        </div>
+      );
+    }
+    return undefined;
+  };
 
   const renderFiles = () => {
     const rowStyle = isRTL
@@ -112,10 +145,10 @@ export default function FileRow({
           )
           .uniqueFiles.map((file: ExtendedFile, index: number) => {
             const handleDelete = () => {
-              if (abortUpload && file.progress < 1) {
+              if (abortUpload && isFileProcessing(file)) {
                 abortUpload();
               }
-              if (file.progress >= 1 && !file.attached) {
+              if (!isFileProcessing(file) && !file.attached) {
                 showToast({
                   message: localize('com_ui_deleting_file'),
                   status: 'info',
@@ -124,6 +157,7 @@ export default function FileRow({
               deleteFile({ file, setFiles });
             };
             const isImage = file.type?.startsWith('image') ?? false;
+            const subtitle = getFileSubtitle(file);
 
             return (
               <div
@@ -142,7 +176,7 @@ export default function FileRow({
                     source={file.source}
                   />
                 ) : (
-                  <FileContainer file={file} onDelete={handleDelete} />
+                  <FileContainer file={file} onDelete={handleDelete} subtitle={subtitle} />
                 )}
               </div>
             );

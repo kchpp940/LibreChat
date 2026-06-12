@@ -210,31 +210,22 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     const jobCreatedAt = job.createdAt; // Capture creation time to detect job replacement
     req._resumableStreamId = streamId;
 
-    // Stable responseMessageId generated at job creation time - used across entire stream lifecycle
-    // This ensures SSE, saveMessage, abort, and resume all reference the same message identity
-    const stableResponseMessageId = job.metadata.responseMessageId;
-
     // Send JSON response IMMEDIATELY so client can connect to SSE stream
     // This is critical: tool loading (MCP OAuth) may emit events that the client needs to receive
-    // Include stable responseMessageId so the client can create the response message with the correct ID
-    res.json({
-      streamId,
-      conversationId,
-      status: 'started',
-      responseMessageId: stableResponseMessageId,
-    });
+    res.json({ streamId, conversationId, status: 'started' });
 
     await attachConversationCreatedAt(req, { userId, conversationId, isNewConvo });
 
     const endpointIconURL = getEndpointIconURL(req, endpointOption);
     const responseModel = getAgentResponseModel(req, endpointOption);
     const preliminaryUserMessage = getPreliminaryUserMessage(req.body, conversationId);
+    const preliminaryResponseMessageId = getPreliminaryResponseMessageId(req.body);
     await GenerationJobManager.updateMetadata(streamId, {
       conversationId,
       endpoint: endpointOption.endpoint,
       iconURL: endpointIconURL,
       model: responseModel,
-      responseMessageId: stableResponseMessageId,
+      responseMessageId: preliminaryResponseMessageId,
       userMessage: preliminaryUserMessage,
     });
 
@@ -266,20 +257,19 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
       }
 
       const resumeState = await GenerationJobManager.getResumeState(streamId);
-      if (!resumeState?.userMessage || !resumeState?.responseMessageId) {
-        logger.debug('[ResumableAgentController] Missing user message or responseMessageId for partial response save');
+      if (!resumeState?.userMessage) {
+        logger.debug('[ResumableAgentController] No user message to save partial response for');
         return;
       }
 
       partialResponseSaved = true;
       const responseConversationId = resumeState.conversationId || conversationId;
-      const userMessageId = resumeState.userMessage.messageId;
 
       try {
         const partialMessage = {
-          messageId: stableResponseMessageId,
+          messageId: resumeState.responseMessageId || `${resumeState.userMessage.messageId}_`,
           conversationId: responseConversationId,
-          parentMessageId: userMessageId,
+          parentMessageId: resumeState.userMessage.messageId,
           sender: client?.sender ?? 'AI',
           content: persistableContent,
           unfinished: true,
@@ -294,10 +284,6 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         if (req.body?.agent_id) {
           partialMessage.agent_id = req.body.agent_id;
         }
-
-        logger.debug(
-          `[ResumableAgentController] Saving partial response with stable ID ${stableResponseMessageId} for ${streamId}`,
-        );
 
         await saveMessage(
           {
@@ -429,11 +415,12 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
       };
 
       try {
-        const onStart = (userMsg, _respMsgId, _isNewConvo) => {
+        const onStart = (userMsg, respMsgId, _isNewConvo) => {
           userMessage = userMsg;
 
-          // Store userMessage upfront; responseMessageId is already set from stable job ID
+          // Store userMessage and responseMessageId upfront for resume capability
           GenerationJobManager.updateMetadata(streamId, {
+            responseMessageId: respMsgId,
             userMessage: {
               messageId: userMsg.messageId,
               parentMessageId: userMsg.parentMessageId,
@@ -462,7 +449,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           overrideParentMessageId,
           isEdited: !!editedContent,
           userMCPAuthMap: result.userMCPAuthMap,
-          responseMessageId: stableResponseMessageId,
+          responseMessageId: editedResponseMessageId,
           progressOptions: {
             res: {
               write: () => true,
@@ -537,20 +524,12 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         // CRITICAL: Save response message BEFORE emitting final event.
         // This prevents race conditions where the client sends a follow-up message
         // before the response is saved to the database, causing orphaned parentMessageIds.
-        // Use stableResponseMessageId as the canonical message identity for idempotent updates.
-        if (client.savedMessageIds && !client.savedMessageIds.has(stableResponseMessageId)) {
-          const saveParams = {
-            ...response,
-            messageId: stableResponseMessageId,
-            user: userId,
-            unfinished: wasAbortedBeforeComplete,
-          };
+        if (client.savedMessageIds && !client.savedMessageIds.has(messageId)) {
           await saveMessage(
             reqCtx,
-            saveParams,
+            { ...response, user: userId, unfinished: wasAbortedBeforeComplete },
             { context: 'api/server/controllers/agents/request.js - resumable response end' },
           );
-          client.savedMessageIds.add(stableResponseMessageId);
         }
 
         // Check if our job was replaced by a new request before emitting

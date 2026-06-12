@@ -14,6 +14,7 @@ const {
 const {
   Constants,
   FileSources,
+  FileIndexingStatus,
   ContentTypes,
   excludedKeys,
   EModelEndpoint,
@@ -1235,11 +1236,24 @@ class BaseClient {
         continue;
       }
       if (
-        file.embedded === true ||
         file.metadata?.codeEnvRef != null ||
         file.metadata?.fileIdentifier != null
       ) {
         allFiles.push(file);
+        continue;
+      }
+      const indexingStatus = file.indexingStatus;
+      const isIndexed = file.embedded === true || indexingStatus === FileIndexingStatus.INDEXED;
+      const isIndexingFailed = indexingStatus === FileIndexingStatus.FAILED;
+      const isIndexingPending = indexingStatus === FileIndexingStatus.PENDING;
+      if (isIndexed) {
+        allFiles.push(file);
+        continue;
+      }
+      if (isIndexingFailed || isIndexingPending) {
+        logger.warn(
+          `[processAttachments] File "${file.filename}" (${file.file_id}) will not be sent to model: indexingStatus=${indexingStatus}`,
+        );
         continue;
       }
 

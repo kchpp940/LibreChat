@@ -59,10 +59,6 @@ export interface MessageMethods {
 export function createMessageMethods(mongoose: typeof import('mongoose')): MessageMethods {
   /**
    * Saves a message in the database.
-   *
-   * Idempotent: multiple calls with the same messageId will update the same record.
-   * For resumable streams, responseMessageId is generated at job creation and is
-   * stable across the entire lifecycle (SSE, abort, resume, save) — no temporary IDs.
    */
   async function saveMessage(
     {
@@ -91,11 +87,10 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
 
     try {
       const Message = mongoose.models.Message as Model<IMessage>;
-      const targetMessageId = params.newMessageId || params.messageId;
       const update: Record<string, unknown> = {
         ...params,
         user: userId,
-        messageId: targetMessageId,
+        messageId: params.newMessageId || params.messageId,
       };
 
       if (interfaceConfig?.retentionMode === RetentionMode.ALL) {
@@ -130,14 +125,10 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
         logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
         update.tokenCount = 0;
       }
-
-      // Idempotent upsert by messageId + userId.
-      // For resumable streams, messageId is stable from job creation,
-      // so partial saves, abort saves, and final saves all update the same record.
       const message = await Message.findOneAndUpdate(
-        { messageId: targetMessageId, user: userId },
-        { $set: update },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { messageId: params.messageId, user: userId },
+        update,
+        { upsert: true, new: true },
       );
 
       if (
@@ -164,9 +155,8 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
 
         try {
           const Message = mongoose.models.Message as Model<IMessage>;
-          const targetMessageId = params.newMessageId || params.messageId;
           const existingMessage = await Message.findOne({
-            messageId: targetMessageId,
+            messageId: params.messageId,
             user: userId,
           });
 

@@ -8,6 +8,7 @@ import {
   QueryKeys,
   ContentTypes,
   EModelEndpoint,
+  FileIndexingStatus,
   getEndpointField,
   isAgentsEndpoint,
   parseCompactConvo,
@@ -417,17 +418,52 @@ export default function useChatFunctions({
       submissionFiles &&
       submissionFiles.length > 0;
 
+    const hasUnavailableFiles = (fileList: ExtendedFile[]): boolean => {
+      return fileList.some(
+        (file) =>
+          file.indexingStatus === FileIndexingStatus.FAILED ||
+          file.indexingStatus === FileIndexingStatus.PENDING,
+      );
+    };
+
     if (setFiles && reuseFiles === true) {
       currentMsg.files = [...submissionFiles];
       setFiles(new Map());
       setFilesToDelete({});
     } else if (setFiles && files && files.size > 0) {
-      currentMsg.files = Array.from(files.values()).map((file) => ({
+      const fileList = Array.from(files.values());
+
+      if (hasUnavailableFiles(fileList)) {
+        const failedFiles = fileList.filter(
+          (f) => f.indexingStatus === FileIndexingStatus.FAILED,
+        );
+        const pendingFiles = fileList.filter(
+          (f) => f.indexingStatus === FileIndexingStatus.PENDING,
+        );
+        if (failedFiles.length > 0) {
+          console.warn(
+            '[useChatFunctions] Cannot send message: some files failed to index',
+            failedFiles.map((f) => `${f.filename}: ${f.indexingError}`),
+          );
+        }
+        if (pendingFiles.length > 0) {
+          console.warn(
+            '[useChatFunctions] Cannot send message: some files are still indexing',
+            pendingFiles.map((f) => f.filename),
+          );
+        }
+        return false;
+      }
+
+      currentMsg.files = fileList.map((file) => ({
         file_id: file.file_id,
         filepath: file.filepath,
         type: file.type ?? '', // Ensure type is not undefined
         height: file.height,
         width: file.width,
+        embedded: file.embedded,
+        indexingStatus: file.indexingStatus,
+        indexingError: file.indexingError,
       }));
       setFiles(new Map());
       setFilesToDelete({});

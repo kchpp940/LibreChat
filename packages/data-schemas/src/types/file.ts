@@ -1,5 +1,5 @@
 import { Document, Types } from 'mongoose';
-import type { CodeEnvRef } from 'librechat-data-provider';
+import type { CodeEnvRef, FileIndexingStatus } from 'librechat-data-provider';
 
 export interface IMongoFile extends Omit<Document, 'model'> {
   user: Types.ObjectId;
@@ -55,6 +55,20 @@ export interface IMongoFile extends Omit<Document, 'model'> {
   storageRegion?: string;
   object: 'file';
   embedded?: boolean;
+  /**
+   * RAG 索引状态，用于追踪文件是否可被检索。
+   * - `pending`: 正在处理或索引中
+   * - `indexed`: 已成功索引，可被检索
+   * - `failed`: 索引失败，无法被检索
+   * - `skipped`: 跳过索引（如非文本类型、RAG未配置等）
+   * - `undefined`: legacy records，根据 `embedded` 字段判断
+   */
+  indexingStatus?: FileIndexingStatus;
+  /**
+   * 索引失败的原因，当 `indexingStatus === 'failed'` 时设置。
+   * 适合用于 tooltip 提示，不是用户友好的文本。
+   */
+  indexingError?: string;
   type: string;
   context?: string;
   usage: number;

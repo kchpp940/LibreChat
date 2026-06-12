@@ -103,24 +103,13 @@ export const mergeRegenerateFinalMessages = ({
   let inserted = false;
 
   for (const message of messages) {
-    if (!message?.messageId) {
+    if (!message?.messageId || message.messageId === initialResponseId) {
       continue;
     }
 
-    // If this is the response message (by exact ID match), replace with final version
     if (message.messageId === responseMessage.messageId) {
       finalMessages.push(responseMessage);
       inserted = true;
-      continue;
-    }
-
-    // Skip old initial response placeholder if it has a different ID
-    // (only happens if the ID hasn't been replaced yet, e.g. fast final before ID swap)
-    if (
-      initialResponseId &&
-      message.messageId === initialResponseId &&
-      initialResponseId !== responseMessage.messageId
-    ) {
       continue;
     }
 
@@ -129,63 +118,6 @@ export const mergeRegenerateFinalMessages = ({
 
   if (!inserted) {
     finalMessages.push(responseMessage);
-  }
-
-  return finalMessages;
-};
-
-export const mergeFinalMessages = ({
-  messages,
-  requestMessage,
-  responseMessage,
-  initialResponseId,
-}: {
-  messages: TMessage[];
-  requestMessage?: TMessage;
-  responseMessage?: TMessage;
-  initialResponseId?: string | null;
-}): TMessage[] => {
-  if (!requestMessage || !responseMessage) {
-    return messages;
-  }
-
-  const finalMessages: TMessage[] = [];
-  let requestInserted = false;
-  let responseInserted = false;
-
-  for (const message of messages) {
-    if (!message?.messageId) {
-      continue;
-    }
-
-    if (message.messageId === initialResponseId) {
-      continue;
-    }
-
-    if (message.messageId === requestMessage.messageId) {
-      finalMessages.push(requestMessage);
-      requestInserted = true;
-      continue;
-    }
-
-    if (message.messageId === responseMessage.messageId) {
-      finalMessages.push(responseMessage);
-      responseInserted = true;
-      continue;
-    }
-
-    finalMessages.push(message);
-  }
-
-  if (!requestInserted || !responseInserted) {
-    const result = [...finalMessages];
-    if (!requestInserted) {
-      result.push(requestMessage);
-    }
-    if (!responseInserted) {
-      result.push(responseMessage);
-    }
-    return result;
   }
 
   return finalMessages;
@@ -344,39 +276,14 @@ export default function useEventHandlers({
   const { conversationId: paramId } = useParams();
   const { token } = useAuthContext();
 
-  const { contentHandler, resetContentHandler, migrateContentMessageId } = useContentHandler({
-    setMessages,
-    getMessages,
-  });
-  const {
-    stepHandler,
-    clearStepMaps,
-    resetSubagentAtoms,
-    syncStepMessage,
-    migrateStepMessageId,
-  } = useStepHandler({
+  const { contentHandler, resetContentHandler } = useContentHandler({ setMessages, getMessages });
+  const { stepHandler, clearStepMaps, resetSubagentAtoms, syncStepMessage } = useStepHandler({
     setMessages,
     getMessages,
     announcePolite,
     setIsSubmitting,
     lastAnnouncementTimeRef,
   });
-
-  /**
-   * Atomically migrate a message ID across all internal handler maps.
-   * Used when a temporary optimistic ID is replaced by a stable server-generated ID.
-   * Call this alongside any cache / state updates to keep everything in sync.
-   */
-  const migrateMessageId = useCallback(
-    (oldId: string, newId: string) => {
-      if (oldId === newId) {
-        return;
-      }
-      migrateContentMessageId(oldId, newId);
-      migrateStepMessageId(oldId, newId);
-    },
-    [migrateContentMessageId, migrateStepMessageId],
-  );
   const attachmentHandler = useAttachmentHandler(queryClient);
 
   /** Wipe the per-subagent Recoil atoms on conversation navigation.
@@ -781,25 +688,7 @@ export default function useEventHandlers({
 
         const setFinalMessages = (id: string | null, _messages: TMessage[]) => {
           setMessages(_messages);
-          if (id) {
-            queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
-            updateConvoInAllQueries(queryClient, id, (convo) => {
-              if (!convo) {
-                return convo;
-              }
-              const lastMessage = _messages[_messages.length - 1];
-              if (!lastMessage) {
-                return convo;
-              }
-              const lastMessageText = getAllContentText(lastMessage);
-              return {
-                ...convo,
-                lastMessageId: lastMessage.messageId,
-                lastMessageText,
-                updatedAt: new Date().toISOString(),
-              };
-            });
-          }
+          queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
         };
 
         const hasNoResponse =
@@ -838,12 +727,7 @@ export default function useEventHandlers({
             initialResponseId: submission.initialResponse.messageId,
           });
         } else if (requestMessage != null && responseMessage != null) {
-          finalMessages = mergeFinalMessages({
-            messages: currentMessages ?? messages,
-            requestMessage,
-            responseMessage,
-            initialResponseId: submission.initialResponse.messageId,
-          });
+          finalMessages = [...messages, requestMessage, responseMessage];
         }
 
         /* Preserve files from current messages when server response lacks them */
@@ -1195,6 +1079,5 @@ export default function useEventHandlers({
     attachmentHandler,
     abortConversation,
     resetContentHandler,
-    migrateMessageId,
   };
 }

@@ -1065,28 +1065,5 @@ export default function useStepHandler({
     }
   }, []);
 
-  /**
-   * Atomically migrate a message ID in all step handler internal maps.
-   * Used when a temporary optimistic ID is replaced by a stable server-generated ID.
-   * Migrates messageMap and updates any stepMap entries that reference the old runId.
-   */
-  const migrateStepMessageId = useCallback((oldId: string, newId: string) => {
-    if (oldId === newId) {
-      return;
-    }
-
-    const messageEntry = messageMap.current.get(oldId);
-    if (messageEntry) {
-      messageMap.current.set(newId, { ...messageEntry, messageId: newId });
-      messageMap.current.delete(oldId);
-    }
-
-    for (const [stepId, step] of stepMap.current.entries()) {
-      if (step.runId === oldId) {
-        stepMap.current.set(stepId, { ...step, runId: newId });
-      }
-    }
-  }, []);
-
-  return { stepHandler, clearStepMaps, resetSubagentAtoms, syncStepMessage, migrateStepMessageId };
+  return { stepHandler, clearStepMaps, resetSubagentAtoms, syncStepMessage };
 }
