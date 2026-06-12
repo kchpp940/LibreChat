@@ -214,6 +214,7 @@ router.get('/', async (req, res) => {
       const searchResults = await db.searchMessages(search, searchOptions, true);
 
       const messages = searchResults.hits || [];
+      const indexingStatus = searchResults.indexingStatus || null;
 
       const result = await db.getConvosQueried(req.user.id, messages, cursor);
 
@@ -265,7 +266,7 @@ router.get('/', async (req, res) => {
         }
       }
 
-      response = { messages: activeMessages, nextCursor: null, searchHits };
+      response = { messages: activeMessages, nextCursor: null, searchHits, indexingStatus };
     } else {
       response = { messages: [], nextCursor: null };
     }

@@ -76,10 +76,16 @@ export type MessagesListParams = {
   searchTypes?: SearchHitType[];
 };
 
+export type SearchIndexingStatus = {
+  hasLegacyDocs: boolean;
+  needsReindex: boolean;
+};
+
 export type MessagesListResponse = {
   messages: s.TMessage[];
   nextCursor: string | null;
   searchHits?: Record<string, SearchHit[]>;
+  indexingStatus?: SearchIndexingStatus;
 };
 
 /* Shared Links */

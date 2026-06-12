@@ -92,6 +92,25 @@ export default function Search() {
     return hits;
   }, [searchMessages?.pages]);
 
+  const indexingStatus = useMemo(() => {
+    let hasLegacyDocs = false;
+    let needsReindex = false;
+    searchMessages?.pages.forEach((page) => {
+      if (page.indexingStatus) {
+        if (page.indexingStatus.hasLegacyDocs) {
+          hasLegacyDocs = true;
+        }
+        if (page.indexingStatus.needsReindex) {
+          needsReindex = true;
+        }
+      }
+    });
+    if (!hasLegacyDocs && !needsReindex) {
+      return null;
+    }
+    return { hasLegacyDocs, needsReindex };
+  }, [searchMessages?.pages]);
+
   const messages = useMemo(() => {
     const msgs =
       searchMessages?.pages.flatMap((page) =>
@@ -169,6 +188,19 @@ export default function Search() {
           />
         ))}
       </div>
+
+      {indexingStatus && indexingStatus.needsReindex && (
+        <div className="mx-4 mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/30 dark:text-amber-200">
+          <div className="font-medium">
+            {localize('com_nav_search_indexing_warning_title')}
+          </div>
+          <div className="mt-1 text-xs opacity-80">
+            {selectedTypes.length > 0
+              ? localize('com_nav_search_indexing_warning_filtered')
+              : localize('com_nav_search_indexing_warning_generic')}
+          </div>
+        </div>
+      )}
 
       {(messages && messages.length === 0) || messages == null ? (
         <div className="absolute inset-0 flex items-center justify-center">
