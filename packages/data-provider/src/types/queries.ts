@@ -1,6 +1,7 @@
 import type { InfiniteData } from '@tanstack/react-query';
 import type * as p from '../accessPermissions';
 import type * as a from '../types/agents';
+import { SearchHitType } from '../schemas';
 import type * as s from '../schemas';
 import type * as t from '../types';
 
@@ -52,16 +53,6 @@ export type ProjectListResponse = {
 };
 
 export type ProjectData = InfiniteData<ProjectListResponse>;
-
-export enum SearchHitType {
-  TEXT = 'text',
-  TOOL_CALL = 'tool_call',
-  TOOL_OUTPUT = 'tool_output',
-  ATTACHMENT = 'attachment',
-  ARTIFACT = 'artifact',
-  ERROR = 'error',
-  FILE = 'file',
-}
 
 export type SearchHit = {
   type: SearchHitType;

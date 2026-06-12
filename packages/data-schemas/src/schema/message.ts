@@ -109,6 +109,11 @@ const messageSchema: Schema<IMessage> = new Schema(
       default: undefined,
       meiliIndex: true,
     },
+    contentTypes: {
+      type: [String],
+      default: undefined,
+      meiliIndex: true,
+    },
     thread_id: {
       type: String,
     },

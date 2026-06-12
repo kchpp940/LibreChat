@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { parseTextParts } from 'librechat-data-provider';
+import { parseTextParts, ContentTypes, SearchHitType, SearchHitTypeValues } from 'librechat-data-provider';
 import { MeiliSearch, MeiliSearchTimeOutError } from 'meilisearch';
 import type { SearchResponse, SearchParams, Index, MeiliSearchErrorInfo } from 'meilisearch';
 import type {
@@ -108,6 +108,68 @@ const buildIndexableQuery = (schema: Schema): FilterQuery<unknown> => {
 
 const hasActiveExpiration = (expiredAt?: Date | null): boolean =>
   _.isNil(expiredAt) || new Date(expiredAt).getTime() > Date.now();
+
+function extractArtifactTitle(text?: string): string | null {
+  if (!text) return null;
+  const match = text.match(/<artifact_identifier[^>]*title="([^"]*)"/);
+  if (match) return match[1];
+  const codeMatch = text.match(/```(\w+)\s*title="([^"]*)"/);
+  if (codeMatch) return codeMatch[2];
+  return null;
+}
+
+function analyzeContentTypes(doc: DocumentWithMeiliIndex): string[] {
+  const types = new Set<string>();
+  const { text, content, files, attachments, error } = doc as IMessage;
+
+  if (text) {
+    const artifactTitle = extractArtifactTitle(text);
+    if (artifactTitle) {
+      types.add(SearchHitType.ARTIFACT);
+    } else {
+      types.add(SearchHitType.TEXT);
+    }
+  }
+
+  if (error && text) {
+    types.add(SearchHitType.ERROR);
+  }
+
+  if (Array.isArray(content) && content.length > 0) {
+    content.forEach((part) => {
+      if (!part) return;
+      const typedPart = part as Record<string, unknown>;
+
+      if (typedPart.type === ContentTypes.TEXT && typedPart.text) {
+        const partText = typeof typedPart.text === 'string' ? typedPart.text : (typedPart.text as Record<string, unknown>)?.text as string || '';
+        const artifactTitle = extractArtifactTitle(partText);
+        if (artifactTitle) {
+          types.add(SearchHitType.ARTIFACT);
+        } else {
+          types.add(SearchHitType.TEXT);
+        }
+      }
+
+      if (typedPart.type === ContentTypes.TOOL_CALL && typedPart.tool_call) {
+        types.add(SearchHitType.TOOL_CALL);
+      }
+
+      if (typedPart.type === ContentTypes.ERROR) {
+        types.add(SearchHitType.ERROR);
+      }
+    });
+  }
+
+  if (Array.isArray(files) && files.length > 0) {
+    types.add(SearchHitType.FILE);
+  }
+
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    types.add(SearchHitType.ATTACHMENT);
+  }
+
+  return Array.from(types);
+}
 
 /**
  * `isTemporary` defaults to `false` on the schema, so hydrated legacy documents
@@ -395,10 +457,22 @@ const createMeiliMongooseModel = ({
     static async meiliSearch(
       this: SchemaWithMeiliMethods,
       q: string,
-      params: SearchParams,
+      params: SearchParams & { contentTypes?: string[] },
       populate: boolean,
     ): Promise<SearchResponse<MeiliIndexable, Record<string, unknown>>> {
-      const data = await index.search(q, params);
+      const searchParams = { ...params };
+      if (searchParams.contentTypes && searchParams.contentTypes.length > 0) {
+        const contentTypeFilters = searchParams.contentTypes
+          .map((type) => `contentTypes = '${type}'`)
+          .join(' OR ');
+        if (searchParams.filter) {
+          searchParams.filter = `${searchParams.filter} AND (${contentTypeFilters})`;
+        } else {
+          searchParams.filter = contentTypeFilters;
+        }
+        delete searchParams.contentTypes;
+      }
+      const data = await index.search(q, searchParams);
 
       if (populate) {
         const query: Record<string, unknown> = {};
@@ -454,6 +528,10 @@ const createMeiliMongooseModel = ({
       if (object.content && Array.isArray(object.content)) {
         object.text = parseTextParts(object.content);
         delete object.content;
+      }
+
+      if (object.text && !object.contentTypes) {
+        object.contentTypes = analyzeContentTypes(this);
       }
 
       return object;
@@ -683,9 +761,9 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
 
     try {
       await index.updateSettings({
-        filterableAttributes: ['user'],
+        filterableAttributes: ['user', 'contentTypes'],
       });
-      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' filterable`);
+      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' and 'contentTypes' filterable`);
     } catch (settingsError) {
       logger.error(`[mongoMeili] Error updating index settings for ${indexName}:`, settingsError);
     }

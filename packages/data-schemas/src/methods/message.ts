@@ -1,4 +1,4 @@
-import { RetentionMode } from 'librechat-data-provider';
+import { RetentionMode, SearchHitType } from 'librechat-data-provider';
 import type { DeleteResult, FilterQuery, Model } from 'mongoose';
 import type { AppConfig, IMessage } from '~/types';
 import { createTempChatExpirationDate } from '~/utils/tempChatRetention';
@@ -50,7 +50,7 @@ export interface MessageMethods {
   ): Promise<{ messages: IMessage[]; nextCursor: string | null }>;
   searchMessages(
     query: string,
-    searchOptions: Partial<IMessage>,
+    searchOptions: Partial<IMessage> & { contentTypes?: SearchHitType[] },
     hydrate?: boolean,
   ): Promise<unknown>;
   deleteMessages(filter: FilterQuery<IMessage>): Promise<DeleteResult>;

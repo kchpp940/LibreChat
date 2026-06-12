@@ -49,26 +49,32 @@ function extractArtifactTitle(text) {
   return null;
 }
 
-function buildSearchHits(message, query) {
+function buildSearchHits(message, query, contentTypes = []) {
   const hits = [];
   const { text, content, files, attachments, error } = message;
+  const typeSet = contentTypes.length > 0 ? new Set(contentTypes) : null;
 
   if (text && text.toLowerCase().includes(query.toLowerCase())) {
     const artifactTitle = extractArtifactTitle(text);
-    hits.push({
-      type: artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT,
-      snippet: generateSnippet(text, query),
-      field: 'text',
-      artifactTitle: artifactTitle || undefined,
-    });
+    const type = artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT;
+    if (!typeSet || typeSet.has(type)) {
+      hits.push({
+        type,
+        snippet: generateSnippet(text, query),
+        field: 'text',
+        artifactTitle: artifactTitle || undefined,
+      });
+    }
   }
 
   if (error && text) {
-    hits.push({
-      type: SearchHitType.ERROR,
-      snippet: generateSnippet(text, query),
-      field: 'error',
-    });
+    if (!typeSet || typeSet.has(SearchHitType.ERROR)) {
+      hits.push({
+        type: SearchHitType.ERROR,
+        snippet: generateSnippet(text, query),
+        field: 'error',
+      });
+    }
   }
 
   if (Array.isArray(content) && content.length > 0) {
@@ -79,13 +85,16 @@ function buildSearchHits(message, query) {
         const partText = typeof part.text === 'string' ? part.text : part.text?.text || '';
         if (partText.toLowerCase().includes(query.toLowerCase())) {
           const artifactTitle = extractArtifactTitle(partText);
-          hits.push({
-            type: artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT,
-            snippet: generateSnippet(partText, query),
-            field: 'content',
-            partIndex,
-            artifactTitle: artifactTitle || undefined,
-          });
+          const type = artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT;
+          if (!typeSet || typeSet.has(type)) {
+            hits.push({
+              type,
+              snippet: generateSnippet(partText, query),
+              field: 'content',
+              partIndex,
+              artifactTitle: artifactTitle || undefined,
+            });
+          }
         }
       }
 
@@ -96,13 +105,15 @@ function buildSearchHits(message, query) {
 
         if (toolName.toLowerCase().includes(query.toLowerCase()) ||
             toolInput.toLowerCase().includes(query.toLowerCase())) {
-          hits.push({
-            type: SearchHitType.TOOL_CALL,
-            snippet: generateSnippet(toolInput || toolName, query),
-            field: 'content',
-            partIndex,
-            toolName,
-          });
+          if (!typeSet || typeSet.has(SearchHitType.TOOL_CALL)) {
+            hits.push({
+              type: SearchHitType.TOOL_CALL,
+              snippet: generateSnippet(toolInput || toolName, query),
+              field: 'content',
+              partIndex,
+              toolName,
+            });
+          }
         }
       }
 
@@ -110,12 +121,14 @@ function buildSearchHits(message, query) {
         const errorText = part.text || part.error || '';
         const errText = typeof errorText === 'string' ? errorText : errorText?.text || '';
         if (errText.toLowerCase().includes(query.toLowerCase())) {
-          hits.push({
-            type: SearchHitType.ERROR,
-            snippet: generateSnippet(errText, query),
-            field: 'content',
-            partIndex,
-          });
+          if (!typeSet || typeSet.has(SearchHitType.ERROR)) {
+            hits.push({
+              type: SearchHitType.ERROR,
+              snippet: generateSnippet(errText, query),
+              field: 'content',
+              partIndex,
+            });
+          }
         }
       }
     });
@@ -125,11 +138,13 @@ function buildSearchHits(message, query) {
     files.forEach((file) => {
       const fileName = file.filename || file.file_name || '';
       if (fileName.toLowerCase().includes(query.toLowerCase())) {
-        hits.push({
-          type: SearchHitType.FILE,
-          snippet: fileName,
-          fileName,
-        });
+        if (!typeSet || typeSet.has(SearchHitType.FILE)) {
+          hits.push({
+            type: SearchHitType.FILE,
+            snippet: fileName,
+            fileName,
+          });
+        }
       }
     });
   }
@@ -140,39 +155,19 @@ function buildSearchHits(message, query) {
       const attType = attachment.type || '';
       if (attName.toLowerCase().includes(query.toLowerCase()) ||
           attType.toLowerCase().includes(query.toLowerCase())) {
-        hits.push({
-          type: SearchHitType.ATTACHMENT,
-          snippet: attName || attType,
-          fileName: attName || undefined,
-          toolName: attType || undefined,
-        });
+        if (!typeSet || typeSet.has(SearchHitType.ATTACHMENT)) {
+          hits.push({
+            type: SearchHitType.ATTACHMENT,
+            snippet: attName || attType,
+            fileName: attName || undefined,
+            toolName: attType || undefined,
+          });
+        }
       }
     });
   }
 
   return hits;
-}
-
-function filterMessagesByType(messages, searchTypes, query) {
-  if (!searchTypes || searchTypes.length === 0) {
-    return { filteredMessages: messages, searchHitsMap: {} };
-  }
-
-  const searchHitsMap = {};
-  const filteredMessages = [];
-  const typeSet = new Set(searchTypes);
-
-  for (const message of messages) {
-    const hits = buildSearchHits(message, query);
-    const matchingHits = hits.filter((hit) => typeSet.has(hit.type));
-
-    if (matchingHits.length > 0) {
-      filteredMessages.push(message);
-      searchHitsMap[message.messageId] = matchingHits;
-    }
-  }
-
-  return { filteredMessages, searchHitsMap };
 }
 
 router.get('/', async (req, res) => {
@@ -205,7 +200,18 @@ router.get('/', async (req, res) => {
         { sortField, sortOrder, limit: pageSize, cursor },
       );
     } else if (search) {
-      const searchResults = await db.searchMessages(search, { filter: `user = "${user}"` }, true);
+      const parsedSearchTypes = Array.isArray(searchTypes)
+        ? searchTypes
+        : searchTypes
+          ? [searchTypes]
+          : [];
+
+      const searchOptions = { filter: `user = "${user}"` };
+      if (parsedSearchTypes.length > 0) {
+        searchOptions.contentTypes = parsedSearchTypes;
+      }
+
+      const searchResults = await db.searchMessages(search, searchOptions, true);
 
       const messages = searchResults.hits || [];
 
@@ -251,33 +257,15 @@ router.get('/', async (req, res) => {
         });
       }
 
-      let finalMessages = activeMessages;
-      let searchHits = {};
-
-      const parsedSearchTypes = Array.isArray(searchTypes)
-        ? searchTypes
-        : searchTypes
-          ? [searchTypes]
-          : [];
-
-      if (parsedSearchTypes.length > 0) {
-        const { filteredMessages, searchHitsMap } = filterMessagesByType(
-          activeMessages,
-          parsedSearchTypes,
-          search,
-        );
-        finalMessages = filteredMessages;
-        searchHits = searchHitsMap;
-      } else {
-        for (const message of activeMessages) {
-          const hits = buildSearchHits(message, search);
-          if (hits.length > 0) {
-            searchHits[message.messageId] = hits;
-          }
+      const searchHits = {};
+      for (const message of activeMessages) {
+        const hits = buildSearchHits(message, search, parsedSearchTypes);
+        if (hits.length > 0) {
+          searchHits[message.messageId] = hits;
         }
       }
 
-      response = { messages: finalMessages, nextCursor: null, searchHits };
+      response = { messages: activeMessages, nextCursor: null, searchHits };
     } else {
       response = { messages: [], nextCursor: null };
     }
