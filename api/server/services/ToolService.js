@@ -563,6 +563,22 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   const mcpPermissionContext = createMCPPermissionContext(req);
   const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
+  let mcpServerConfigs = null;
+  if (hasMCPTools && canUseMCP) {
+    try {
+      const configServers = await resolveConfigServers(req);
+      mcpServerConfigs = await getMCPServersRegistry().getAllServerConfigs(
+        req.user.id,
+        configServers,
+      );
+    } catch (e) {
+      logger.warn(
+        '[loadToolDefinitionsWrapper] MCP registry unavailable, skipping MCP server availability checks',
+        e.message,
+      );
+    }
+  }
+
   const filteredTools = agent.tools?.filter((tool) => {
     if (tool === Tools.file_search) {
       return checkCapability(AgentCapabilities.file_search);
@@ -577,7 +593,27 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
       return actionsEnabled;
     }
     if (tool?.includes(Constants.mcp_delimiter)) {
-      return areToolsEnabled && canUseMCP;
+      if (!areToolsEnabled || !canUseMCP) {
+        return false;
+      }
+      if (mcpServerConfigs) {
+        const parts = tool.split(Constants.mcp_delimiter);
+        const serverName = parts[parts.length - 1];
+        const serverConfig = mcpServerConfigs[serverName];
+        if (!serverConfig) {
+          logger.warn(
+            `[loadToolDefinitionsWrapper] Filtering out MCP tool "${tool}" — server "${serverName}" not found in registry`,
+          );
+          return false;
+        }
+        if (serverConfig.inspectionFailed) {
+          logger.warn(
+            `[loadToolDefinitionsWrapper] Filtering out MCP tool "${tool}" — server "${serverName}" has inspectionFailed`,
+          );
+          return false;
+        }
+      }
+      return true;
     }
     if (!areToolsEnabled) {
       return false;
@@ -1117,6 +1153,22 @@ async function loadAgentTools({
   const mcpPermissionContext = createMCPPermissionContext(req);
   const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
+  let mcpServerConfigs = null;
+  if (hasMCPTools && canUseMCP) {
+    try {
+      const configServers = await resolveConfigServers(req);
+      mcpServerConfigs = await getMCPServersRegistry().getAllServerConfigs(
+        req.user.id,
+        configServers,
+      );
+    } catch (e) {
+      logger.warn(
+        '[loadAgentTools] MCP registry unavailable, skipping MCP server availability checks',
+        e.message,
+      );
+    }
+  }
+
   let includesWebSearch = false;
   const _agentTools = agent.tools?.filter((tool) => {
     if (tool === Tools.file_search) {
@@ -1129,7 +1181,27 @@ async function loadAgentTools({
     } else if (isActionTool(tool)) {
       return actionsEnabled;
     } else if (tool?.includes(Constants.mcp_delimiter)) {
-      return areToolsEnabled && canUseMCP;
+      if (!areToolsEnabled || !canUseMCP) {
+        return false;
+      }
+      if (mcpServerConfigs) {
+        const parts = tool.split(Constants.mcp_delimiter);
+        const serverName = parts[parts.length - 1];
+        const serverConfig = mcpServerConfigs[serverName];
+        if (!serverConfig) {
+          logger.warn(
+            `[loadAgentTools] Filtering out MCP tool "${tool}" — server "${serverName}" not found in registry`,
+          );
+          return false;
+        }
+        if (serverConfig.inspectionFailed) {
+          logger.warn(
+            `[loadAgentTools] Filtering out MCP tool "${tool}" — server "${serverName}" has inspectionFailed`,
+          );
+          return false;
+        }
+      }
+      return true;
     } else if (!areToolsEnabled) {
       return false;
     }

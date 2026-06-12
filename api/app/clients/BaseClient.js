@@ -14,7 +14,6 @@ const {
 const {
   Constants,
   FileSources,
-  FileIndexingStatus,
   ContentTypes,
   excludedKeys,
   EModelEndpoint,
@@ -1236,61 +1235,10 @@ class BaseClient {
         continue;
       }
       if (
+        file.embedded === true ||
         file.metadata?.codeEnvRef != null ||
         file.metadata?.fileIdentifier != null
       ) {
-        allFiles.push(file);
-        continue;
-      }
-
-      const indexingStatus = file.indexingStatus;
-      if (indexingStatus === FileIndexingStatus.FAILED) {
-        logger.warn(
-          `[processAttachments] File "${file.filename}" (${file.file_id}) skipped: indexing failed`,
-        );
-        continue;
-      }
-      if (indexingStatus === FileIndexingStatus.PENDING) {
-        logger.warn(
-          `[processAttachments] File "${file.filename}" (${file.file_id}) skipped: still indexing`,
-        );
-        continue;
-      }
-
-      if (indexingStatus === FileIndexingStatus.INDEXED) {
-        allFiles.push(file);
-        continue;
-      }
-
-      if (indexingStatus === FileIndexingStatus.SKIPPED) {
-        if (file.type.startsWith('image/')) {
-          categorizedAttachments.images.push(file);
-        } else if (file.type === 'application/pdf') {
-          categorizedAttachments.documents.push(file);
-          allFiles.push(file);
-        } else if (isBedrock && isBedrockDocumentType(file.type)) {
-          categorizedAttachments.documents.push(file);
-          allFiles.push(file);
-        } else if (file.type.startsWith('video/')) {
-          categorizedAttachments.videos.push(file);
-          allFiles.push(file);
-        } else if (file.type.startsWith('audio/')) {
-          categorizedAttachments.audios.push(file);
-          allFiles.push(file);
-        } else if (
-          file.type &&
-          this._mergedFileConfig &&
-          this._endpointFileConfig?.supportedMimeTypes &&
-          this._mergedFileConfig.checkType(file.type, this._endpointFileConfig.supportedMimeTypes)
-        ) {
-          categorizedAttachments.documents.push(file);
-          allFiles.push(file);
-        }
-        continue;
-      }
-
-      const isLegacyIndexed = file.embedded === true && indexingStatus === undefined;
-      if (isLegacyIndexed) {
         allFiles.push(file);
         continue;
       }

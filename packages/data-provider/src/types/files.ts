@@ -1,13 +1,6 @@
 import { EToolResources } from './assistants';
 import type { CodeEnvRef } from '../codeEnvRef';
 
-export enum FileIndexingStatus {
-  PENDING = 'pending',
-  INDEXED = 'indexed',
-  FAILED = 'failed',
-  SKIPPED = 'skipped',
-}
-
 export enum FileSources {
   local = 'local',
   firebase = 'firebase',
@@ -158,20 +151,6 @@ export type TFile = {
    * Suitable for tooltip text but not user-facing prose.
    */
   previewError?: string;
-  /**
-   * RAG 索引状态，用于追踪文件是否可被检索。
-   * - `pending`: 正在处理或索引中
-   * - `indexed`: 已成功索引，可被检索
-   * - `failed`: 索引失败，无法被检索
-   * - `skipped`: 跳过索引（如非文本类型、RAG未配置等）
-   * - `undefined`:  legacy records，根据 `embedded` 字段判断
-   */
-  indexingStatus?: FileIndexingStatus;
-  /**
-   * 索引失败的原因，当 `indexingStatus === 'failed'` 时设置。
-   * 适合用于 tooltip 提示，不是用户友好的文本。
-   */
-  indexingError?: string;
   metadata?: {
     fileIdentifier?: string;
     /**
@@ -271,8 +250,6 @@ export type BatchFile = {
   embedded: boolean;
   source: FileSources;
   temp_file_id?: string;
-  indexingStatus?: FileIndexingStatus;
-  indexingError?: string;
 };
 
 export type DeleteFilesBody = {

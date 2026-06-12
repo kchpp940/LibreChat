@@ -7,7 +7,6 @@ const {
   megabyte,
   FileContext,
   FileSources,
-  FileIndexingStatus,
   imageExtRegex,
   EModelEndpoint,
   EToolResources,
@@ -646,7 +645,6 @@ const processFileUpload = async ({ req, res, metadata }) => {
       height,
       width,
       tenantId: req.user.tenantId,
-      indexingStatus: embedded === true ? FileIndexingStatus.INDEXED : FileIndexingStatus.SKIPPED,
     },
     true,
   );
@@ -869,8 +867,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
 
   // Dual storage pattern for RAG files: Storage + Vector DB
   let storageResult, embeddingResult;
-  let indexingStatus;
-  let indexingError;
   const isImageFile = file.mimetype.startsWith('image');
   const source = getFileStrategy(appConfig, { isImage: isImageFile });
 
@@ -886,33 +882,15 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       entity_id,
     });
 
-    // SECOND: Upload to Vector DB, with graceful failure handling
-    if (!process.env.RAG_API_URL) {
-      indexingStatus = FileIndexingStatus.SKIPPED;
-      indexingError = 'rag_api_not_configured';
-      logger.warn(
-        `[processAgentFileUpload] RAG_API_URL not configured, skipping vector indexing for "${file.originalname}"`,
-      );
-    } else {
-      const { uploadVectors } = require('./VectorDB/crud');
-      try {
-        indexingStatus = FileIndexingStatus.PENDING;
-        embeddingResult = await uploadVectors({
-          req,
-          file,
-          file_id,
-          entity_id,
-        });
-        indexingStatus = FileIndexingStatus.INDEXED;
-      } catch (embeddingError) {
-        indexingStatus = FileIndexingStatus.FAILED;
-        indexingError = embeddingError.message || 'vector_indexing_failed';
-        logger.error(
-          `[processAgentFileUpload] Vector indexing failed for "${file.originalname}":`,
-          indexingError,
-        );
-      }
-    }
+    // SECOND: Upload to Vector DB
+    const { uploadVectors } = require('./VectorDB/crud');
+
+    embeddingResult = await uploadVectors({
+      req,
+      file,
+      file_id,
+      entity_id,
+    });
 
     // Vector status will be stored at root level, no need for metadata
     fileInfoMetadata = {};
@@ -927,7 +905,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       basePath,
       entity_id,
     });
-    indexingStatus = FileIndexingStatus.SKIPPED;
   }
 
   let {
@@ -942,7 +919,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
   // For RAG files, use embedding result; for others, use storage result
   let embedded = storageResult.embedded;
   if (tool_resource === EToolResources.file_search) {
-    embedded = embeddingResult?.embedded ?? false;
+    embedded = embeddingResult?.embedded;
     filename = embeddingResult?.filename || filename;
   }
 
@@ -1002,8 +979,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       height,
       width,
       tenantId: req.user.tenantId,
-      indexingStatus,
-      indexingError,
     }),
     ...retentionExpiry,
   };

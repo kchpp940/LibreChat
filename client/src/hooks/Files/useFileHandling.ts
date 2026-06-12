@@ -129,7 +129,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
           {
             progress: 0.9,
             filepath: data.filepath,
-            indexingStatus: data.indexingStatus,
           },
           assistant_id ? true : false,
         );
@@ -153,8 +152,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
               filename: data.filename,
               source: data.source,
               embedded: data.embedded,
-              indexingStatus: data.indexingStatus,
-              indexingError: data.indexingError,
             },
             assistant_id ? true : false,
           );

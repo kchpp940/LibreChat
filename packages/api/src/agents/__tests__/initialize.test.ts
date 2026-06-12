@@ -206,7 +206,6 @@ function createMocks(overrides?: {
     getFiles: jest.fn().mockResolvedValue([]),
     getConvoFiles: jest.fn().mockResolvedValue([]),
     updateFilesUsage: jest.fn().mockResolvedValue([]),
-    validateFileIndexingStatus: jest.fn().mockReturnValue({ valid: true, unavailableFiles: [] }),
     getUserKey: jest.fn().mockResolvedValue('user-1'),
     getUserKeyValues: jest.fn().mockResolvedValue([]),
     getToolFilesByIds: jest.fn().mockResolvedValue([]),

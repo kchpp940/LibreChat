@@ -137,6 +137,46 @@ const getMCPTools = async (req, res) => {
         const serverTools = serverToolsMap.get(serverName);
 
         const serverConfig = mcpConfig[serverName];
+        const requiresOAuth = serverConfig?.requiresOAuth ?? false;
+        const inspectionFailed = serverConfig?.inspectionFailed ?? false;
+
+        let oauthAuthorized = true;
+        if (requiresOAuth) {
+          try {
+            const identifier = `mcp:${serverName}`;
+            const accessTokenData = await db.findToken({
+              userId,
+              type: 'mcp_oauth',
+              identifier,
+            });
+
+            const hasValidAccessToken =
+              accessTokenData &&
+              accessTokenData.expiresAt &&
+              new Date() < new Date(accessTokenData.expiresAt);
+
+            if (hasValidAccessToken) {
+              oauthAuthorized = true;
+            } else {
+              const refreshTokenData = await db.findToken({
+                userId,
+                type: 'mcp_oauth_refresh',
+                identifier: `${identifier}:refresh`,
+              });
+              oauthAuthorized = !!refreshTokenData;
+            }
+          } catch (oauthError) {
+            logger.error(
+              `[getMCPTools] Error checking OAuth status for server "${serverName}":`,
+              oauthError,
+            );
+            oauthAuthorized = false;
+          }
+        }
+
+        const hasCustomUserVars =
+          serverConfig?.customUserVars &&
+          Object.keys(serverConfig.customUserVars).length > 0;
 
         const server = {
           name: serverName,
@@ -144,10 +184,13 @@ const getMCPTools = async (req, res) => {
           authenticated: true,
           authConfig: [],
           tools: [],
+          requiresOAuth,
+          oauthAuthorized,
+          inspectionFailed,
         };
 
         // Set authentication config once for the server
-        if (serverConfig?.customUserVars) {
+        if (hasCustomUserVars) {
           const customVarKeys = Object.keys(serverConfig.customUserVars);
           if (customVarKeys.length > 0) {
             server.authConfig = Object.entries(serverConfig.customUserVars).map(([key, value]) => ({

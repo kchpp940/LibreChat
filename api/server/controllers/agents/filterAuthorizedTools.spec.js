@@ -415,6 +415,101 @@ describe('MCP Tool Authorization', () => {
       expect(result).not.toContainEqual(expect.stringContaining('victimServer'));
       expect(result).not.toContainEqual(expect.stringContaining(`a${d}b`));
     });
+
+    test('should filter out tools from servers with inspectionFailed', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+        failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}healthyServer`, `toolB${d}failedServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}healthyServer`);
+      expect(result).toContain('web_search');
+      expect(result).not.toContain(`toolB${d}failedServer`);
+    });
+
+    test('should preserve existing MCP tools from inspectionFailed servers', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
+      });
+
+      const existingTools = [`existingTool${d}failedServer`];
+
+      const result = await filterAuthorizedTools({
+        tools: [`existingTool${d}failedServer`, `newTool${d}failedServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+        existingTools,
+      });
+
+      expect(result).toContain(`existingTool${d}failedServer`);
+      expect(result).toContain('web_search');
+      expect(result).not.toContain(`newTool${d}failedServer`);
+    });
+
+    test('should filter out tools from inspectionFailed servers even when no existingTools', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}failedServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toEqual(['web_search']);
+      expect(result).not.toContain(`toolA${d}failedServer`);
+    });
+
+    test('should allow tools from servers without inspectionFailed', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com', inspectionFailed: false },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}healthyServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}healthyServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should handle mixed inspectionFailed and healthy servers', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+        failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
+        anotherHealthy: { type: 'sse', url: 'https://another-healthy.example.com', inspectionFailed: false },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [
+          `toolA${d}healthyServer`,
+          `toolB${d}failedServer`,
+          `toolC${d}anotherHealthy`,
+          'web_search',
+        ],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}healthyServer`);
+      expect(result).toContain(`toolC${d}anotherHealthy`);
+      expect(result).toContain('web_search');
+      expect(result).not.toContain(`toolB${d}failedServer`);
+    });
   });
 
   describe('createAgentHandler - MCP tool authorization', () => {

@@ -17,7 +17,7 @@ const azureAssistants = require('~/server/services/Endpoints/azureAssistants');
 const assistants = require('~/server/services/Endpoints/assistants');
 const { getEndpointsConfig } = require('~/server/services/Config');
 const agents = require('~/server/services/Endpoints/agents');
-const { updateFilesUsage, validateFileIndexingStatus } = require('~/models');
+const { updateFilesUsage } = require('~/models');
 
 const buildFunction = {
   [EModelEndpoint.agents]: agents.buildOptions,
@@ -132,17 +132,9 @@ async function buildEndpointOption(req, res, next) {
     req.body.endpointOption = await builder(endpoint, parsedBody, endpointType);
 
     if (req.body.files && !isAgents) {
-      const fileRecords = await updateFilesUsage(req.body.files, undefined, {
+      req.body.endpointOption.attachments = updateFilesUsage(req.body.files, undefined, {
         user: req.user.id,
       });
-      const validation = validateFileIndexingStatus(fileRecords);
-      if (!validation.valid) {
-        return res.status(422).json({
-          error: 'Some files are not ready for retrieval',
-          unavailableFiles: validation.unavailableFiles,
-        });
-      }
-      req.body.endpointOption.attachments = fileRecords;
     }
 
     next();

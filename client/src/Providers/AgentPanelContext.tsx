@@ -72,6 +72,10 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         const displayDescription =
           serverConfig?.description || `${localize('com_ui_tool_collection_prefix')} ${serverName}`;
 
+        const requiresOAuth = (serverData as any).requiresOAuth ?? false;
+        const oauthAuthorized = (serverData as any).oauthAuthorized ?? true;
+        const inspectionFailed = (serverData as any).inspectionFailed ?? false;
+
         const metadata = {
           name: displayName,
           pluginKey: serverName,
@@ -79,6 +83,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
           icon: serverData.icon || '',
           authConfig: serverData.authConfig,
           authenticated: serverData.authenticated,
+          requiresOAuth,
+          oauthAuthorized,
+          inspectionFailed,
         } as TPlugin;
 
         const tools = serverData.tools.map((tool) => ({
@@ -88,6 +95,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
             icon: serverData.icon,
             authConfig: serverData.authConfig,
             authenticated: serverData.authenticated,
+            requiresOAuth,
+            oauthAuthorized,
+            inspectionFailed,
           } as TPlugin,
         }));
 
@@ -98,6 +108,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
           isConnected: connectionStatus?.[serverName]?.connectionState === 'connected',
           metadata,
           consumeOnly: serverConfig?.consumeOnly,
+          requiresOAuth,
+          oauthAuthorized,
+          inspectionFailed,
         });
       }
     }
@@ -119,6 +132,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         name: displayName,
         pluginKey: mcpServerName,
         description: displayDescription,
+        requiresOAuth: false,
+        oauthAuthorized: true,
+        inspectionFailed: false,
       } as TPlugin;
 
       serversMap.set(mcpServerName, {
@@ -128,6 +144,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         serverName: mcpServerName,
         isConnected: connectionStatus?.[mcpServerName]?.connectionState === 'connected',
         consumeOnly: serverConfig?.consumeOnly,
+        requiresOAuth: false,
+        oauthAuthorized: true,
+        inspectionFailed: false,
       });
     }
 

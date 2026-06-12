@@ -27,18 +27,29 @@ export function useVisibleTools(
     const regularToolIds: string[] = [];
 
     for (const toolId of selectedToolIds ?? []) {
-      // MCP tools/servers
       if (toolId.includes(Constants.mcp_delimiter)) {
         const serverName = toolId.split(Constants.mcp_delimiter)[1];
         if (serverName) {
+          const serverInfo = mcpServersMap.get(serverName);
+          if (serverInfo?.inspectionFailed) {
+            continue;
+          }
+          if (serverInfo?.requiresOAuth && !serverInfo?.oauthAuthorized) {
+            continue;
+          }
           mcpServers.add(serverName);
         }
       }
-      // Legacy MCP server check (just server name)
       else if (mcpServersMap.has(toolId)) {
+        const serverInfo = mcpServersMap.get(toolId);
+        if (serverInfo?.inspectionFailed) {
+          continue;
+        }
+        if (serverInfo?.requiresOAuth && !serverInfo?.oauthAuthorized) {
+          continue;
+        }
         mcpServers.add(toolId);
       }
-      // Regular LibreChat tools
       else if (regularTools?.some((t) => t.pluginKey === toolId)) {
         regularToolIds.push(toolId);
       }

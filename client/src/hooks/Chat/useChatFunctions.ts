@@ -8,7 +8,6 @@ import {
   QueryKeys,
   ContentTypes,
   EModelEndpoint,
-  FileIndexingStatus,
   getEndpointField,
   isAgentsEndpoint,
   parseCompactConvo,
@@ -418,75 +417,17 @@ export default function useChatFunctions({
       submissionFiles &&
       submissionFiles.length > 0;
 
-    const hasUnavailableFiles = (fileList: ExtendedFile[]): boolean => {
-      return fileList.some(
-        (file) =>
-          file.indexingStatus === FileIndexingStatus.FAILED ||
-          file.indexingStatus === FileIndexingStatus.PENDING,
-      );
-    };
-
     if (setFiles && reuseFiles === true) {
       currentMsg.files = [...submissionFiles];
       setFiles(new Map());
       setFilesToDelete({});
     } else if (setFiles && files && files.size > 0) {
-      const fileList = Array.from(files.values());
-
-      if (hasUnavailableFiles(fileList)) {
-        const failedFiles = fileList.filter(
-          (f) => f.indexingStatus === FileIndexingStatus.FAILED,
-        );
-        const pendingFiles = fileList.filter(
-          (f) => f.indexingStatus === FileIndexingStatus.PENDING,
-        );
-        const lines: string[] = [];
-        if (failedFiles.length > 0) {
-          lines.push(
-            ...failedFiles.map(
-              (f) => `- ${f.filename ?? f.file_id}: index failed${f.indexingError ? ` (${f.indexingError})` : ''}`,
-            ),
-          );
-        }
-        if (pendingFiles.length > 0) {
-          lines.push(
-            ...pendingFiles.map((f) => `- ${f.filename ?? f.file_id}: still indexing`),
-          );
-        }
-        const errorText = `Files not ready for retrieval:\n${lines.join('\n')}`;
-        console.warn('[useChatFunctions]', errorText);
-
-        const errorMsg: TMessage = {
-          messageId: `${intermediateId}_file_error`,
-          parentMessageId: intermediateId,
-          conversationId,
-          text: errorText,
-          sender: responseSender,
-          endpoint: endpoint ?? '',
-          isCreatedByUser: false,
-          error: true,
-          unfinished: false,
-        };
-        const existingMessages = getMessages() ?? [];
-        setMessages([...existingMessages, currentMsg, errorMsg]);
-        setIsSubmitting(false);
-        return false;
-      }
-
-      currentMsg.files = fileList.map((file) => ({
+      currentMsg.files = Array.from(files.values()).map((file) => ({
         file_id: file.file_id,
         filepath: file.filepath,
-        type: file.type ?? '',
+        type: file.type ?? '', // Ensure type is not undefined
         height: file.height,
         width: file.width,
-        embedded:
-          file.indexingStatus === FileIndexingStatus.INDEXED
-            ? true
-            : file.indexingStatus === FileIndexingStatus.SKIPPED
-              ? false
-              : file.embedded,
-        indexingStatus: file.indexingStatus,
-        indexingError: file.indexingError,
       }));
       setFiles(new Map());
       setFilesToDelete({});

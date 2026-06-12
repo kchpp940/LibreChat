@@ -401,10 +401,6 @@ export interface InitializeAgentDbMethods extends EndpointDbMethods {
     fileIds?: string[],
     options?: { user?: string },
   ) => Promise<unknown[]>;
-  /** Validate file indexing status for request files */
-  validateFileIndexingStatus: (
-    files: Array<{ file_id: string; indexingStatus?: string; indexingError?: string; filename?: string }>,
-  ) => { valid: boolean; unavailableFiles: Array<{ file_id: string; filename?: string; indexingStatus?: string; indexingError?: string }> };
   /** Get files from database */
   getFiles: (filter: unknown, sort: unknown, select: unknown) => Promise<unknown[]>;
   /** Filter files by agent access permissions (ownership or agent attachment) */
@@ -662,17 +658,6 @@ export async function initializeAgent(
               user: requestFileOwnerId,
             })) as IMongoFile[])
           : [];
-      if (requestUsageFiles.length && db.validateFileIndexingStatus) {
-        const validation = db.validateFileIndexingStatus(requestUsageFiles);
-        if (!validation.valid) {
-          const unavailableNames = validation.unavailableFiles
-            .map((f) => f.filename ?? f.file_id)
-            .join(', ');
-          throw new Error(
-            `Files not ready for retrieval: ${unavailableNames}`,
-          );
-        }
-      }
       const requestUsageFileIds = new Set(requestUsageFiles.map((file) => file.file_id));
       const trustedToolFiles = allToolFiles.filter(
         (file) => !requestUsageFileIds.has(file.file_id),
@@ -688,17 +673,6 @@ export async function initializeAgent(
           user: requestFileOwnerId,
         })) as IMongoFile[])
       : [];
-    if (currentFiles.length && db.validateFileIndexingStatus) {
-      const validation = db.validateFileIndexingStatus(currentFiles);
-      if (!validation.valid) {
-        const unavailableNames = validation.unavailableFiles
-          .map((f) => f.filename ?? f.file_id)
-          .join(', ');
-        throw new Error(
-          `Files not ready for retrieval: ${unavailableNames}`,
-        );
-      }
-    }
   }
 
   if (currentFiles && currentFiles.length) {

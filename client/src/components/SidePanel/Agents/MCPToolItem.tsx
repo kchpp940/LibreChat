@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, MoreHorizontal, Code2 } from 'lucide-react';
+import { Clock, MoreHorizontal, Code2, AlertTriangle } from 'lucide-react';
 import {
   Checkbox,
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
+  TooltipAnchor,
 } from '@librechat/client';
 import type { AgentToolType } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
@@ -20,12 +21,21 @@ interface MCPToolItemProps {
   isProgrammatic: boolean;
   deferredToolsEnabled: boolean;
   programmaticToolsEnabled: boolean;
+  isDisabled?: boolean;
+  disabledReason?: string;
   onToggleSelect: () => void;
   onToggleDefer: () => void;
   onToggleProgrammatic: () => void;
 }
 
-function getToolItemStyle(isDeferred: boolean, isProgrammatic: boolean): string {
+function getToolItemStyle(
+  isDeferred: boolean,
+  isProgrammatic: boolean,
+  isDisabled?: boolean,
+): string {
+  if (isDisabled) {
+    return 'border-red-500/30 bg-red-500/5 opacity-60';
+  }
   if (isDeferred && isProgrammatic) {
     return 'border-purple-500/50 bg-purple-500/5 hover:bg-purple-500/10';
   }
@@ -48,6 +58,8 @@ export default function MCPToolItem({
   onToggleProgrammatic,
   deferredToolsEnabled,
   programmaticToolsEnabled,
+  isDisabled = false,
+  disabledReason = '',
 }: MCPToolItemProps) {
   const localize = useLocalize();
   const hasOptions = isDeferred || isProgrammatic;
@@ -57,7 +69,8 @@ export default function MCPToolItem({
       className={cn(
         'group/item flex cursor-pointer items-center rounded-lg border p-2',
         'ml-2 mr-1 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background',
-        getToolItemStyle(isDeferred, isProgrammatic),
+        getToolItemStyle(isDeferred, isProgrammatic, isDisabled),
+        isDisabled && 'cursor-not-allowed',
       )}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
@@ -65,23 +78,43 @@ export default function MCPToolItem({
       <Checkbox
         id={tool.tool_id}
         checked={isSelected}
-        onCheckedChange={onToggleSelect}
+        onCheckedChange={isDisabled ? undefined : onToggleSelect}
+        disabled={isDisabled}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            const checkbox = e.currentTarget as HTMLButtonElement;
-            checkbox.click();
+            if (!isDisabled) {
+              const checkbox = e.currentTarget as HTMLButtonElement;
+              checkbox.click();
+            }
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="relative mr-2 inline-flex h-4 w-4 shrink-0 cursor-pointer rounded border border-border-medium transition-[border-color] duration-200 hover:border-border-heavy focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+        className={cn(
+          'relative mr-2 inline-flex h-4 w-4 shrink-0 rounded border border-border-medium transition-[border-color] duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
+          !isDisabled && 'cursor-pointer hover:border-border-heavy',
+          isDisabled && 'cursor-not-allowed opacity-50',
+        )}
         aria-label={tool.metadata.name}
       />
-      <span className="text-token-text-primary min-w-0 flex-1 select-none truncate">
+      <span
+        className={cn(
+          'text-token-text-primary min-w-0 flex-1 select-none truncate',
+          isDisabled && 'text-text-secondary',
+        )}
+      >
         {tool.metadata.name}
       </span>
       <div className="ml-2 flex shrink-0 items-center gap-1.5">
+        {isDisabled && disabledReason && (
+          <TooltipAnchor description={disabledReason}>
+            <AlertTriangle
+              className="h-3.5 w-3.5 text-red-500"
+              aria-hidden="true"
+            />
+          </TooltipAnchor>
+        )}
         {isDeferred && <Clock className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />}
         {isProgrammatic && <Code2 className="h-3.5 w-3.5 text-violet-500" aria-hidden="true" />}
         <DropdownMenu>

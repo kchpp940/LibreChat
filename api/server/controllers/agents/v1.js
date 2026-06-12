@@ -279,6 +279,18 @@ const filterAuthorizedTools = async ({
       continue;
     }
 
+    const serverConfig = mcpServerConfigs[serverName];
+    if (serverConfig?.inspectionFailed) {
+      if (existingToolSet?.has(tool)) {
+        filteredTools.push(tool);
+      } else {
+        logger.warn(
+          `[filterAuthorizedTools] Rejected MCP tool "${tool}" — server "${serverName}" has inspectionFailed and tool is not already on agent`,
+        );
+      }
+      continue;
+    }
+
     filteredTools.push(tool);
   }
 

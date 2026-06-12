@@ -1,5 +1,5 @@
 import { RefObject } from 'react';
-import { FileSources, EModelEndpoint, isEphemeralAgentId, FileIndexingStatus } from 'librechat-data-provider';
+import { FileSources, EModelEndpoint, isEphemeralAgentId } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type * as InputNumberPrimitive from 'rc-input-number';
 import type { SetterOrUpdater, RecoilState } from 'recoil';
@@ -213,6 +213,9 @@ export interface MCPServerInfo {
   isConnected: boolean;
   consumeOnly?: boolean;
   metadata: t.TPlugin;
+  requiresOAuth?: boolean;
+  oauthAuthorized?: boolean;
+  inspectionFailed?: boolean;
 }
 
 export type AgentPanelContextType = {
@@ -580,8 +583,6 @@ export interface ExtendedFile {
   embedded?: boolean;
   tool_resource?: string;
   metadata?: t.TFile['metadata'];
-  indexingStatus?: FileIndexingStatus;
-  indexingError?: string;
 }
 
 export interface ModelItemProps {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Label, OGDialog, TrashIcon, OGDialogTrigger, OGDialogTemplate } from '@librechat/client';
+import { Label, OGDialog, TrashIcon, OGDialogTrigger, OGDialogTemplate, TooltipAnchor } from '@librechat/client';
+import { AlertTriangle } from 'lucide-react';
 import type { MCPServerInfo } from '~/common';
 import { useLocalize, useMCPServerManager, useRemoveMCPTool } from '~/hooks';
 import MCPServerStatusIcon from '~/components/MCP/MCPServerStatusIcon';
@@ -24,6 +25,24 @@ export default function UninitializedMCPTool({ serverInfo }: { serverInfo?: MCPS
   const isServerInitializing = isInitializing(serverName);
   const statusIconProps = getServerStatusIconProps(serverName);
   const configDialogProps = getConfigDialogProps();
+
+  const isInspectionFailed = serverInfo.inspectionFailed ?? false;
+  const requiresOAuth = serverInfo.requiresOAuth ?? false;
+  const oauthAuthorized = serverInfo.oauthAuthorized ?? true;
+  const hasOAuthFailure = requiresOAuth && !oauthAuthorized;
+  const isServerUnavailable = isInspectionFailed || hasOAuthFailure;
+
+  const getDisabledReason = (): string => {
+    if (isInspectionFailed) {
+      return localize('com_ui_mcp_inspection_failed');
+    }
+    if (hasOAuthFailure) {
+      return localize('com_ui_mcp_oauth_unauthorized');
+    }
+    return '';
+  };
+
+  const disabledReason = getDisabledReason();
 
   const statusIcon = statusIconProps && (
     <div
@@ -50,26 +69,32 @@ export default function UninitializedMCPTool({ serverInfo }: { serverInfo?: MCPS
         }}
       >
         <div
-          className="flex grow cursor-pointer items-center gap-1 rounded bg-transparent p-0 text-left transition-colors"
+          className={cn(
+            'flex grow items-center gap-1 rounded bg-transparent p-0 text-left transition-colors',
+            !isServerUnavailable && 'cursor-pointer',
+            isServerUnavailable && 'cursor-not-allowed',
+          )}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest('[data-status-icon]')) {
               return;
             }
-            if (!isServerInitializing) {
-              initializeServer(serverName);
+            if (isServerUnavailable || isServerInitializing) {
+              return;
             }
+            initializeServer(serverName);
           }}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              if (!isServerInitializing) {
-                initializeServer(serverName);
+              if (isServerUnavailable || isServerInitializing) {
+                return;
               }
+              initializeServer(serverName);
             }
           }}
-          aria-disabled={isServerInitializing}
+          aria-disabled={isServerInitializing || isServerUnavailable}
         >
           {statusIcon && (
             <div className="flex items-center" data-status-icon>
@@ -89,14 +114,22 @@ export default function UninitializedMCPTool({ serverInfo }: { serverInfo?: MCPS
             </div>
           )}
           <div
-            className="grow px-2 py-1.5"
+            className="grow px-2 py-1.5 flex items-center gap-1.5"
             style={{ textOverflow: 'ellipsis', wordBreak: 'break-all', overflow: 'hidden' }}
           >
-            {serverName}
+            <span className="truncate">{serverName}</span>
             {isServerInitializing && (
-              <span className="ml-2 text-xs text-text-secondary">
+              <span className="text-xs text-text-secondary">
                 {localize('com_ui_initializing')}
               </span>
+            )}
+            {isServerUnavailable && disabledReason && (
+              <TooltipAnchor description={disabledReason}>
+                <AlertTriangle
+                  className="h-3.5 w-3.5 flex-shrink-0 text-red-500"
+                  aria-hidden="true"
+                />
+              </TooltipAnchor>
             )}
           </div>
         </div>
