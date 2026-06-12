@@ -432,6 +432,8 @@ describe('Share Methods', () => {
         feedback: { rating: 'thumbsDown', tag: { key: 'inaccurate' }, text: 'private note' },
         manualSkills: ['research'],
         alwaysAppliedSkills: ['brand-voice'],
+        tokenCount: 1234,
+        finish_reason: 'stop',
         files: [
           {
             file_id: 'file123',
@@ -443,6 +445,8 @@ describe('Share Methods', () => {
             width: 100,
             height: 100,
             filepath: '/images/upload.png',
+            preview: '/api/files/preview/file123',
+            downloadUrl: '/api/files/download/file123',
             conversationId,
             messageId: 'original-message-id',
             user: userId,
@@ -457,7 +461,7 @@ describe('Share Methods', () => {
           {
             toolCallId: 'call_abc',
             type: 'web_search',
-            web_search: { results: [{ title: 'Cited source', link: 'https://example.com' }] },
+            web_search: { turn: 0, organic: [{ title: 'Cited source', link: 'https://example.com' }] },
             filename: 'result.json',
             filepath: '/images/result.json',
             storageKey: 'private/result.json',
@@ -489,15 +493,21 @@ describe('Share Methods', () => {
       expect(shared).not.toHaveProperty('metadata');
       // Private owner feedback is not render data and must not leak publicly.
       expect(shared).not.toHaveProperty('feedback');
-      // Skill badges are non-sensitive UI metadata and should still render.
-      expect(shared?.manualSkills).toEqual(['research']);
-      expect(shared?.alwaysAppliedSkills).toEqual(['brand-voice']);
+      // Skill ids and token-level metadata are implementation details, NOT display data.
+      expect(shared).not.toHaveProperty('manualSkills');
+      expect(shared).not.toHaveProperty('alwaysAppliedSkills');
+      expect(shared).not.toHaveProperty('tokenCount');
+      expect(shared).not.toHaveProperty('finish_reason');
 
-      // User-uploaded files keep their render URL (filepath/preview) but drop ALL storage internals
-      // and internal identifiers including file_id, _id, id, temp_file_id.
+      // User-uploaded files keep ONLY whitelisted display fields (filename, type,
+      // width, height). All internal paths (/files/*, /api/files/*, /preview,
+      // /download) are stripped by FORBIDDEN_URL_PATTERN.
       const file = shared?.files?.[0];
-      expect(file).toMatchObject({ filename: 'upload.png', type: 'image/png' });
-      expect(file?.filepath).toBe('/images/upload.png');
+      expect(file).toMatchObject({ filename: 'upload.png', type: 'image/png', width: 100, height: 100 });
+      // Internal file URLs/paths must NEVER reach the anonymous client.
+      expect(file).not.toHaveProperty('filepath');
+      expect(file).not.toHaveProperty('preview');
+      expect(file).not.toHaveProperty('downloadUrl');
       // Sensitive identifiers must be stripped.
       expect(file).not.toHaveProperty('_id');
       expect(file).not.toHaveProperty('id');
@@ -516,14 +526,20 @@ describe('Share Methods', () => {
       expect(file?.messageId).toBe(shared?.messageId);
       expect(file?.messageId).not.toBe('original-message-id');
 
-      // Tool-call attachments: correlation toolCallId is ANONYMIZED (not preserved as-is)
-      // so internal call identifiers don't leak, while payload and render URL are preserved.
+      // Tool-call attachments: correlation toolCallId is ANONYMIZED (not
+      // preserved as-is) so internal call identifiers don't leak. The
+      // web_search payload is sanitized through the tool sanitizer.
       const attachment = shared?.attachments?.[0];
-      expect(attachment).toMatchObject({
-        type: 'web_search',
-        web_search: { results: [{ title: 'Cited source', link: 'https://example.com' }] },
-        filepath: '/images/result.json',
+      expect(attachment?.type).toBe('web_search');
+      expect(attachment?.web_search).toBeDefined();
+      expect(attachment?.web_search?.turn).toBe(0);
+      expect(attachment?.web_search?.organic).toBeDefined();
+      expect(attachment?.web_search?.organic[0]).toMatchObject({
+        title: 'Cited source',
+        link: 'https://example.com',
       });
+      // Internal filepath URLs are stripped from attachments too.
+      expect(attachment).not.toHaveProperty('filepath');
       // Anonymized toolCallId should have the call_ prefix but not equal the original.
       expect(attachment?.toolCallId).toMatch(/^call_/);
       expect(attachment?.toolCallId).not.toBe('call_abc');
@@ -2073,6 +2089,289 @@ describe('Share Methods', () => {
       // args stripped
       expect(fsCall).not.toHaveProperty('args');
       expect(fsCall.output).toBe('Search results');
+    });
+  });
+
+  describe('Files/Attachments White-list Sanitization', () => {
+    test('strips all forbidden URL patterns from file fields', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const shareId = `share_${nanoid()}`;
+
+      const message = await Message.create({
+        messageId: `msg_${nanoid()}`,
+        conversationId,
+        user: userId,
+        text: 'files with internal URLs',
+        isCreatedByUser: false,
+        files: [
+          {
+            filename: 'a.pdf',
+            filepath: '/api/files/download/abc',
+            preview: '/api/files/preview/abc',
+            downloadUrl: '/download/abc',
+            href: '/files/abc.pdf',
+            cdnUrl: 'https://bucket.s3.amazonaws.com/private/abc.pdf',
+            bytes: 1024,
+            type: 'application/pdf',
+            text: 'Extracted PDF text',
+          },
+          {
+            filename: 'b.png',
+            filepath: '/files/b.png',
+            preview: '/preview/b.png',
+            codeDownload: '/api/files/code/download/session/b.png',
+            width: 200,
+            height: 200,
+            type: 'image/png',
+          },
+        ],
+      });
+
+      await SharedLink.create({
+        shareId,
+        conversationId,
+        user: userId,
+        messages: [message._id],
+      });
+
+      const result = await shareMethods.getSharedMessages(shareId);
+      const fileA = result?.messages[0]?.files?.[0];
+      const fileB = result?.messages[0]?.files?.[1];
+
+      // Render-safe display fields are preserved
+      expect(fileA).toMatchObject({
+        filename: 'a.pdf',
+        bytes: 1024,
+        type: 'application/pdf',
+        text: 'Extracted PDF text',
+      });
+      expect(fileB).toMatchObject({
+        filename: 'b.png',
+        width: 200,
+        height: 200,
+        type: 'image/png',
+      });
+
+      // ALL URL-like fields are stripped
+      expect(fileA).not.toHaveProperty('filepath');
+      expect(fileA).not.toHaveProperty('preview');
+      expect(fileA).not.toHaveProperty('downloadUrl');
+      expect(fileA).not.toHaveProperty('href');
+      expect(fileA).not.toHaveProperty('cdnUrl');
+      expect(fileB).not.toHaveProperty('filepath');
+      expect(fileB).not.toHaveProperty('preview');
+      expect(fileB).not.toHaveProperty('codeDownload');
+    });
+
+    test('sanitizes file_search attachment sources: strips metadata and replaces real fileId with anonymized token', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const shareId = `share_${nanoid()}`;
+
+      const message = await Message.create({
+        messageId: `msg_${nanoid()}`,
+        conversationId,
+        user: userId,
+        text: 'file search results',
+        isCreatedByUser: false,
+        attachments: [
+          {
+            type: 'file_search',
+            toolCallId: 'call_search_1',
+            filename: 'search-output.json',
+            file_search: {
+              turn: 2,
+              sources: [
+                {
+                  fileId: 'internal-file-uuid-789',
+                  fileName: 'Quarterly Report.pdf',
+                  pages: [3, 7, 12],
+                  relevance: 0.92,
+                  pageRelevance: { '3': 0.8, '7': 0.95 },
+                  metadata: {
+                    s3Bucket: 'private-docs',
+                    ownerTeam: 'finance',
+                    classification: 'CONFIDENTIAL',
+                  },
+                },
+                {
+                  fileId: 'internal-file-uuid-abc',
+                  fileName: 'Roadmap.docx',
+                  pages: [1],
+                  metadata: { path: '/shared/secrets/roadmap.docx' },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      await SharedLink.create({
+        shareId,
+        conversationId,
+        user: userId,
+        messages: [message._id],
+      });
+
+      const result = await shareMethods.getSharedMessages(shareId);
+      const attachment = result?.messages[0]?.attachments?.[0];
+
+      expect(attachment?.type).toBe('file_search');
+      expect(attachment?.file_search).toBeDefined();
+      expect(attachment?.file_search?.turn).toBe(2);
+      expect(attachment?.file_search?.sources).toHaveLength(2);
+
+      const sourceA = attachment?.file_search?.sources?.[0];
+      expect(sourceA.fileName).toBe('Quarterly Report.pdf');
+      expect(sourceA.pages).toEqual([3, 7, 12]);
+      expect(sourceA.relevance).toBe(0.92);
+      expect(sourceA.pageRelevance).toEqual({ '3': 0.8, '7': 0.95 });
+
+      // Sensitive file identifiers: anonymized (not leaked as-is), metadata completely stripped
+      expect(sourceA.fileId).toBeDefined();
+      expect(sourceA.fileId).not.toBe('internal-file-uuid-789');
+      expect(sourceA.fileId.startsWith('f_')).toBe(true);
+      expect(sourceA).not.toHaveProperty('metadata');
+
+      const sourceB = attachment?.file_search?.sources?.[1];
+      expect(sourceB.fileName).toBe('Roadmap.docx');
+      expect(sourceB.fileId).toBeDefined();
+      expect(sourceB.fileId).not.toBe('internal-file-uuid-abc');
+      expect(sourceB).not.toHaveProperty('metadata');
+
+      // Same file_id consistency is tested separately; here we just ensure toolCallId is anonymized.
+      expect(attachment?.toolCallId).toMatch(/^call_/);
+      expect(attachment?.toolCallId).not.toBe('call_search_1');
+    });
+
+    test('drops non-whitelisted fields from files entirely (denylist cannot drift)', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const shareId = `share_${nanoid()}`;
+
+      const message = await Message.create({
+        messageId: `msg_${nanoid()}`,
+        conversationId,
+        user: userId,
+        text: 'sneaky fields',
+        isCreatedByUser: false,
+        files: [
+          {
+            filename: 'ok.txt',
+            bytes: 42,
+            // Everything below should be stripped: not on SHARED_FILE_WHITELIST
+            avatar: { filepath: '/api/files/avatar/x.png' },
+            embedded: true,
+            usage: { uploadCount: 1 },
+            filterSource: 'user-upload',
+            context: { owner: 'acct_123' },
+            expiresAt: Date.now(),
+            internalNote: 'never share this',
+            sourceAccount: 'user@private',
+          },
+        ],
+      });
+
+      await SharedLink.create({
+        shareId,
+        conversationId,
+        user: userId,
+        messages: [message._id],
+      });
+
+      const result = await shareMethods.getSharedMessages(shareId);
+      const file = result?.messages[0]?.files?.[0];
+
+      // Only whitelisted fields pass through
+      expect(file).toMatchObject({ filename: 'ok.txt', bytes: 42 });
+      // Non-whitelisted fields — regardless of naming — are dropped.
+      const allowedKeys = new Set([
+        'filename', 'bytes', 'size', 'width', 'height', 'text', 'textFormat',
+        'type', 'toolCallId', 'status', 'previewError', 'messageId',
+        'conversationId', 'file_search', 'web_search',
+      ]);
+      for (const key of Object.keys(file ?? {})) {
+        expect(allowedKeys.has(key)).toBe(true);
+      }
+      expect(file).not.toHaveProperty('avatar');
+      expect(file).not.toHaveProperty('embedded');
+      expect(file).not.toHaveProperty('usage');
+      expect(file).not.toHaveProperty('filterSource');
+      expect(file).not.toHaveProperty('context');
+      expect(file).not.toHaveProperty('expiresAt');
+      expect(file).not.toHaveProperty('internalNote');
+      expect(file).not.toHaveProperty('sourceAccount');
+    });
+
+    test('message top-level uses strict whitelist: no tokenCount, finish_reason, skill ids, or metadata leaks', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const shareId = `share_${nanoid()}`;
+
+      const message = await Message.create({
+        messageId: `msg_${nanoid()}`,
+        conversationId,
+        user: userId,
+        text: 'toplevel',
+        isCreatedByUser: true,
+        sender: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        // Fields below MUST NOT leak through the shared response.
+        tokenCount: 999,
+        finish_reason: 'length',
+        manualSkills: ['skill-A', 'skill-B'],
+        alwaysAppliedSkills: ['default-skill'],
+        endpoint: 'custom-endpoint',
+        metadata: { traceId: 'secret-trace', agentVersion: '3.1.4' },
+        assistant_id: 'asst_private',
+        agent_id: 'agent_123_private',
+        responseMessageId: 'resp_internal',
+        thread_id: 'thread_xyz',
+        codeEnvRef: 'env-ref-private',
+        embedding_model: 'text-embedding-3',
+        files_config: { retention: 'PRIVATE' },
+        runtimeError: 'stacktrace here',
+        errorMessage: 'do not share',
+      });
+
+      await SharedLink.create({
+        shareId,
+        conversationId,
+        user: userId,
+        messages: [message._id],
+      });
+
+      const result = await shareMethods.getSharedMessages(shareId);
+      const shared = result?.messages[0];
+
+      // Explicit allowed top-level keys — the contract must not widen silently.
+      const allowedTopLevel = new Set([
+        'messageId', 'parentMessageId', 'conversationId', 'sender', 'text',
+        'content', 'iconURL', 'model', 'isCreatedByUser', 'createdAt',
+        'updatedAt', 'unfinished', 'error', 'files', 'attachments',
+      ]);
+      for (const key of Object.keys(shared ?? {})) {
+        expect(allowedTopLevel.has(key)).toBe(true);
+      }
+
+      // Each forbidden field individually asserted for clarity in failure messages.
+      expect(shared).not.toHaveProperty('tokenCount');
+      expect(shared).not.toHaveProperty('finish_reason');
+      expect(shared).not.toHaveProperty('manualSkills');
+      expect(shared).not.toHaveProperty('alwaysAppliedSkills');
+      expect(shared).not.toHaveProperty('endpoint');
+      expect(shared).not.toHaveProperty('metadata');
+      expect(shared).not.toHaveProperty('assistant_id');
+      expect(shared).not.toHaveProperty('agent_id');
+      expect(shared).not.toHaveProperty('responseMessageId');
+      expect(shared).not.toHaveProperty('thread_id');
+      expect(shared).not.toHaveProperty('codeEnvRef');
+      expect(shared).not.toHaveProperty('embedding_model');
+      expect(shared).not.toHaveProperty('files_config');
+      expect(shared).not.toHaveProperty('runtimeError');
+      expect(shared).not.toHaveProperty('errorMessage');
     });
   });
 });

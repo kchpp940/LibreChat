@@ -396,26 +396,54 @@ export type TSharedContentPart =
 
 /**
  * A file or attachment as exposed through a public shared link.
- * Storage- and identity-internal fields (_id, user, storageKey, file_id, etc.)
- * are stripped by the backend; only render-relevant fields are preserved.
+ *
+ * STRICT WHITELIST ONLY: this type mirrors the backend sanitizer's
+ * `SHARED_FILE_WHITELIST`. No storage-internal field (filepath, preview,
+ * file_id, /api/files/* URLs, storage keys) is present; the backend drops
+ * everything not on the list. Render-only fields such as `text` (extracted
+ * text) and image dimensions are preserved for the share renderer;
+ * `messageId`/`conversationId`/`toolCallId` carry only the anonymized
+ * tokens assigned by the share serializer.
  */
 export type TSharedFile = Record<string, unknown> & {
   filename?: string;
-  filepath?: string;
-  preview?: string;
-  height?: number;
+  bytes?: number;
+  size?: number;
   width?: number;
+  height?: number;
+  text?: string;
+  textFormat?: string;
   type?: string;
-  expiresAt?: number;
   toolCallId?: string;
+  status?: string;
+  previewError?: string;
   messageId?: string;
   conversationId?: string;
+  file_search?: {
+    sources?: Array<{
+      fileName?: string;
+      pages?: number[];
+      relevance?: number;
+      pageRelevance?: Record<string, number>;
+      fileId?: string;
+    }>;
+    turn?: number;
+  };
+  web_search?: {
+    turn?: number;
+    organic?: Array<Record<string, unknown>>;
+    topStories?: Array<Record<string, unknown>>;
+    images?: Array<Record<string, unknown>>;
+    references?: Array<Record<string, unknown>>;
+  };
 };
 
 /**
  * Public, anonymized projection of a message returned by a shared link.
- * Only render-relevant fields are surfaced; internal fields (endpoint,
- * conversationSignature, clientId, plugin(s), metadata, etc.) are omitted
+ *
+ * Only render-relevant fields are surfaced; every other internal message
+ * field (endpoint, conversationSignature, clientId, plugin(s), metadata,
+ * tokenCount, finish_reason, skill configuration, agent ids) is dropped
  * by the backend regardless of the type definition.
  */
 export type TSharedMessage = {
@@ -430,12 +458,8 @@ export type TSharedMessage = {
   isCreatedByUser: boolean;
   createdAt: string | number | Date;
   updatedAt?: string | number | Date;
-  tokenCount?: number;
   unfinished?: boolean;
   error?: boolean;
-  finish_reason?: string;
-  manualSkills?: string[];
-  alwaysAppliedSkills?: string[];
   files?: TSharedFile[];
   attachments?: TSharedFile[];
   children?: TSharedMessage[];

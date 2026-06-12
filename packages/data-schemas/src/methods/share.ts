@@ -43,49 +43,158 @@ function anonymizeConvo(conversation: Partial<t.IConversation> & Partial<t.IShar
 }
 
 /**
- * Storage- and identity-internal fields that must never be exposed through a
- * public shared link. Everything else on a file/attachment — including the
- * `filepath`/`preview` render URLs, dimensions, and tool-call payloads such as
- * `toolCallId` and search results — is render data the shared view needs, so it
- * is preserved. (`storageKey` is the raw object key and is dropped; `filepath`
- * is the URL the share renderer actually loads, so it is kept.)
+ * RENDER-ONLY WHITELIST for files and attachments in shared links.
+ *
+ * Security rationale: anything that could carry an internal resource
+ * identifier (file_id, filepath, storageKey, /api/files/* URLs, messageId
+ * bindings, agent avatar paths, embedding metadata) must be EXPLICITLY
+ * excluded. We only keep fields that the shared renderer actually needs
+ * for DISPLAY: filename, byte count, image dimensions, extracted text,
+ * tool name routing, anonymized toolCallId, and — for file_search only —
+ * the page-level relevance info (fileId is rewritten to an anonymized
+ * stable token so references can't be used for URL construction).
+ *
+ * Any field not in this set is dropped, period — no denylist drift.
  */
-const SENSITIVE_SHARED_FILE_FIELDS = new Set([
-  '_id',
-  '__v',
-  'user',
-  'tenantId',
-  'storageRegion',
-  'storageKey',
-  'temp_file_id',
-  'file_id',
-  'id',
-  'message',
-  'source',
-  'filterSource',
-  'context',
-  'embedded',
-  'usage',
-  'metadata',
+const SHARED_FILE_WHITELIST = new Set([
+  'filename',
+  'bytes',
+  'size',
+  'width',
+  'height',
+  'text',
+  'textFormat',
+  'type',
+  'toolCallId',
+  'status',
+  'previewError',
+]);
+
+const SHARED_ATTACHMENT_TOOL_KEYS = new Set([
+  'web_search',
+  'file_search',
 ]);
 
 /**
- * Strip storage/identity-internal fields from a file or attachment while keeping
- * render-relevant data (including tool-call payloads keyed by tool name).
+ * Regex that matches URL-looking values we must never leak through a
+ * shared response: `/api/files/...` routes, `/files/...` path stubs,
+ * `/preview` endpoints, `/download` endpoints, `/code/download`
+ * code-executor routes, and any raw `http(s)` CDN URL.
+ */
+const FORBIDDEN_URL_PATTERN = /^(\/api\/files\/|\/files\/|\/preview|\/download|\/api\/files\/code\/download|https?:\/\/)/i;
+
+const anonymizeFileId = memoizedAnonymizeId('f');
+
+function sanitizeFileSearchSources(sources: unknown[]): unknown[] {
+  return sources
+    .filter((s): s is Record<string, unknown> => s != null && typeof s === 'object' && !Array.isArray(s))
+    .map((source) => {
+      const result: Record<string, unknown> = {};
+      if (typeof source.fileName === 'string') {
+        result.fileName = source.fileName;
+      }
+      if (Array.isArray(source.pages)) {
+        result.pages = source.pages.filter((p) => typeof p === 'number');
+      }
+      if (typeof source.relevance === 'number') {
+        result.relevance = source.relevance;
+      }
+      if (
+        source.pageRelevance != null &&
+        typeof source.pageRelevance === 'object' &&
+        !Array.isArray(source.pageRelevance)
+      ) {
+        result.pageRelevance = source.pageRelevance;
+      }
+      if (typeof source.fileId === 'string') {
+        result.fileId = anonymizeFileId(source.fileId);
+      }
+      return result;
+    })
+    .filter((s) => Object.keys(s).length > 0);
+}
+
+function sanitizeToolAttachmentPayload(
+  toolKey: string,
+  value: unknown,
+): unknown {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const payload = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (toolKey === 'file_search') {
+    if (Array.isArray(payload.sources)) {
+      result.sources = sanitizeFileSearchSources(payload.sources);
+    }
+    if (typeof payload.turn === 'number') {
+      result.turn = payload.turn;
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  if (toolKey === 'web_search') {
+    if (typeof payload.turn === 'number') {
+      result.turn = payload.turn;
+    }
+    if (Array.isArray(payload.organic)) {
+      result.organic = payload.organic.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.topStories)) {
+      result.topStories = payload.topStories.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.images)) {
+      result.images = payload.images.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.references)) {
+      result.references = payload.references.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Strip storage/identity-internal fields from a file or attachment while
+ * keeping ONLY the render-safe whitelisted fields. Any URL, filepath, or
+ * internal identifier is removed entirely.
  */
 function sanitizeSharedFile(value: unknown): t.SharedFile | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
 
-  const result: t.SharedFile = {};
-  for (const [key, fieldValue] of Object.entries(value as Record<string, unknown>)) {
-    if (!SENSITIVE_SHARED_FILE_FIELDS.has(key)) {
+  const src = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  for (const [key, fieldValue] of Object.entries(src)) {
+    if (SHARED_FILE_WHITELIST.has(key)) {
+      if (typeof fieldValue === 'string' && FORBIDDEN_URL_PATTERN.test(fieldValue)) {
+        continue;
+      }
       result[key] = fieldValue;
+      continue;
+    }
+    if (SHARED_ATTACHMENT_TOOL_KEYS.has(key)) {
+      const sanitized = sanitizeToolAttachmentPayload(key, fieldValue);
+      if (sanitized !== undefined) {
+        result[key] = sanitized;
+      }
+      continue;
     }
   }
 
-  return Object.keys(result).length > 0 ? result : null;
+  return Object.keys(result).length > 0 ? (result as t.SharedFile) : null;
 }
 
 function sanitizeSharedFiles(files: unknown): t.SharedFile[] | undefined {
@@ -113,7 +222,6 @@ function anonymizeSharedModel(model?: string): string | undefined {
 
 const anonymizeToolCallId = memoizedAnonymizeId('call');
 const anonymizeAgentId = memoizedAnonymizeId('ag');
-const anonymizeFileId = memoizedAnonymizeId('f');
 
 /**
  * Sanitize sensitive fields from a tool_call object while preserving only the
@@ -392,10 +500,12 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
     });
     // Persisted file records can carry the original conversation/message ids;
     // rewrite them to the anonymized ids so shared files don't expose them.
+    // Note: the sanitizer already stripped the original ids, so we re-assign
+    // unconditionally rather than conditionally on presence.
     const files = sanitizeSharedFiles(message.files)?.map((file) => ({
       ...file,
-      ...(file.conversationId !== undefined && { conversationId: newConvoId }),
-      ...(file.messageId !== undefined && { messageId: newMessageId }),
+      conversationId: newConvoId,
+      messageId: newMessageId,
     }));
     const model = anonymizeSharedModel(message.model);
     const sanitizedContent = sanitizeContent(message.content);
@@ -414,12 +524,8 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
       isCreatedByUser: message.isCreatedByUser,
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
-      tokenCount: message.tokenCount,
       unfinished: message.unfinished,
       error: message.error,
-      finish_reason: message.finish_reason,
-      ...(message.manualSkills && { manualSkills: message.manualSkills }),
-      ...(message.alwaysAppliedSkills && { alwaysAppliedSkills: message.alwaysAppliedSkills }),
       ...(files && { files }),
       ...(attachments && { attachments }),
     };

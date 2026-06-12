@@ -48,65 +48,177 @@ const resolveSharedLinkExpiration = (req, conversationId) =>
   );
 
 /**
- * Fields that must NEVER appear on a shared message, regardless of what the
- * underlying data layer returns. This is a defense-in-depth filter applied at
- * the HTTP boundary so even if a serialization bug leaks an internal field it
- * is stripped before leaving the server.
+ * STRICT WHITELIST for shared messages at the HTTP boundary.
+ *
+ * This is the FINAL defensive gate before bytes are written to the
+ * response. ANY field not listed here is dropped, period — even if
+ * the data-schemas layer has a bug. The whitelist is deliberately
+ * narrower than the data-schemas version: we do NOT allow
+ * `tokenCount`, `finish_reason`, `manualSkills`, `alwaysAppliedSkills`
+ * or any other non-essential field to reach the client.
+ *
+ * Content (`content`), files (`files`), and attachments (`attachments`)
+ * are individually re-sanitized via dedicated functions below.
  */
-const SHARED_MESSAGE_DENYLIST = new Set([
-  'endpoint',
-  'conversationSignature',
-  'clientId',
-  'plugin',
-  'plugins',
-  'metadata',
-  'feedback',
-  'user',
-  'responseMessageId',
-  'thread_id',
-  'assistant_id',
-  'agent_id',
-  'runtimeError',
-  'errorMessage',
-  'nextAuth',
-  'auth',
-  'kernel',
-  'sources',
-  'codeEnvRef',
-  'embedding_model',
-  'files_config',
-]);
-
-const SHARED_FILE_DENYLIST = new Set([
-  '_id',
-  '__v',
-  'user',
-  'tenantId',
-  'storageRegion',
-  'storageKey',
-  'temp_file_id',
-  'file_id',
-  'id',
-  'message',
-  'source',
-  'filterSource',
-  'context',
-  'embedded',
-  'usage',
-  'metadata',
-  'toolCallId',
-]);
-
-const SHARED_LINK_DENYLIST = new Set([
-  '_id',
-  '__v',
-  'user',
-  'messages',
+const SHARED_MESSAGE_WHITELIST = new Set([
+  'messageId',
+  'parentMessageId',
+  'conversationId',
+  'sender',
+  'text',
+  'content',
+  'iconURL',
+  'model',
+  'isCreatedByUser',
+  'createdAt',
+  'updatedAt',
+  'unfinished',
+  'error',
+  'files',
+  'attachments',
+  'children',
 ]);
 
 /**
- * Strip any non-shared fields from a file or attachment record. The data layer
- * already does this, but we enforce it again at the HTTP boundary.
+ * STRICT WHITELIST for shared files/attachments at the HTTP boundary.
+ *
+ * NARROWER than the data-schemas whitelist: we re-check every field so
+ * bugs in the serialization layer cannot leak internal identifiers.
+ * `filepath`, `preview`, `href`, `downloadUrl`, `/api/files/*` pattern
+ * values are stripped unconditionally by `sanitizeSharedFile` below.
+ */
+const SHARED_FILE_WHITELIST = new Set([
+  'filename',
+  'bytes',
+  'size',
+  'width',
+  'height',
+  'text',
+  'textFormat',
+  'type',
+  'toolCallId',
+  'status',
+  'previewError',
+  'messageId',
+  'conversationId',
+]);
+
+const SHARED_FILE_TOOL_KEYS = new Set(['web_search', 'file_search']);
+
+/**
+ * URL patterns that must NEVER appear in a shared response. Covers:
+ *  - The authenticated file download routes (/api/files/*, /files/*)
+ *  - Preview/download endpoints
+ *  - Code-executor download routes
+ *
+ * Two variants exist:
+ *  - FORBIDDEN_URL_PATTERN_STRICT: applied to file/attachment fields.
+ *    Also rejects any raw http(s) URL because filenames, text excerpts,
+ *    etc. should never carry a full URL — this catches accidental
+ *    storage-bucket hostname leaks (S3, GCS, Azure Blob, CDN signed
+ *    URLs, etc.).
+ *  - FORBIDDEN_URL_PATTERN_SOFT: applied to fields that ARE expected
+ *    to be URLs (e.g. `iconURL`). Only strips the internal /api/files,
+ *    /files, /preview, /download paths. Legitimate public CDN URLs
+ *    like `https://cdn.example.com/avatar.png` are preserved.
+ */
+const FORBIDDEN_URL_PATTERN_STRICT = /^(\/api\/files\/|\/files\/|\/preview|\/download|\/api\/files\/code\/download|https?:\/\/)/i;
+const FORBIDDEN_URL_PATTERN_SOFT = /^(\/api\/files\/|\/files\/|\/preview|\/download|\/api\/files\/code\/download)/i;
+
+/**
+ * Top-level fields dropped unconditionally from the share response.
+ * NOTE: `messages` is deliberately NOT in this set — it is handled by
+ * a separate branch in `enforceSharedMessagesResponse` that runs the
+ * per-message sanitization contract before passing it through.
+ */
+const SHARED_LINK_DENYLIST = new Set(['_id', '__v', 'user']);
+
+function sanitizeFileSearchSources(sources) {
+  if (!Array.isArray(sources)) {
+    return undefined;
+  }
+  return sources
+    .filter((s) => s != null && typeof s === 'object' && !Array.isArray(s))
+    .map((source) => {
+      const result = {};
+      if (typeof source.fileName === 'string') {
+        result.fileName = source.fileName;
+      }
+      if (Array.isArray(source.pages)) {
+        result.pages = source.pages.filter((p) => typeof p === 'number');
+      }
+      if (typeof source.relevance === 'number') {
+        result.relevance = source.relevance;
+      }
+      if (
+        source.pageRelevance != null &&
+        typeof source.pageRelevance === 'object' &&
+        !Array.isArray(source.pageRelevance)
+      ) {
+        result.pageRelevance = source.pageRelevance;
+      }
+      // Note: source.fileId is intentionally dropped at the HTTP layer.
+      // The data-schemas layer may emit an anonymized token for it, but
+      // we strip it here so no file identifier whatsoever reaches the
+      // anonymous client — not even an opaque one.
+      return result;
+    })
+    .filter((s) => Object.keys(s).length > 0);
+}
+
+function sanitizeToolAttachmentPayload(toolKey, value) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const payload = value;
+  const result = {};
+
+  if (toolKey === 'file_search') {
+    const sources = sanitizeFileSearchSources(payload.sources);
+    if (sources && sources.length > 0) {
+      result.sources = sources;
+    }
+    if (typeof payload.turn === 'number') {
+      result.turn = payload.turn;
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  if (toolKey === 'web_search') {
+    if (typeof payload.turn === 'number') {
+      result.turn = payload.turn;
+    }
+    if (Array.isArray(payload.organic)) {
+      result.organic = payload.organic.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.topStories)) {
+      result.topStories = payload.topStories.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.images)) {
+      result.images = payload.images.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    if (Array.isArray(payload.references)) {
+      result.references = payload.references.filter(
+        (r) => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Strip every non-whitelisted field from a file/attachment record, and
+ * additionally reject any whitelisted string value that looks like a
+ * URL or internal path. This is the HTTP-layer enforcement so it is
+ * deliberately stricter than the data-schemas sanitizer.
  */
 function sanitizeSharedFile(file) {
   if (!file || typeof file !== 'object' || Array.isArray(file)) {
@@ -114,8 +226,19 @@ function sanitizeSharedFile(file) {
   }
   const result = {};
   for (const [key, value] of Object.entries(file)) {
-    if (!SHARED_FILE_DENYLIST.has(key)) {
+    if (SHARED_FILE_WHITELIST.has(key)) {
+      if (typeof value === 'string' && FORBIDDEN_URL_PATTERN_STRICT.test(value)) {
+        continue;
+      }
       result[key] = value;
+      continue;
+    }
+    if (SHARED_FILE_TOOL_KEYS.has(key)) {
+      const sanitized = sanitizeToolAttachmentPayload(key, value);
+      if (sanitized !== undefined) {
+        result[key] = sanitized;
+      }
+      continue;
     }
   }
   return Object.keys(result).length > 0 ? result : undefined;
@@ -238,10 +361,15 @@ function sanitizeSharedContentPart(part) {
 }
 
 /**
- * Apply the shared-message contract at the HTTP boundary: strip any denylisted
- * fields from the message, its content parts, and its file/attachment records,
- * and drop any unknown content types entirely. This is the final gate before
- * bytes are written to the response.
+ * Apply the shared-message contract at the HTTP boundary using a STRICT
+ * WHITELIST. Every field on the incoming message not present in
+ * `SHARED_MESSAGE_WHITELIST` is dropped. Content parts, files, and
+ * attachments pass through their own sanitizers; `children` is
+ * processed recursively. If any forbidden-looking URL string leaks onto
+ * a whitelisted text field, it is stripped too.
+ *
+ * This is the FINAL gate before bytes are written to the anonymous
+ * client's response — it MUST be narrower than the data-schemas layer.
  */
 function enforceSharedMessageContract(message) {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
@@ -250,7 +378,7 @@ function enforceSharedMessageContract(message) {
 
   const result = {};
   for (const [key, value] of Object.entries(message)) {
-    if (SHARED_MESSAGE_DENYLIST.has(key)) {
+    if (!SHARED_MESSAGE_WHITELIST.has(key)) {
       continue;
     }
 
@@ -291,6 +419,10 @@ function enforceSharedMessageContract(message) {
       if (sanitized.length > 0) {
         result.children = sanitized;
       }
+      continue;
+    }
+
+    if (key === 'iconURL' && typeof value === 'string' && FORBIDDEN_URL_PATTERN_SOFT.test(value)) {
       continue;
     }
 
