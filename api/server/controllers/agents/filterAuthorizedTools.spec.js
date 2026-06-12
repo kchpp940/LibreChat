@@ -8,6 +8,7 @@ const d = Constants.mcp_delimiter;
 
 const mockGetAllServerConfigs = jest.fn();
 const mockUserCanUseMCPServers = jest.fn();
+const mockFindToken = jest.fn();
 
 jest.mock('~/server/services/Config', () => ({
   getCachedTools: jest.fn().mockResolvedValue({
@@ -60,6 +61,7 @@ jest.mock('~/models', () => {
     ...methods,
     getCategoriesWithCounts: jest.fn(),
     deleteFileByFilter: jest.fn(),
+    findToken: (...args) => mockFindToken(...args),
   };
 });
 
@@ -434,7 +436,7 @@ describe('MCP Tool Authorization', () => {
       expect(result).not.toContain(`toolB${d}failedServer`);
     });
 
-    test('should preserve existing MCP tools from inspectionFailed servers', async () => {
+    test('should NOT preserve existing MCP tools from inspectionFailed servers (strict mode for save)', async () => {
       mockGetAllServerConfigs.mockResolvedValue({
         failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
       });
@@ -449,9 +451,9 @@ describe('MCP Tool Authorization', () => {
         existingTools,
       });
 
-      expect(result).toContain(`existingTool${d}failedServer`);
-      expect(result).toContain('web_search');
+      expect(result).not.toContain(`existingTool${d}failedServer`);
       expect(result).not.toContain(`newTool${d}failedServer`);
+      expect(result).toContain('web_search');
     });
 
     test('should filter out tools from inspectionFailed servers even when no existingTools', async () => {
@@ -510,6 +512,177 @@ describe('MCP Tool Authorization', () => {
       expect(result).toContain('web_search');
       expect(result).not.toContain(`toolB${d}failedServer`);
     });
+
+  describe('filterAuthorizedTools - OAuth authorization failure', () => {
+    beforeEach(() => {
+      mockFindToken.mockReset();
+    });
+
+    test('should filter out tools from requiresOAuth servers when no tokens exist', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        oauthServer: { type: 'sse', url: 'https://oauth.example.com', requiresOAuth: true },
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+      });
+
+      mockFindToken.mockResolvedValue(null);
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}oauthServer`, `toolB${d}healthyServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolB${d}healthyServer`);
+      expect(result).toContain('web_search');
+      expect(result).not.toContain(`toolA${d}oauthServer`);
+    });
+
+    test('should allow tools from requiresOAuth servers when valid access token exists', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        oauthServer: { type: 'sse', url: 'https://oauth.example.com', requiresOAuth: true },
+      });
+
+      const farFuture = new Date(Date.now() + 3600 * 1000);
+      mockFindToken.mockImplementation((query) => {
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:oauthServer') {
+          return Promise.resolve({ expiresAt: farFuture });
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}oauthServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}oauthServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should allow tools from requiresOAuth servers when refresh token exists (access token expired)', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        oauthServer: { type: 'sse', url: 'https://oauth.example.com', requiresOAuth: true },
+      });
+
+      const pastDate = new Date(Date.now() - 1000);
+      mockFindToken.mockImplementation((query) => {
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:oauthServer') {
+          return Promise.resolve({ expiresAt: pastDate });
+        }
+        if (
+          query?.type === 'mcp_oauth_refresh' &&
+          query?.identifier === 'mcp:oauthServer:refresh'
+        ) {
+          return Promise.resolve({ token: 'refresh-token' });
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}oauthServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}oauthServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should filter tools from requiresOAuth servers when access token expired and no refresh token', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        oauthServer: { type: 'sse', url: 'https://oauth.example.com', requiresOAuth: true },
+      });
+
+      const pastDate = new Date(Date.now() - 1000);
+      mockFindToken.mockImplementation((query) => {
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:oauthServer') {
+          return Promise.resolve({ expiresAt: pastDate });
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}oauthServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).not.toContain(`toolA${d}oauthServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should handle mixed OAuth valid/invalid and inspectionFailed servers', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+        validOAuth: { type: 'sse', url: 'https://valid-oauth.example.com', requiresOAuth: true },
+        expiredOAuth: { type: 'sse', url: 'https://expired-oauth.example.com', requiresOAuth: true },
+        failedServer: { type: 'sse', url: 'https://failed.example.com', inspectionFailed: true },
+      });
+
+      const farFuture = new Date(Date.now() + 3600 * 1000);
+      const pastDate = new Date(Date.now() - 1000);
+      mockFindToken.mockImplementation((query) => {
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:validOAuth') {
+          return Promise.resolve({ expiresAt: farFuture });
+        }
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:expiredOAuth') {
+          return Promise.resolve({ expiresAt: pastDate });
+        }
+        return Promise.resolve(null);
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [
+          `toolA${d}healthyServer`,
+          `toolB${d}validOAuth`,
+          `toolC${d}expiredOAuth`,
+          `toolD${d}failedServer`,
+          'web_search',
+        ],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}healthyServer`);
+      expect(result).toContain(`toolB${d}validOAuth`);
+      expect(result).toContain('web_search');
+      expect(result).not.toContain(`toolC${d}expiredOAuth`);
+      expect(result).not.toContain(`toolD${d}failedServer`);
+    });
+
+    test('should NOT preserve existing tools from OAuth-expired servers (strict mode for save)', async () => {
+      mockGetAllServerConfigs.mockResolvedValue({
+        oauthServer: { type: 'sse', url: 'https://oauth.example.com', requiresOAuth: true },
+      });
+
+      const pastDate = new Date(Date.now() - 1000);
+      mockFindToken.mockImplementation((query) => {
+        if (query?.type === 'mcp_oauth' && query?.identifier === 'mcp:oauthServer') {
+          return Promise.resolve({ expiresAt: pastDate });
+        }
+        return Promise.resolve(null);
+      });
+
+      const existingTools = [`existingTool${d}oauthServer`];
+      const result = await filterAuthorizedTools({
+        tools: [`existingTool${d}oauthServer`, `newTool${d}oauthServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+        existingTools,
+      });
+
+      expect(result).not.toContain(`existingTool${d}oauthServer`);
+      expect(result).not.toContain(`newTool${d}oauthServer`);
+      expect(result).toContain('web_search');
+    });
+  });
   });
 
   describe('createAgentHandler - MCP tool authorization', () => {

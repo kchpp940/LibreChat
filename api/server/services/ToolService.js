@@ -68,7 +68,12 @@ const { primeFiles: primeSearchFiles } = require('~/app/clients/tools/util/fileS
 const { primeFiles: primeCodeFiles } = require('~/server/services/Files/Code/process');
 const { manifestToolMap, toolkits } = require('~/app/clients/tools/manifest');
 const { createOnSearchResults } = require('~/server/services/Tools/search');
-const { reinitMCPServer } = require('~/server/services/Tools/mcp');
+const {
+  reinitMCPServer,
+  isMCPServerAvailable,
+  getMCPServersOAuthStatus,
+  collectMCPServerNames,
+} = require('~/server/services/Tools/mcp');
 const { createMCPPermissionContext, resolveConfigServers } = require('~/server/services/MCP');
 const { getMCPRequestContext } = require('~/server/services/MCPRequestContext');
 const { recordUsage } = require('~/server/services/Threads');
@@ -564,6 +569,8 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
   let mcpServerConfigs = null;
+  /** @type {Map<string, boolean>} */
+  let mcpOAuthStatus = new Map();
   if (hasMCPTools && canUseMCP) {
     try {
       const configServers = await resolveConfigServers(req);
@@ -571,6 +578,19 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
         req.user.id,
         configServers,
       );
+
+      const oauthServerNames = Object.entries(mcpServerConfigs)
+        .filter(([, config]) => config?.requiresOAuth)
+        .map(([serverName]) => serverName);
+
+      if (oauthServerNames.length > 0) {
+        const { findToken } = require('~/models');
+        mcpOAuthStatus = await getMCPServersOAuthStatus(
+          req.user.id,
+          oauthServerNames,
+          { findToken },
+        );
+      }
     } catch (e) {
       logger.warn(
         '[loadToolDefinitionsWrapper] MCP registry unavailable, skipping MCP server availability checks',
@@ -600,15 +620,25 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
         const parts = tool.split(Constants.mcp_delimiter);
         const serverName = parts[parts.length - 1];
         const serverConfig = mcpServerConfigs[serverName];
+        const oauthAuthorized = serverConfig?.requiresOAuth
+          ? (mcpOAuthStatus.get(serverName) ?? false)
+          : undefined;
         if (!serverConfig) {
           logger.warn(
             `[loadToolDefinitionsWrapper] Filtering out MCP tool "${tool}" — server "${serverName}" not found in registry`,
           );
           return false;
         }
-        if (serverConfig.inspectionFailed) {
+        if (!isMCPServerAvailable(serverConfig, oauthAuthorized)) {
+          const reasons = [];
+          if (serverConfig.inspectionFailed) {
+            reasons.push('inspectionFailed');
+          }
+          if (serverConfig.requiresOAuth && oauthAuthorized === false) {
+            reasons.push('OAuth authorization expired/revoked');
+          }
           logger.warn(
-            `[loadToolDefinitionsWrapper] Filtering out MCP tool "${tool}" — server "${serverName}" has inspectionFailed`,
+            `[loadToolDefinitionsWrapper] Filtering out MCP tool "${tool}" — server "${serverName}" unavailable: ${reasons.join(', ')}`,
           );
           return false;
         }
@@ -1154,6 +1184,8 @@ async function loadAgentTools({
   const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
   let mcpServerConfigs = null;
+  /** @type {Map<string, boolean>} */
+  let mcpOAuthStatus = new Map();
   if (hasMCPTools && canUseMCP) {
     try {
       const configServers = await resolveConfigServers(req);
@@ -1161,6 +1193,19 @@ async function loadAgentTools({
         req.user.id,
         configServers,
       );
+
+      const oauthServerNames = Object.entries(mcpServerConfigs)
+        .filter(([, config]) => config?.requiresOAuth)
+        .map(([serverName]) => serverName);
+
+      if (oauthServerNames.length > 0) {
+        const { findToken } = require('~/models');
+        mcpOAuthStatus = await getMCPServersOAuthStatus(
+          req.user.id,
+          oauthServerNames,
+          { findToken },
+        );
+      }
     } catch (e) {
       logger.warn(
         '[loadAgentTools] MCP registry unavailable, skipping MCP server availability checks',
@@ -1188,15 +1233,25 @@ async function loadAgentTools({
         const parts = tool.split(Constants.mcp_delimiter);
         const serverName = parts[parts.length - 1];
         const serverConfig = mcpServerConfigs[serverName];
+        const oauthAuthorized = serverConfig?.requiresOAuth
+          ? (mcpOAuthStatus.get(serverName) ?? false)
+          : undefined;
         if (!serverConfig) {
           logger.warn(
             `[loadAgentTools] Filtering out MCP tool "${tool}" — server "${serverName}" not found in registry`,
           );
           return false;
         }
-        if (serverConfig.inspectionFailed) {
+        if (!isMCPServerAvailable(serverConfig, oauthAuthorized)) {
+          const reasons = [];
+          if (serverConfig.inspectionFailed) {
+            reasons.push('inspectionFailed');
+          }
+          if (serverConfig.requiresOAuth && oauthAuthorized === false) {
+            reasons.push('OAuth authorization expired/revoked');
+          }
           logger.warn(
-            `[loadAgentTools] Filtering out MCP tool "${tool}" — server "${serverName}" has inspectionFailed`,
+            `[loadAgentTools] Filtering out MCP tool "${tool}" — server "${serverName}" unavailable: ${reasons.join(', ')}`,
           );
           return false;
         }

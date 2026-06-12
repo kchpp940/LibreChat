@@ -10,6 +10,111 @@ const { updateMCPServerTools } = require('~/server/services/Config');
 const { getLogStores } = require('~/cache');
 
 /**
+ * Unified MCP server availability check.
+ * Combines inspectionFailed state and OAuth authorization status.
+ * Returns true only if the server is fully available for use.
+ *
+ * @param {object} [serverConfig] - The parsed MCP server config from registry
+ * @param {boolean | undefined} [oauthAuthorized] - Whether the user has valid OAuth authorization
+ * @returns {boolean} True if the server is available, false otherwise
+ */
+function isMCPServerAvailable(serverConfig, oauthAuthorized) {
+  if (!serverConfig) {
+    return false;
+  }
+  if (serverConfig.inspectionFailed) {
+    return false;
+  }
+  if (serverConfig.requiresOAuth && oauthAuthorized === false) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Bulk check OAuth authorization status for multiple MCP servers for a given user.
+ * Returns a map of serverName -> isAuthorized (boolean).
+ * Checks for valid access tokens first, falls back to refresh token existence.
+ *
+ * @param {string} userId - The user ID to check tokens for
+ * @param {string[]} serverNames - Array of MCP server names that require OAuth
+ * @param {{ findToken: Function }} [tokenModel] - Token model injection (defaults to ~/models findToken)
+ * @returns {Promise<Map<string, boolean>>} Map of serverName to authorization status
+ */
+async function getMCPServersOAuthStatus(
+  userId,
+  serverNames,
+  tokenModel = { findToken },
+) {
+  const oauthStatus = new Map();
+  if (!serverNames || serverNames.length === 0 || !userId) {
+    return oauthStatus;
+  }
+
+  const oauthServers = serverNames.filter((name) => name);
+  if (oauthServers.length === 0) {
+    return oauthStatus;
+  }
+
+  const now = new Date();
+  for (const serverName of oauthServers) {
+    try {
+      const identifier = `mcp:${serverName}`;
+      const accessTokenData = await tokenModel.findToken({
+        userId,
+        type: 'mcp_oauth',
+        identifier,
+      });
+
+      const hasValidAccessToken =
+        accessTokenData &&
+        accessTokenData.expiresAt &&
+        new Date(accessTokenData.expiresAt) > now;
+
+      if (hasValidAccessToken) {
+        oauthStatus.set(serverName, true);
+        continue;
+      }
+
+      const refreshTokenData = await tokenModel.findToken({
+        userId,
+        type: 'mcp_oauth_refresh',
+        identifier: `${identifier}:refresh`,
+      });
+
+      oauthStatus.set(serverName, !!refreshTokenData);
+    } catch (e) {
+      logger.warn(
+        `[getMCPServersOAuthStatus] Failed to check OAuth status for server "${serverName}":`,
+        e.message,
+      );
+      oauthStatus.set(serverName, false);
+    }
+  }
+
+  return oauthStatus;
+}
+
+/**
+ * Collects all referenced MCP server names from a tool list.
+ * @param {string[]} tools - Array of tool identifiers
+ * @returns {Set<string>} Unique set of MCP server names referenced by tools
+ */
+function collectMCPServerNames(tools) {
+  const serverNames = new Set();
+  for (const tool of tools ?? []) {
+    if (typeof tool !== 'string' || !tool.includes(Constants.mcp_delimiter)) {
+      continue;
+    }
+    const parts = tool.split(Constants.mcp_delimiter);
+    if (parts.length === 2 && parts[1]) {
+      serverNames.add(parts[1]);
+    }
+  }
+  return serverNames;
+}
+
+/**
  * Reinitializes an MCP server connection and discovers available tools.
  * When OAuth is required, uses discovery mode to list tools without full authentication
  * (per MCP spec, tool listing should be possible without auth).
@@ -283,4 +388,7 @@ async function reinitMCPServer({
 
 module.exports = {
   reinitMCPServer,
+  isMCPServerAvailable,
+  getMCPServersOAuthStatus,
+  collectMCPServerNames,
 };
