@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TMessage } from 'librechat-data-provider';
+import type { TSharedMessage } from 'librechat-data-provider';
 import MultiMessage from './MultiMessage';
 import { useLocalize } from '~/hooks';
 
@@ -7,7 +7,7 @@ export default function MessagesView({
   messagesTree: _messagesTree,
   conversationId,
 }: {
-  messagesTree?: TMessage[] | null;
+  messagesTree?: TSharedMessage[] | null;
   conversationId: string;
 }) {
   const localize = useLocalize();

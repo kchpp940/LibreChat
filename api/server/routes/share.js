@@ -11,7 +11,7 @@ const {
   getSharedLinkExpiration,
 } = require('@librechat/api');
 const { logger, createTempChatExpirationDate } = require('@librechat/data-schemas');
-const { PermissionTypes, Permissions } = require('librechat-data-provider');
+const { PermissionTypes, Permissions, ContentTypes } = require('librechat-data-provider');
 const {
   getSharedMessages,
   createSharedLink,
@@ -48,6 +48,280 @@ const resolveSharedLinkExpiration = (req, conversationId) =>
   );
 
 /**
+ * Fields that must NEVER appear on a shared message, regardless of what the
+ * underlying data layer returns. This is a defense-in-depth filter applied at
+ * the HTTP boundary so even if a serialization bug leaks an internal field it
+ * is stripped before leaving the server.
+ */
+const SHARED_MESSAGE_DENYLIST = new Set([
+  'endpoint',
+  'conversationSignature',
+  'clientId',
+  'plugin',
+  'plugins',
+  'metadata',
+  'feedback',
+  'user',
+  'responseMessageId',
+  'thread_id',
+  'assistant_id',
+  'agent_id',
+  'runtimeError',
+  'errorMessage',
+  'nextAuth',
+  'auth',
+  'kernel',
+  'sources',
+  'codeEnvRef',
+  'embedding_model',
+  'files_config',
+]);
+
+const SHARED_FILE_DENYLIST = new Set([
+  '_id',
+  '__v',
+  'user',
+  'tenantId',
+  'storageRegion',
+  'storageKey',
+  'temp_file_id',
+  'file_id',
+  'id',
+  'message',
+  'source',
+  'filterSource',
+  'context',
+  'embedded',
+  'usage',
+  'metadata',
+  'toolCallId',
+]);
+
+const SHARED_LINK_DENYLIST = new Set([
+  '_id',
+  '__v',
+  'user',
+  'messages',
+]);
+
+/**
+ * Strip any non-shared fields from a file or attachment record. The data layer
+ * already does this, but we enforce it again at the HTTP boundary.
+ */
+function sanitizeSharedFile(file) {
+  if (!file || typeof file !== 'object' || Array.isArray(file)) {
+    return undefined;
+  }
+  const result = {};
+  for (const [key, value] of Object.entries(file)) {
+    if (!SHARED_FILE_DENYLIST.has(key)) {
+      result[key] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Strip sensitive fields from a single content part. Only render-relevant
+ * fields are preserved; tool parameters, auth data, and internal IDs are
+ * always removed at the HTTP boundary.
+ */
+function sanitizeSharedContentPart(part) {
+  if (!part || typeof part !== 'object' || Array.isArray(part)) {
+    return undefined;
+  }
+  const type = part.type;
+  if (!type) {
+    return undefined;
+  }
+
+  switch (type) {
+    case ContentTypes.TEXT: {
+      const result = { type };
+      if (part.text !== undefined) {
+        result.text = part.text;
+      }
+      return result;
+    }
+    case ContentTypes.THINK: {
+      const result = { type };
+      if (part.think !== undefined) {
+        result.think = part.think;
+      }
+      return result;
+    }
+    case ContentTypes.ERROR: {
+      const result = { type };
+      if (typeof part.error === 'string') {
+        result.error = part.error;
+      }
+      if (typeof part.text === 'string') {
+        result.text = part.text;
+      }
+      return result;
+    }
+    case ContentTypes.TOOL_CALL: {
+      const tc = part.tool_call;
+      if (!tc || typeof tc !== 'object' || Array.isArray(tc)) {
+        return undefined;
+      }
+      const sanitizedTc = {};
+      if (typeof tc.name === 'string') {
+        sanitizedTc.name = tc.name;
+      }
+      if (tc.output !== undefined) {
+        sanitizedTc.output = tc.output;
+      }
+      if (typeof tc.progress === 'number') {
+        sanitizedTc.progress = tc.progress;
+      }
+      if (tc.type !== undefined) {
+        sanitizedTc.type = tc.type;
+      }
+      if (tc.function && typeof tc.function === 'object') {
+        sanitizedTc.function = {
+          ...(tc.function.name !== undefined && { name: tc.function.name }),
+        };
+      }
+      if (tc.retrieval && typeof tc.retrieval === 'object') {
+        sanitizedTc.retrieval = {};
+      }
+      if (tc.file_search && typeof tc.file_search === 'object') {
+        sanitizedTc.file_search = {};
+      }
+      if (Array.isArray(tc.subagent_content)) {
+        sanitizedTc.subagent_content = tc.subagent_content
+          .map((p) => sanitizeSharedContentPart(p))
+          .filter((p) => p !== undefined);
+      }
+      return { type, tool_call: sanitizedTc };
+    }
+    case ContentTypes.IMAGE_FILE: {
+      const img = part.image_file;
+      if (!img || typeof img !== 'object' || Array.isArray(img)) {
+        return undefined;
+      }
+      const sanitizedImg = {};
+      if (img.detail !== undefined) {
+        sanitizedImg.detail = img.detail;
+      }
+      return { type, image_file: sanitizedImg };
+    }
+    case ContentTypes.IMAGE_URL:
+    case ContentTypes.VIDEO_URL:
+    case ContentTypes.INPUT_AUDIO: {
+      return { type, ...(part[type] !== undefined && { [type]: part[type] }) };
+    }
+    case ContentTypes.AGENT_UPDATE: {
+      return { type, agent_update: {} };
+    }
+    case ContentTypes.SUMMARY: {
+      const result = { type };
+      if (part.content !== undefined) {
+        result.content = part.content;
+      }
+      if (typeof part.provider === 'string') {
+        result.provider = part.provider;
+      }
+      if (typeof part.tokenCount === 'number') {
+        result.tokenCount = part.tokenCount;
+      }
+      if (typeof part.summarizing === 'boolean') {
+        result.summarizing = part.summarizing;
+      }
+      return result;
+    }
+    default: {
+      return undefined;
+    }
+  }
+}
+
+/**
+ * Apply the shared-message contract at the HTTP boundary: strip any denylisted
+ * fields from the message, its content parts, and its file/attachment records,
+ * and drop any unknown content types entirely. This is the final gate before
+ * bytes are written to the response.
+ */
+function enforceSharedMessageContract(message) {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return undefined;
+  }
+
+  const result = {};
+  for (const [key, value] of Object.entries(message)) {
+    if (SHARED_MESSAGE_DENYLIST.has(key)) {
+      continue;
+    }
+
+    if (key === 'content' && Array.isArray(value)) {
+      const sanitized = value
+        .map((part) => sanitizeSharedContentPart(part))
+        .filter((p) => p !== undefined);
+      if (sanitized.length > 0) {
+        result.content = sanitized;
+      }
+      continue;
+    }
+
+    if (key === 'files' && Array.isArray(value)) {
+      const sanitized = value
+        .map((f) => sanitizeSharedFile(f))
+        .filter((f) => f !== undefined);
+      if (sanitized.length > 0) {
+        result.files = sanitized;
+      }
+      continue;
+    }
+
+    if (key === 'attachments' && Array.isArray(value)) {
+      const sanitized = value
+        .map((f) => sanitizeSharedFile(f))
+        .filter((f) => f !== undefined);
+      if (sanitized.length > 0) {
+        result.attachments = sanitized;
+      }
+      continue;
+    }
+
+    if (key === 'children' && Array.isArray(value)) {
+      const sanitized = value
+        .map((m) => enforceSharedMessageContract(m))
+        .filter((m) => m !== undefined);
+      if (sanitized.length > 0) {
+        result.children = sanitized;
+      }
+      continue;
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
+function enforceSharedMessagesResponse(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  const result = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (SHARED_LINK_DENYLIST.has(key)) {
+      continue;
+    }
+    if (key === 'messages' && Array.isArray(value)) {
+      result.messages = value
+        .map((m) => enforceSharedMessageContract(m))
+        .filter((m) => m !== undefined);
+      continue;
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+/**
  * Shared messages
  */
 const allowSharedLinks =
@@ -59,7 +333,8 @@ if (allowSharedLinks) {
       const share = await getSharedMessages(req.params.shareId, req.shareResourceId);
       if (share) {
         res.set('Cache-Control', 'private, no-store');
-        res.status(200).json(share);
+        const sanitized = enforceSharedMessagesResponse(share);
+        res.status(200).json(sanitized);
       } else {
         res.status(404).end();
       }

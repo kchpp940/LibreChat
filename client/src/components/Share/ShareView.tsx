@@ -1,8 +1,9 @@
-import { memo, useState, useCallback, useContext } from 'react';
+import { memo, useState, useCallback, useContext, useMemo } from 'react';
 import Cookies from 'js-cookie';
 import { useRecoilState } from 'recoil';
 import { useParams } from 'react-router-dom';
 import { buildTree } from 'librechat-data-provider';
+import type { TSharedMessage, TSharedMessagesResponse } from 'librechat-data-provider';
 import { CalendarDays, Settings } from 'lucide-react';
 import { useGetSharedMessages } from 'librechat-data-provider/react-query';
 import {
@@ -33,17 +34,35 @@ function SharedView() {
   const { theme, setTheme } = useContext(ThemeContext);
   const { shareId } = useParams();
   const { data, isLoading } = useGetSharedMessages(shareId ?? '');
-  const dataTree = data && buildTree({ messages: data.messages });
-  const messagesTree = dataTree?.length === 0 ? null : (dataTree ?? null);
+
+  /**
+   * Security: `data` is typed `TSharedMessagesResponse` — the sanitized shared-only
+   * contract. The tree below is also `TSharedMessage[]`. No code in this file or
+   * child components is allowed to fall back to the full `TMessage` type.
+   */
+  const sharedData = data as TSharedMessagesResponse | undefined;
+
+  const messagesTree = useMemo<TSharedMessage[] | null>(() => {
+    if (!sharedData || !Array.isArray(sharedData.messages)) {
+      return null;
+    }
+    // buildTree returns structurally compatible messages; we re-cast to the strict
+    // shared type since the tree only contains fields already on TSharedMessage.
+    const tree = buildTree({ messages: sharedData.messages as unknown as Parameters<typeof buildTree>[0]['messages'] });
+    if (!tree || tree.length === 0) {
+      return null;
+    }
+    return tree as TSharedMessage[];
+  }, [sharedData]);
 
   const [langcode, setLangcode] = useRecoilState(store.lang);
 
   // configure document title
   let docTitle = '';
-  if (config?.appTitle != null && data?.title != null) {
-    docTitle = `${data.title} | ${config.appTitle}`;
+  if (config?.appTitle != null && sharedData?.title != null) {
+    docTitle = `${sharedData.title} | ${config.appTitle}`;
   } else {
-    docTitle = data?.title ?? config?.appTitle ?? document.title;
+    docTitle = sharedData?.title ?? config?.appTitle ?? document.title;
   }
 
   useDocumentTitle(docTitle);
@@ -55,8 +74,8 @@ function SharedView() {
       : 'en-US');
 
   const formattedDate =
-    data?.createdAt != null
-      ? new Date(data.createdAt).toLocaleDateString(locale, {
+    sharedData?.createdAt != null
+      ? new Date(sharedData.createdAt).toLocaleDateString(locale, {
           month: 'long',
           day: 'numeric',
           year: 'numeric',
@@ -93,11 +112,11 @@ function SharedView() {
         <Spinner className="" />
       </div>
     );
-  } else if (data && messagesTree && messagesTree.length !== 0) {
+  } else if (sharedData && messagesTree && messagesTree.length !== 0) {
     content = (
       <>
         <ShareHeader
-          title={data.title}
+          title={sharedData.title}
           formattedDate={formattedDate}
           theme={theme}
           langcode={langcode}
@@ -105,7 +124,7 @@ function SharedView() {
           onLangChange={handleLangChange}
           settingsLabel={localize('com_nav_settings')}
         />
-        <ShareMessagesProvider messages={data.messages}>
+        <ShareMessagesProvider messages={sharedData.messages}>
           <MessagesView messagesTree={messagesTree} conversationId="shared-conversation" />
         </ShareMessagesProvider>
       </>
@@ -137,10 +156,10 @@ function SharedView() {
   );
 
   const artifactsContainer =
-    data && data.messages ? (
+    sharedData && sharedData.messages ? (
       <ShareArtifactsContainer
-        messages={data.messages}
-        conversationId={data.conversationId}
+        messages={sharedData.messages}
+        conversationId={sharedData.conversationId}
         mainContent={mainContent}
       />
     ) : (

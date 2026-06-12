@@ -6,7 +6,7 @@ import {
   ResizableHandleAlt,
   ResizablePanelGroup,
 } from '@librechat/client';
-import type { TMessage } from 'librechat-data-provider';
+import type { TSharedMessage } from 'librechat-data-provider';
 import type { ArtifactsContextValue } from '~/Providers';
 import { ArtifactsProvider, EditorProvider } from '~/Providers';
 import Artifacts from '~/components/Artifacts/Artifacts';
@@ -41,13 +41,16 @@ const getInitialArtifactPanelSize = () => {
 };
 
 interface ShareArtifactsContainerProps {
-  messages: TMessage[];
+  messages: TSharedMessage[];
   conversationId: string;
   mainContent: React.ReactNode;
 }
 
 /**
- * Container component that manages artifact visibility and layout for shared conversations
+ * Container component that manages artifact visibility and layout for shared conversations.
+ *
+ * Security: accepts ONLY `TSharedMessage[]` (sanitized shared-only type), never the full
+ * `TMessage[]` which would contain internal endpoint/metadata/tool_call parameters.
  */
 export function ShareArtifactsContainer({
   messages,
