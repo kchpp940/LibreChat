@@ -46,10 +46,28 @@ type ChatHelpers = Pick<
   'setMessages' | 'getMessages' | 'setConversation' | 'setIsSubmitting' | 'newConversation'
 >;
 
+const formatFileIndexingError = (errorData: Record<string, unknown>): string | null => {
+  const unavailableFiles = errorData.unavailableFiles as
+    | Array<{ file_id: string; filename?: string; indexingStatus?: string; indexingError?: string }>
+    | undefined;
+  if (!Array.isArray(unavailableFiles) || unavailableFiles.length === 0) {
+    return null;
+  }
+  const fileLines = unavailableFiles
+    .map((f) => {
+      const name = f.filename ?? f.file_id;
+      const status = f.indexingStatus === 'pending' ? 'indexing' : f.indexingStatus ?? 'unknown';
+      const detail = f.indexingError ? ` (${f.indexingError})` : '';
+      return `- ${name}: ${status}${detail}`;
+    })
+    .join('\n');
+  return `${errorData.error ?? 'Some files are not ready for retrieval'}\n${fileLines}`;
+};
+
 const getStreamStartFailureData = (errorData?: Record<string, unknown>): TResData =>
   ({
     text: errorData
-      ? JSON.stringify(errorData)
+      ? formatFileIndexingError(errorData) ?? JSON.stringify(errorData)
       : 'Error connecting to server, try refreshing the page.',
     metadata: markStreamStartFailedMetadata(),
   }) as unknown as TResData;

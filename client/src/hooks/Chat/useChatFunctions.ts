@@ -440,18 +440,36 @@ export default function useChatFunctions({
         const pendingFiles = fileList.filter(
           (f) => f.indexingStatus === FileIndexingStatus.PENDING,
         );
+        const lines: string[] = [];
         if (failedFiles.length > 0) {
-          console.warn(
-            '[useChatFunctions] Cannot send message: some files failed to index',
-            failedFiles.map((f) => `${f.filename}: ${f.indexingError}`),
+          lines.push(
+            ...failedFiles.map(
+              (f) => `- ${f.filename ?? f.file_id}: index failed${f.indexingError ? ` (${f.indexingError})` : ''}`,
+            ),
           );
         }
         if (pendingFiles.length > 0) {
-          console.warn(
-            '[useChatFunctions] Cannot send message: some files are still indexing',
-            pendingFiles.map((f) => f.filename),
+          lines.push(
+            ...pendingFiles.map((f) => `- ${f.filename ?? f.file_id}: still indexing`),
           );
         }
+        const errorText = `Files not ready for retrieval:\n${lines.join('\n')}`;
+        console.warn('[useChatFunctions]', errorText);
+
+        const errorMsg: TMessage = {
+          messageId: `${intermediateId}_file_error`,
+          parentMessageId: intermediateId,
+          conversationId,
+          text: errorText,
+          sender: responseSender,
+          endpoint: endpoint ?? '',
+          isCreatedByUser: false,
+          error: true,
+          unfinished: false,
+        };
+        const existingMessages = getMessages() ?? [];
+        setMessages([...existingMessages, currentMsg, errorMsg]);
+        setIsSubmitting(false);
         return false;
       }
 

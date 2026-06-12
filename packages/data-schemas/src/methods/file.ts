@@ -56,6 +56,17 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
     options?: { user?: string },
   ) => Promise<IMongoFile[]>;
   sweepOrphanedPreviews: (maxAgeMs?: number) => Promise<number>;
+  validateFileIndexingStatus: (
+    files: IMongoFile[],
+  ) => {
+    valid: boolean;
+    unavailableFiles: Array<{
+      file_id: string;
+      filename?: string;
+      indexingStatus?: string;
+      indexingError?: string;
+    }>;
+  };
 } {
   /**
    * Finds a file by its file_id with additional query options.
@@ -524,6 +535,27 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
     return result.modifiedCount ?? 0;
   }
 
+  function validateFileIndexingStatus(files: IMongoFile[]): {
+    valid: boolean;
+    unavailableFiles: Array<{ file_id: string; filename?: string; indexingStatus?: string; indexingError?: string }>;
+  } {
+    const unavailableFiles: Array<{ file_id: string; filename?: string; indexingStatus?: string; indexingError?: string }> = [];
+    for (const file of files) {
+      if (
+        file.indexingStatus === FileIndexingStatus.PENDING ||
+        file.indexingStatus === FileIndexingStatus.FAILED
+      ) {
+        unavailableFiles.push({
+          file_id: file.file_id,
+          filename: file.filename,
+          indexingStatus: file.indexingStatus,
+          indexingError: file.indexingError,
+        });
+      }
+    }
+    return { valid: unavailableFiles.length === 0, unavailableFiles };
+  }
+
   return {
     findFileById,
     getFiles,
@@ -541,6 +573,7 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
     batchUpdateFiles,
     updateFilesUsage,
     sweepOrphanedPreviews,
+    validateFileIndexingStatus,
   };
 }
 
