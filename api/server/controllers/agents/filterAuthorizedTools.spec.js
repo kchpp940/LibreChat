@@ -683,6 +683,96 @@ describe('MCP Tool Authorization', () => {
       expect(result).toContain('web_search');
     });
   });
+
+  describe('filterAuthorizedTools - permission denied', () => {
+    beforeEach(() => {
+      mockGetAllServerConfigs.mockReset();
+    });
+
+    test('should filter out all MCP tools when canUseServers returns false', async () => {
+      mockUserCanUseMCPServers.mockResolvedValue(false);
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+        anotherHealthy: { type: 'sse', url: 'https://another.example.com' },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [
+          `toolA${d}healthyServer`,
+          `toolB${d}anotherHealthy`,
+          `${Constants.mcp_all}${d}healthyServer`,
+          'web_search',
+        ],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).not.toContain(`toolA${d}healthyServer`);
+      expect(result).not.toContain(`toolB${d}anotherHealthy`);
+      expect(result).not.toContain(`${Constants.mcp_all}${d}healthyServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should preserve non-MCP tools when MCP permission is denied', async () => {
+      mockUserCanUseMCPServers.mockResolvedValue(false);
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [
+          `toolA${d}healthyServer`,
+          'web_search',
+          'custom_tool',
+        ],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).not.toContain(`toolA${d}healthyServer`);
+      expect(result).toContain('web_search');
+      expect(result).toContain('custom_tool');
+    });
+
+    test('should filter out pre-existing MCP tools from saved agent when permission denied', async () => {
+      mockUserCanUseMCPServers.mockResolvedValue(false);
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+      });
+
+      const existingTools = [`existingTool${d}healthyServer`];
+      const result = await filterAuthorizedTools({
+        tools: [`existingTool${d}healthyServer`, `newTool${d}healthyServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+        existingTools,
+      });
+
+      expect(result).not.toContain(`existingTool${d}healthyServer`);
+      expect(result).not.toContain(`newTool${d}healthyServer`);
+      expect(result).toContain('web_search');
+    });
+
+    test('should allow MCP tools through when canUseServers returns true', async () => {
+      mockUserCanUseMCPServers.mockResolvedValue(true);
+      mockGetAllServerConfigs.mockResolvedValue({
+        healthyServer: { type: 'sse', url: 'https://healthy.example.com' },
+      });
+
+      const result = await filterAuthorizedTools({
+        tools: [`toolA${d}healthyServer`, 'web_search'],
+        userId,
+        user: testUser,
+        availableTools,
+      });
+
+      expect(result).toContain(`toolA${d}healthyServer`);
+      expect(result).toContain('web_search');
+    });
+  });
   });
 
   describe('createAgentHandler - MCP tool authorization', () => {

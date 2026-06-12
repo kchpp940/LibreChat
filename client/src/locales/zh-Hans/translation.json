@@ -1089,6 +1089,8 @@
   "com_ui_mcp_init_failed": "初始化 MCP 服务器失败",
   "com_ui_mcp_inspection_failed": "MCP 服务器检查失败 — 工具不可用",
   "com_ui_mcp_oauth_unauthorized": "OAuth 授权已过期或被撤销 — 请重新授权以使用工具",
+  "com_ui_mcp_permission_denied": "您没有使用此 MCP 服务器的权限 — 请联系管理员",
+  "com_ui_mcp_server_unavailable": "MCP 服务器不可用 — 请联系管理员",
   "com_ui_mcp_initialize": "初始化",
   "com_ui_mcp_initialized_success": "MCP 服务器 “{{0}}” 初始化成功",
   "com_ui_mcp_oauth_cancelled": "{{0}} OAuth 登录已取消",

@@ -206,6 +206,14 @@ export type AgentPanelProps = {
   agentsConfig?: t.TAgentsEndpoint | null;
 };
 
+export type MCPServerAvailabilityReason =
+  | 'ok'
+  | 'permission_denied'
+  | 'not_found'
+  | 'inspection_failed'
+  | 'oauth_unauthorized'
+  | 'registry_unavailable';
+
 export interface MCPServerInfo {
   serverName: string;
   tools: t.AgentToolType[];
@@ -216,6 +224,12 @@ export interface MCPServerInfo {
   requiresOAuth?: boolean;
   oauthAuthorized?: boolean;
   inspectionFailed?: boolean;
+  /** Machine-readable availability reason covering permission, inspectionFailed, and OAuth status */
+  availability_reason?: MCPServerAvailabilityReason;
+  /** Whether the server is fully available (permissions + inspection + OAuth) */
+  available?: boolean;
+  /** Whether the user lacks MCP server use permission entirely */
+  permission_denied?: boolean;
 }
 
 export type AgentPanelContextType = {

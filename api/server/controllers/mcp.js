@@ -25,9 +25,14 @@ const {
   resolveConfigServers,
   resolveMcpConfigNames,
   resolveAllMcpConfigs,
+  createMCPPermissionContext,
 } = require('~/server/services/MCP');
 const { cacheMCPServerTools, getMCPServerTools } = require('~/server/services/Config');
 const { getMCPManager, getMCPServersRegistry } = require('~/config');
+const {
+  getMCPServerAvailability,
+  getMCPServersOAuthStatus,
+} = require('~/server/services/Tools/mcp');
 const db = require('~/models');
 
 /**
@@ -80,6 +85,9 @@ const getMCPTools = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const mcpPermissionContext = createMCPPermissionContext(req);
+    const canUseMCP = await mcpPermissionContext.canUseServers(req.user);
+
     const mcpConfig = await resolveAllMcpConfigs(userId, req.user);
     const configuredServers = Object.keys(mcpConfig);
 
@@ -89,6 +97,11 @@ const getMCPTools = async (req, res) => {
 
     const mcpManager = getMCPManager();
     const mcpServers = {};
+
+    const oauthServerNames = configuredServers.filter(
+      (name) => mcpConfig[name]?.requiresOAuth,
+    );
+    const oauthStatusMap = await getMCPServersOAuthStatus(userId, oauthServerNames, db);
 
     const serverToolsMap = new Map();
     const cacheResults = await Promise.all(
@@ -124,7 +137,6 @@ const getMCPTools = async (req, res) => {
       serverToolsMap.set(serverName, serverTools);
 
       if (Object.keys(serverTools).length > 0) {
-        // Cache asynchronously without blocking
         cacheMCPServerTools({ userId, serverName, serverTools }).catch((err) =>
           logger.error(`[getMCPTools] Failed to cache tools for ${serverName}:`, err),
         );
@@ -138,41 +150,17 @@ const getMCPTools = async (req, res) => {
 
         const serverConfig = mcpConfig[serverName];
         const requiresOAuth = serverConfig?.requiresOAuth ?? false;
+        const oauthAuthorized = requiresOAuth
+          ? (oauthStatusMap.get(serverName) ?? false)
+          : true;
+
+        const availability = getMCPServerAvailability(
+          serverConfig,
+          requiresOAuth ? oauthAuthorized : undefined,
+          canUseMCP,
+        );
+
         const inspectionFailed = serverConfig?.inspectionFailed ?? false;
-
-        let oauthAuthorized = true;
-        if (requiresOAuth) {
-          try {
-            const identifier = `mcp:${serverName}`;
-            const accessTokenData = await db.findToken({
-              userId,
-              type: 'mcp_oauth',
-              identifier,
-            });
-
-            const hasValidAccessToken =
-              accessTokenData &&
-              accessTokenData.expiresAt &&
-              new Date() < new Date(accessTokenData.expiresAt);
-
-            if (hasValidAccessToken) {
-              oauthAuthorized = true;
-            } else {
-              const refreshTokenData = await db.findToken({
-                userId,
-                type: 'mcp_oauth_refresh',
-                identifier: `${identifier}:refresh`,
-              });
-              oauthAuthorized = !!refreshTokenData;
-            }
-          } catch (oauthError) {
-            logger.error(
-              `[getMCPTools] Error checking OAuth status for server "${serverName}":`,
-              oauthError,
-            );
-            oauthAuthorized = false;
-          }
-        }
 
         const hasCustomUserVars =
           serverConfig?.customUserVars &&
@@ -187,6 +175,9 @@ const getMCPTools = async (req, res) => {
           requiresOAuth,
           oauthAuthorized,
           inspectionFailed,
+          permission_denied: availability.reason === 'permission_denied',
+          availability_reason: availability.reason,
+          available: availability.available,
         };
 
         // Set authentication config once for the server
@@ -215,6 +206,11 @@ const getMCPTools = async (req, res) => {
               name: toolName,
               pluginKey: toolKey,
               description: toolData.function.description || '',
+              available: availability.available,
+              availability_reason: availability.reason,
+              inspectionFailed,
+              requiresOAuth,
+              oauthAuthorized,
             });
           }
         }

@@ -31,10 +31,7 @@ export function useVisibleTools(
         const serverName = toolId.split(Constants.mcp_delimiter)[1];
         if (serverName) {
           const serverInfo = mcpServersMap.get(serverName);
-          if (serverInfo?.inspectionFailed) {
-            continue;
-          }
-          if (serverInfo?.requiresOAuth && !serverInfo?.oauthAuthorized) {
+          if (serverInfo?.available === false) {
             continue;
           }
           mcpServers.add(serverName);
@@ -42,10 +39,7 @@ export function useVisibleTools(
       }
       else if (mcpServersMap.has(toolId)) {
         const serverInfo = mcpServersMap.get(toolId);
-        if (serverInfo?.inspectionFailed) {
-          continue;
-        }
-        if (serverInfo?.requiresOAuth && !serverInfo?.oauthAuthorized) {
+        if (serverInfo?.available === false) {
           continue;
         }
         mcpServers.add(toolId);

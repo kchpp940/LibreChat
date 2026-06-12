@@ -1187,6 +1187,8 @@
   "com_ui_mcp_init_failed": "Failed to initialize MCP server",
   "com_ui_mcp_inspection_failed": "MCP server inspection failed — tools unavailable",
   "com_ui_mcp_oauth_unauthorized": "OAuth authorization expired or revoked — re-authenticate to use tools",
+  "com_ui_mcp_permission_denied": "You do not have permission to use this MCP server — contact your administrator",
+  "com_ui_mcp_server_unavailable": "MCP server is not available — contact your administrator",
   "com_ui_mcp_initialize": "Initialize",
   "com_ui_mcp_initialized_success": "MCP server '{{0}}' initialized successfully",
   "com_ui_mcp_invalid_url": "Please enter a valid URL",

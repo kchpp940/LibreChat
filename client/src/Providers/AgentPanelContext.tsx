@@ -75,6 +75,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         const requiresOAuth = (serverData as any).requiresOAuth ?? false;
         const oauthAuthorized = (serverData as any).oauthAuthorized ?? true;
         const inspectionFailed = (serverData as any).inspectionFailed ?? false;
+        const permission_denied = (serverData as any).permission_denied ?? false;
+        const availability_reason = (serverData as any).availability_reason ?? 'ok';
+        const available = (serverData as any).available ?? !inspectionFailed;
 
         const metadata = {
           name: displayName,
@@ -86,6 +89,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
           requiresOAuth,
           oauthAuthorized,
           inspectionFailed,
+          permission_denied,
+          availability_reason,
+          available,
         } as TPlugin;
 
         const tools = serverData.tools.map((tool) => ({
@@ -98,6 +104,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
             requiresOAuth,
             oauthAuthorized,
             inspectionFailed,
+            permission_denied,
+            availability_reason: (tool as any).availability_reason ?? availability_reason,
+            available: (tool as any).available ?? available,
           } as TPlugin,
         }));
 
@@ -111,6 +120,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
           requiresOAuth,
           oauthAuthorized,
           inspectionFailed,
+          permission_denied,
+          availability_reason,
+          available,
         });
       }
     }
@@ -135,6 +147,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         requiresOAuth: false,
         oauthAuthorized: true,
         inspectionFailed: false,
+        permission_denied: false,
+        availability_reason: 'ok' as const,
+        available: true,
       } as TPlugin;
 
       serversMap.set(mcpServerName, {
@@ -147,6 +162,9 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         requiresOAuth: false,
         oauthAuthorized: true,
         inspectionFailed: false,
+        permission_denied: false,
+        availability_reason: 'ok',
+        available: true,
       });
     }
 

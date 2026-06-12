@@ -10,6 +10,40 @@ const { updateMCPServerTools } = require('~/server/services/Config');
 const { getLogStores } = require('~/cache');
 
 /**
+ * @typedef {Object} MCPServerAvailability
+ * @property {boolean} available - Whether the server is fully available for use
+ * @property {'ok'|'permission_denied'|'not_found'|'inspection_failed'|'oauth_unauthorized'|'registry_unavailable'} reason - Machine-readable reason code
+ * @property {string} [details] - Human-readable details
+ */
+
+/**
+ * Unified MCP server availability check.
+ * Combines inspectionFailed state and OAuth authorization status.
+ * Returns a structured result with availability flag and reason code.
+ *
+ * @param {object} [serverConfig] - The parsed MCP server config from registry
+ * @param {boolean | undefined} [oauthAuthorized] - Whether the user has valid OAuth authorization
+ * @param {boolean} [canUseServers=true] - Whether the user has global MCP server use permission
+ * @returns {MCPServerAvailability} Structured availability result
+ */
+function getMCPServerAvailability(serverConfig, oauthAuthorized, canUseServers = true) {
+  if (!canUseServers) {
+    return { available: false, reason: 'permission_denied' };
+  }
+  if (!serverConfig) {
+    return { available: false, reason: 'not_found' };
+  }
+  if (serverConfig.inspectionFailed) {
+    return { available: false, reason: 'inspection_failed' };
+  }
+  if (serverConfig.requiresOAuth && oauthAuthorized === false) {
+    return { available: false, reason: 'oauth_unauthorized' };
+  }
+  return { available: true, reason: 'ok' };
+}
+
+/**
+ * @deprecated Use getMCPServerAvailability() for structured result with reason code.
  * Unified MCP server availability check.
  * Combines inspectionFailed state and OAuth authorization status.
  * Returns true only if the server is fully available for use.
@@ -19,16 +53,30 @@ const { getLogStores } = require('~/cache');
  * @returns {boolean} True if the server is available, false otherwise
  */
 function isMCPServerAvailable(serverConfig, oauthAuthorized) {
-  if (!serverConfig) {
-    return false;
+  return getMCPServerAvailability(serverConfig, oauthAuthorized).available;
+}
+
+/**
+ * Build a map of server availability for all referenced servers.
+ * Takes pre-fetched registry configs and OAuth status to avoid duplicate lookups.
+ *
+ * @param {Record<string, object>} serverConfigs - Map of serverName -> config from registry
+ * @param {Map<string, boolean>} oauthStatus - Map of serverName -> oauthAuthorized boolean
+ * @param {boolean} [canUseServers=true] - Whether the user has global MCP permission
+ * @returns {Map<string, MCPServerAvailability>} Map of serverName -> availability result
+ */
+function buildMCPServerAvailabilityMap(serverConfigs, oauthStatus, canUseServers = true) {
+  const result = new Map();
+  if (!serverConfigs) {
+    return result;
   }
-  if (serverConfig.inspectionFailed) {
-    return false;
+  for (const [serverName, config] of Object.entries(serverConfigs)) {
+    const oauthAuthorized = config?.requiresOAuth
+      ? (oauthStatus?.get(serverName) ?? false)
+      : undefined;
+    result.set(serverName, getMCPServerAvailability(config, oauthAuthorized, canUseServers));
   }
-  if (serverConfig.requiresOAuth && oauthAuthorized === false) {
-    return false;
-  }
-  return true;
+  return result;
 }
 
 /**
@@ -389,6 +437,8 @@ async function reinitMCPServer({
 module.exports = {
   reinitMCPServer,
   isMCPServerAvailable,
+  getMCPServerAvailability,
+  buildMCPServerAvailabilityMap,
   getMCPServersOAuthStatus,
   collectMCPServerNames,
 };

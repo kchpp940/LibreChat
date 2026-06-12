@@ -65,9 +65,26 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
   const requiresOAuth = serverInfo.requiresOAuth ?? false;
   const oauthAuthorized = serverInfo.oauthAuthorized ?? true;
   const hasOAuthFailure = requiresOAuth && !oauthAuthorized;
-  const isServerUnavailable = isInspectionFailed || hasOAuthFailure;
+  const isServerUnavailable = serverInfo.available === false;
 
   const getDisabledReason = (): string => {
+    const reason = serverInfo.availability_reason;
+    if (reason === 'permission_denied') {
+      return localize('com_ui_mcp_permission_denied');
+    }
+    if (reason === 'inspection_failed') {
+      return localize('com_ui_mcp_inspection_failed');
+    }
+    if (reason === 'oauth_unauthorized') {
+      return localize('com_ui_mcp_oauth_unauthorized');
+    }
+    if (reason === 'not_found') {
+      return localize('com_ui_mcp_server_unavailable');
+    }
+    if (reason === 'registry_unavailable') {
+      return localize('com_ui_mcp_server_unavailable');
+    }
+    // Legacy fallbacks
     if (isInspectionFailed) {
       return localize('com_ui_mcp_inspection_failed');
     }
