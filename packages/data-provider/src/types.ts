@@ -350,8 +350,99 @@ export type TArchiveConversationRequest = {
 
 export type TArchiveConversationResponse = TConversation;
 
+/**
+ * A sanitized content part as exposed through a public shared link.
+ * Only render-relevant fields are preserved; internal tool parameters,
+ * auth data, and resource identifiers are stripped or anonymized by the backend.
+ */
+export type TSharedContentPart =
+  | { type: ContentTypes.TEXT; text?: unknown }
+  | { type: ContentTypes.THINK; think?: unknown }
+  | { type: ContentTypes.ERROR; text?: unknown; error?: string }
+  | {
+      type: ContentTypes.TOOL_CALL;
+      tool_call: {
+        name?: string;
+        id?: string;
+        output?: unknown;
+        progress?: number;
+        type?: string;
+        function?: { name?: string };
+        code_interpreter?: { input?: unknown; outputs?: unknown };
+        retrieval?: Record<string, never>;
+        file_search?: Record<string, never>;
+        subagent_content?: TSharedContentPart[];
+      };
+    }
+  | {
+      type: ContentTypes.IMAGE_FILE;
+      image_file: { file_id?: string; detail?: string };
+    }
+  | { type: ContentTypes.IMAGE_URL; image_url?: unknown }
+  | { type: ContentTypes.VIDEO_URL; video_url?: unknown }
+  | { type: ContentTypes.INPUT_AUDIO; input_audio?: unknown }
+  | {
+      type: ContentTypes.AGENT_UPDATE;
+      agent_update: { agentId?: string };
+    }
+  | {
+      type: ContentTypes.SUMMARY;
+      content?: unknown;
+      model?: string;
+      provider?: string;
+      tokenCount?: number;
+      summarizing?: boolean;
+    };
+
+/**
+ * A file or attachment as exposed through a public shared link.
+ * Storage- and identity-internal fields (_id, user, storageKey, file_id, etc.)
+ * are stripped by the backend; only render-relevant fields are preserved.
+ */
+export type TSharedFile = Record<string, unknown> & {
+  filename?: string;
+  filepath?: string;
+  preview?: string;
+  height?: number;
+  width?: number;
+  type?: string;
+  expiresAt?: number;
+  toolCallId?: string;
+  messageId?: string;
+  conversationId?: string;
+};
+
+/**
+ * Public, anonymized projection of a message returned by a shared link.
+ * Only render-relevant fields are surfaced; internal fields (endpoint,
+ * conversationSignature, clientId, plugin(s), metadata, etc.) are omitted
+ * by the backend regardless of the type definition.
+ */
+export type TSharedMessage = {
+  messageId: string;
+  parentMessageId: string | null;
+  conversationId: string;
+  sender: string;
+  text: string | null;
+  content?: TSharedContentPart[];
+  iconURL?: string;
+  model?: string;
+  isCreatedByUser: boolean;
+  createdAt: string | number | Date;
+  updatedAt?: string | number | Date;
+  tokenCount?: number;
+  unfinished?: boolean;
+  error?: boolean;
+  finish_reason?: string;
+  manualSkills?: string[];
+  alwaysAppliedSkills?: string[];
+  files?: TSharedFile[];
+  attachments?: TSharedFile[];
+  children?: TSharedMessage[];
+};
+
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
-  messages: TMessage[];
+  messages: TSharedMessage[];
 };
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;

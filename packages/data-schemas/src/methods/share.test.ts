@@ -435,16 +435,22 @@ describe('Share Methods', () => {
         files: [
           {
             file_id: 'file123',
+            _id: new mongoose.Types.ObjectId(),
+            id: 'legacy-id-123',
+            temp_file_id: 'tmp_456',
             filename: 'upload.png',
             type: 'image/png',
             width: 100,
             height: 100,
             filepath: '/images/upload.png',
             conversationId,
+            messageId: 'original-message-id',
             user: userId,
             tenantId: 'tenant-a',
             storageKey: 'private/upload.png',
+            storageRegion: 'us-east-1',
             source: 's3',
+            metadata: { scanned: true },
           },
         ],
         attachments: [
@@ -456,6 +462,7 @@ describe('Share Methods', () => {
             filepath: '/images/result.json',
             storageKey: 'private/result.json',
             metadata: { codeEnvRef: 'internal-ref' },
+            file_id: 'att_file_789',
           },
         ],
       });
@@ -486,27 +493,43 @@ describe('Share Methods', () => {
       expect(shared?.manualSkills).toEqual(['research']);
       expect(shared?.alwaysAppliedSkills).toEqual(['brand-voice']);
 
-      // User-uploaded files keep their render URL (filepath/preview) but drop storage internals.
+      // User-uploaded files keep their render URL (filepath/preview) but drop ALL storage internals
+      // and internal identifiers including file_id, _id, id, temp_file_id.
       const file = shared?.files?.[0];
       expect(file).toMatchObject({ filename: 'upload.png', type: 'image/png' });
       expect(file?.filepath).toBe('/images/upload.png');
+      // Sensitive identifiers must be stripped.
+      expect(file).not.toHaveProperty('_id');
+      expect(file).not.toHaveProperty('id');
+      expect(file).not.toHaveProperty('file_id');
+      expect(file).not.toHaveProperty('temp_file_id');
+      // Storage and identity fields must be stripped.
       expect(file).not.toHaveProperty('storageKey');
+      expect(file).not.toHaveProperty('storageRegion');
       expect(file).not.toHaveProperty('user');
       expect(file).not.toHaveProperty('tenantId');
       expect(file).not.toHaveProperty('source');
-      // The file's conversation id is rewritten to the anonymized id, not the original.
+      expect(file).not.toHaveProperty('metadata');
+      // The file's conversation/message ids are rewritten to the anonymized ids.
       expect(file?.conversationId).toBe(shared?.conversationId);
       expect(file?.conversationId).not.toBe(conversationId);
+      expect(file?.messageId).toBe(shared?.messageId);
+      expect(file?.messageId).not.toBe('original-message-id');
 
-      // Tool-call attachments keep their correlation id, payload, and render URL so
-      // citations still render, while storage-only fields are removed.
+      // Tool-call attachments: correlation toolCallId is ANONYMIZED (not preserved as-is)
+      // so internal call identifiers don't leak, while payload and render URL are preserved.
       const attachment = shared?.attachments?.[0];
       expect(attachment).toMatchObject({
-        toolCallId: 'call_abc',
         type: 'web_search',
         web_search: { results: [{ title: 'Cited source', link: 'https://example.com' }] },
         filepath: '/images/result.json',
       });
+      // Anonymized toolCallId should have the call_ prefix but not equal the original.
+      expect(attachment?.toolCallId).toMatch(/^call_/);
+      expect(attachment?.toolCallId).not.toBe('call_abc');
+      // Attachment file_id must be stripped.
+      expect(attachment).not.toHaveProperty('file_id');
+      // Storage-only fields are removed.
       expect(attachment).not.toHaveProperty('storageKey');
       expect(attachment).not.toHaveProperty('metadata');
     });
@@ -1505,6 +1528,551 @@ describe('Share Methods', () => {
       const result = await shareMethods.getSharedMessages(shareId);
 
       expect(result?.messages[0].parentMessageId).toBe(Constants.NO_PARENT);
+    });
+  });
+
+  describe('Content Sanitization', () => {
+    const createShareWithContent = async (
+      userId: string,
+      conversationId: string,
+      content: unknown[],
+    ) => {
+      const shareId = `share_${nanoid()}`;
+      const message = await Message.create({
+        messageId: `msg_${nanoid()}`,
+        conversationId,
+        user: userId,
+        text: 'content test',
+        isCreatedByUser: false,
+        content,
+      });
+
+      await SharedLink.create({
+        shareId,
+        conversationId,
+        user: userId,
+        messages: [message._id],
+      });
+
+      return shareMethods.getSharedMessages(shareId);
+    };
+
+    test('sanitizes tool_call args, auth, expires_at and anonymizes internal IDs', async () => {
+      const { ContentTypes, Constants } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const internalFileId = 'file-abc123-sensitive';
+      const internalToolCallId = 'call-original-xyz789';
+      const sensitiveAgentId = 'agent_private_uuid';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.TOOL_CALL,
+          tool_call: {
+            id: internalToolCallId,
+            name: `${Constants.LC_TRANSFER_TO_}${sensitiveAgentId}`,
+            args: {
+              file_id: internalFileId,
+              internal_path: '/etc/passwd',
+              api_key: 'sk-leaked-secret',
+              user_query: 'sensitive user input',
+            },
+            auth: 'https://auth.example.com/authorize?token=secret',
+            expires_at: 1700000000,
+            output: 'This is the tool output that should be visible',
+            progress: 50,
+          },
+        },
+        {
+          type: ContentTypes.TOOL_CALL,
+          tool_call: {
+            id: 'call-mcp-web-search',
+            name: 'mcp__web_search',
+            args: { query: 'search query', private_param: 'secret' },
+            output: { results: [{ title: 'Public result', url: 'https://example.com' }] },
+            type: 'function',
+            function: { name: 'mcp__web_search', arguments: '{"query":"x"}' },
+          },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(2);
+
+      // First tool call: agent handoff
+      const handoffPart = sharedContent?.[0] as Record<string, unknown>;
+      const handoffCall = handoffPart.tool_call as Record<string, unknown>;
+      expect(handoffCall).toBeDefined();
+
+      // tool_call.id must be anonymized (not original)
+      expect(handoffCall.id).toMatch(/^call_/);
+      expect(handoffCall.id).not.toBe(internalToolCallId);
+
+      // handoff agent name must be anonymized
+      expect(typeof handoffCall.name).toBe('string');
+      expect((handoffCall.name as string).startsWith(Constants.LC_TRANSFER_TO_)).toBe(true);
+      expect(handoffCall.name).not.toContain(sensitiveAgentId);
+      expect((handoffCall.name as string).replace(Constants.LC_TRANSFER_TO_, '')).toMatch(/^ag_/);
+
+      // CRITICAL: args must be completely stripped
+      expect(handoffCall).not.toHaveProperty('args');
+      expect(handoffCall).not.toHaveProperty('arguments');
+
+      // CRITICAL: auth must be completely stripped
+      expect(handoffCall).not.toHaveProperty('auth');
+
+      // CRITICAL: expires_at must be completely stripped
+      expect(handoffCall).not.toHaveProperty('expires_at');
+
+      // Output and progress are render data and should be preserved
+      expect(handoffCall.output).toBe('This is the tool output that should be visible');
+      expect(handoffCall.progress).toBe(50);
+
+      // Second tool call: MCP web search
+      const mcpPart = sharedContent?.[1] as Record<string, unknown>;
+      const mcpCall = mcpPart.tool_call as Record<string, unknown>;
+      expect(mcpCall).toBeDefined();
+
+      expect(mcpCall.id).toMatch(/^call_/);
+      expect(mcpCall.id).not.toBe('call-mcp-web-search');
+      expect(mcpCall.name).toBe('mcp__web_search');
+      // args must be stripped for all tool calls
+      expect(mcpCall).not.toHaveProperty('args');
+      // function.arguments must be stripped
+      const fn = mcpCall.function as Record<string, unknown> | undefined;
+      expect(fn).toBeDefined();
+      expect(fn?.name).toBe('mcp__web_search');
+      expect(fn).not.toHaveProperty('arguments');
+      // type preserved
+      expect(mcpCall.type).toBe('function');
+      // output preserved
+      expect(mcpCall.output).toEqual({
+        results: [{ title: 'Public result', url: 'https://example.com' }],
+      });
+    });
+
+    test('sanitizes image_file content parts by anonymizing internal file_id', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const internalFileId = 'file-sensitive-uuid-12345';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.IMAGE_FILE,
+          image_file: {
+            file_id: internalFileId,
+            detail: 'high',
+          },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(1);
+
+      const imagePart = sharedContent?.[0] as Record<string, unknown>;
+      expect(imagePart.type).toBe(ContentTypes.IMAGE_FILE);
+      const imageFile = imagePart.image_file as Record<string, unknown>;
+      expect(imageFile).toBeDefined();
+      // file_id must be anonymized with f_ prefix, not the original
+      expect(typeof imageFile.file_id).toBe('string');
+      expect((imageFile.file_id as string).startsWith('f_')).toBe(true);
+      expect(imageFile.file_id).not.toBe(internalFileId);
+      // detail is render data and should be preserved
+      expect(imageFile.detail).toBe('high');
+    });
+
+    test('sanitizes agent_update content parts by anonymizing agentId and stripping runId/index', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const internalAgentId = 'agent-internal-uuid-abc';
+      const internalRunId = 'run-private-uuid-xyz';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.AGENT_UPDATE,
+          agent_update: {
+            agentId: internalAgentId,
+            runId: internalRunId,
+            index: 3,
+            timestamp: 1234567890,
+          },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(1);
+
+      const agentPart = sharedContent?.[0] as Record<string, unknown>;
+      expect(agentPart.type).toBe(ContentTypes.AGENT_UPDATE);
+      const agentUpdate = agentPart.agent_update as Record<string, unknown>;
+      expect(agentUpdate).toBeDefined();
+      // agentId must be anonymized with ag_ prefix
+      expect(typeof agentUpdate.agentId).toBe('string');
+      expect((agentUpdate.agentId as string).startsWith('ag_')).toBe(true);
+      expect(agentUpdate.agentId).not.toBe(internalAgentId);
+      // CRITICAL: runId must be completely stripped (internal run ID)
+      expect(agentUpdate).not.toHaveProperty('runId');
+      // CRITICAL: index must be completely stripped (internal ordering)
+      expect(agentUpdate).not.toHaveProperty('index');
+      // timestamp is internal and must be stripped
+      expect(agentUpdate).not.toHaveProperty('timestamp');
+    });
+
+    test('handles text, think, error, summary content parts correctly (non-sensitive)', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.TEXT,
+          text: 'Hello world',
+          tool_call_ids: ['call-1', 'call-2'],
+        },
+        {
+          type: ContentTypes.THINK,
+          think: 'Reasoning steps here',
+        },
+        {
+          type: ContentTypes.ERROR,
+          error: 'Something went wrong',
+          text: 'Error message detail',
+        },
+        {
+          type: ContentTypes.SUMMARY,
+          content: 'Summary text',
+          model: 'gpt-4-turbo',
+          provider: 'openai',
+          tokenCount: 500,
+          summarizing: false,
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(4);
+
+      // TEXT
+      const textPart = sharedContent?.[0] as Record<string, unknown>;
+      expect(textPart.type).toBe(ContentTypes.TEXT);
+      expect(textPart.text).toBe('Hello world');
+      // tool_call_ids is not in the sanitized whitelist for TEXT parts
+      // (these internal IDs would be in tool_call objects themselves)
+      expect(textPart).not.toHaveProperty('tool_call_ids');
+
+      // THINK
+      const thinkPart = sharedContent?.[1] as Record<string, unknown>;
+      expect(thinkPart.type).toBe(ContentTypes.THINK);
+      expect(thinkPart.think).toBe('Reasoning steps here');
+
+      // ERROR
+      const errorPart = sharedContent?.[2] as Record<string, unknown>;
+      expect(errorPart.type).toBe(ContentTypes.ERROR);
+      expect(errorPart.error).toBe('Something went wrong');
+      expect(errorPart.text).toBe('Error message detail');
+
+      // SUMMARY - non-assistant model should be undefined/omitted
+      const summaryPart = sharedContent?.[3] as Record<string, unknown>;
+      expect(summaryPart.type).toBe(ContentTypes.SUMMARY);
+      expect(summaryPart.content).toBe('Summary text');
+      // gpt-4-turbo doesn't start with asst_, so model should be anonymized to undefined
+      expect(summaryPart.model).toBeUndefined();
+      expect(summaryPart.provider).toBe('openai');
+      expect(summaryPart.tokenCount).toBe(500);
+      expect(summaryPart.summarizing).toBe(false);
+    });
+
+    test('handles image_url, video_url, input_audio content parts correctly', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.IMAGE_URL,
+          image_url: { url: 'https://example.com/image.png', detail: 'low' },
+        },
+        {
+          type: ContentTypes.VIDEO_URL,
+          video_url: { url: 'https://example.com/video.mp4' },
+        },
+        {
+          type: ContentTypes.INPUT_AUDIO,
+          input_audio: { data: 'base64audiostring', format: 'wav' },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(3);
+
+      const imgUrlPart = sharedContent?.[0] as Record<string, unknown>;
+      expect(imgUrlPart.type).toBe(ContentTypes.IMAGE_URL);
+      expect(imgUrlPart.image_url).toEqual({
+        url: 'https://example.com/image.png',
+        detail: 'low',
+      });
+
+      const vidPart = sharedContent?.[1] as Record<string, unknown>;
+      expect(vidPart.type).toBe(ContentTypes.VIDEO_URL);
+      expect(vidPart.video_url).toEqual({ url: 'https://example.com/video.mp4' });
+
+      const audioPart = sharedContent?.[2] as Record<string, unknown>;
+      expect(audioPart.type).toBe(ContentTypes.INPUT_AUDIO);
+      expect(audioPart.input_audio).toEqual({ data: 'base64audiostring', format: 'wav' });
+    });
+
+    test('recursively sanitizes subagent_content nested parts', async () => {
+      const { ContentTypes, Constants } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const sensitiveSubagentId = 'subagent-secret-id';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.TOOL_CALL,
+          tool_call: {
+            id: 'call-parent',
+            name: 'agent_executor',
+            args: { secret: 'param' },
+            output: 'parent output',
+            subagent_content: [
+              {
+                type: ContentTypes.TOOL_CALL,
+                tool_call: {
+                  id: 'call-nested',
+                  name: `${Constants.LC_TRANSFER_TO_}${sensitiveSubagentId}`,
+                  args: { nested_secret: 'nested_value' },
+                  output: 'nested output',
+                },
+              },
+              {
+                type: ContentTypes.IMAGE_FILE,
+                image_file: {
+                  file_id: 'file-nested-sensitive',
+                },
+              },
+              {
+                type: ContentTypes.AGENT_UPDATE,
+                agent_update: {
+                  agentId: sensitiveSubagentId,
+                  runId: 'run-nested-secret',
+                },
+              },
+            ],
+          },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(1);
+
+      const parentPart = sharedContent?.[0] as Record<string, unknown>;
+      const parentCall = parentPart.tool_call as Record<string, unknown>;
+      // Parent args must be stripped
+      expect(parentCall).not.toHaveProperty('args');
+      expect(parentCall.output).toBe('parent output');
+      // Parent id must be anonymized
+      expect(parentCall.id).toMatch(/^call_/);
+      expect(parentCall.id).not.toBe('call-parent');
+
+      // Subagent content must be sanitized recursively
+      const subagentContent = parentCall.subagent_content as unknown[] | undefined;
+      expect(subagentContent).toBeDefined();
+      expect(subagentContent).toHaveLength(3);
+
+      // Nested tool call
+      const nestedTool = subagentContent?.[0] as Record<string, unknown>;
+      const nestedCall = nestedTool.tool_call as Record<string, unknown>;
+      expect(nestedCall).not.toHaveProperty('args');
+      expect(nestedCall.output).toBe('nested output');
+      expect(typeof nestedCall.name).toBe('string');
+      expect((nestedCall.name as string).startsWith(Constants.LC_TRANSFER_TO_)).toBe(true);
+      expect((nestedCall.name as string).replace(Constants.LC_TRANSFER_TO_, '')).toMatch(/^ag_/);
+      expect(nestedCall.name).not.toContain(sensitiveSubagentId);
+
+      // Nested image_file
+      const nestedImg = subagentContent?.[1] as Record<string, unknown>;
+      const nestedImgFile = nestedImg.image_file as Record<string, unknown>;
+      expect(typeof nestedImgFile.file_id).toBe('string');
+      expect((nestedImgFile.file_id as string).startsWith('f_')).toBe(true);
+      expect(nestedImgFile.file_id).not.toBe('file-nested-sensitive');
+
+      // Nested agent_update
+      const nestedAgent = subagentContent?.[2] as Record<string, unknown>;
+      const nestedAgentUpdate = nestedAgent.agent_update as Record<string, unknown>;
+      expect(typeof nestedAgentUpdate.agentId).toBe('string');
+      expect((nestedAgentUpdate.agentId as string).startsWith('ag_')).toBe(true);
+      expect(nestedAgentUpdate.agentId).not.toBe(sensitiveSubagentId);
+      expect(nestedAgentUpdate).not.toHaveProperty('runId');
+    });
+
+    test('drops unknown/unrecognized content type parts entirely', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: 'text',
+          text: 'Legitimate text',
+        },
+        {
+          type: 'SENSITIVE_INTERNAL_TYPE',
+          secret_data: 'should never appear',
+          internal_ref: 'ref-123',
+        },
+        {
+          type: 'code_interpreter_input',
+          code: 'print("hello")',
+          session_id: 'session-secret',
+        },
+      ] as unknown[]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      // Only the 'text' type part should survive; unknown types are dropped
+      expect(sharedContent).toHaveLength(1);
+      expect((sharedContent?.[0] as Record<string, unknown>).type).toBe('text');
+      expect((sharedContent?.[0] as Record<string, unknown>).text).toBe('Legitimate text');
+    });
+
+    test('omits entire content field from output if all parts are sensitive/unknown', async () => {
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: 'INTERNAL_ONLY',
+          secret: 'sensitive',
+        },
+        {
+          type: 'DEBUG_TRACE',
+          internal_ids: ['a', 'b'],
+        },
+      ] as unknown[]);
+
+      const shared = result?.messages[0] as Record<string, unknown> | undefined;
+      // Entire content field should be omitted since no valid renderable parts remain
+      expect(shared).not.toHaveProperty('content');
+    });
+
+    test('consistently anonymizes same file_id across multiple image_file parts', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const sameFileId = 'file-same-reference-123';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.IMAGE_FILE,
+          image_file: { file_id: sameFileId, detail: 'high' },
+        },
+        {
+          type: ContentTypes.IMAGE_FILE,
+          image_file: { file_id: sameFileId, detail: 'low' },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(2);
+
+      const firstFile = (sharedContent?.[0] as Record<string, unknown>)
+        .image_file as Record<string, unknown>;
+      const secondFile = (sharedContent?.[1] as Record<string, unknown>)
+        .image_file as Record<string, unknown>;
+
+      // Same original file_id should map to the SAME anonymized id (consistency)
+      expect(firstFile.file_id).toBe(secondFile.file_id);
+      // And neither should be the original
+      expect(firstFile.file_id).not.toBe(sameFileId);
+      expect(secondFile.file_id).not.toBe(sameFileId);
+    });
+
+    test('SUMMARY content part anonymizes assistant model id but keeps non-assistant undefined', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+      const assistantId = 'asst_1234567890';
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.SUMMARY,
+          content: 'Assistant summary',
+          model: assistantId,
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      const summaryPart = sharedContent?.[0] as Record<string, unknown>;
+      // Assistant ID should be anonymized with a_ prefix
+      expect(typeof summaryPart.model).toBe('string');
+      expect((summaryPart.model as string).startsWith('a_')).toBe(true);
+      expect(summaryPart.model).not.toBe(assistantId);
+    });
+
+    test('sanitizes retrieval and file_search tool_call objects correctly', async () => {
+      const { ContentTypes } = await import('librechat-data-provider');
+      const userId = new mongoose.Types.ObjectId().toString();
+      const conversationId = `conv_${nanoid()}`;
+
+      const result = await createShareWithContent(userId, conversationId, [
+        {
+          type: ContentTypes.TOOL_CALL,
+          tool_call: {
+            id: 'call-retrieval-1',
+            name: 'retrieval',
+            retrieval: {
+              k: 4,
+              index_id: 'sensitive-index-id',
+              file_ids: ['file-secret-1', 'file-secret-2'],
+            },
+            output: [{ text: 'Retrieved document content' }],
+          },
+        },
+        {
+          type: ContentTypes.TOOL_CALL,
+          tool_call: {
+            id: 'call-filesearch-1',
+            name: 'file_search',
+            file_search: {
+              ranking_options: { ranker: 'default' },
+              filter: { file_ids: ['private-file-id'] },
+            },
+            args: { sensitive: 'filter-params' },
+            output: 'Search results',
+          },
+        },
+      ]);
+
+      const sharedContent = result?.messages[0]?.content as unknown[] | undefined;
+      expect(sharedContent).toBeDefined();
+      expect(sharedContent).toHaveLength(2);
+
+      const retrievalPart = sharedContent?.[0] as Record<string, unknown>;
+      const retrievalCall = retrievalPart.tool_call as Record<string, unknown>;
+      expect(retrievalCall.id).toMatch(/^call_/);
+      expect(retrievalCall.id).not.toBe('call-retrieval-1');
+      // retrieval should be empty object (all internal params stripped)
+      expect(retrievalCall.retrieval).toEqual({});
+      expect(retrievalCall.output).toEqual([{ text: 'Retrieved document content' }]);
+
+      const fsPart = sharedContent?.[1] as Record<string, unknown>;
+      const fsCall = fsPart.tool_call as Record<string, unknown>;
+      expect(fsCall.id).toMatch(/^call_/);
+      expect(fsCall.id).not.toBe('call-filesearch-1');
+      // file_search should be empty object
+      expect(fsCall.file_search).toEqual({});
+      // args stripped
+      expect(fsCall).not.toHaveProperty('args');
+      expect(fsCall.output).toBe('Search results');
     });
   });
 });

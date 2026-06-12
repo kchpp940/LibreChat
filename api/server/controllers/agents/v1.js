@@ -52,11 +52,6 @@ const { getMCPServersRegistry } = require('~/config');
 const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
-const {
-  reinitMCPServer: _unused_reinit,
-  isMCPServerAvailable,
-  getMCPServersOAuthStatus,
-} = require('~/server/services/Tools/mcp');
 const systemTools = {
   [Tools.execute_code]: true,
   [Tools.file_search]: true,
@@ -218,7 +213,6 @@ const filterAuthorizedTools = async ({
 }) => {
   const filteredTools = [];
   let mcpServerConfigs;
-  let oauthStatusMap = new Map();
   let registryUnavailable = false;
   const existingToolSet = existingTools?.length ? new Set(existingTools) : null;
   const hasMCPTools = tools.some((tool) => tool?.includes(Constants.mcp_delimiter));
@@ -254,14 +248,6 @@ const filterAuthorizedTools = async ({
           (role
             ? await getMCPServersRegistry().getAllServerConfigs(userId, configServers, role)
             : await getMCPServersRegistry().getAllServerConfigs(userId, configServers)) ?? {};
-
-        const oauthServerNames = Object.entries(mcpServerConfigs)
-          .filter(([, config]) => config?.requiresOAuth)
-          .map(([serverName]) => serverName);
-
-        if (oauthServerNames.length > 0) {
-          oauthStatusMap = await getMCPServersOAuthStatus(userId, oauthServerNames, db);
-        }
       } catch (e) {
         logger.warn(
           '[filterAuthorizedTools] MCP registry unavailable, filtering all MCP tools',
@@ -289,25 +275,6 @@ const filterAuthorizedTools = async ({
     if (!serverName || !Object.hasOwn(mcpServerConfigs, serverName)) {
       logger.warn(
         `[filterAuthorizedTools] Rejected MCP tool "${tool}" — server "${serverName}" not accessible to user ${userId}`,
-      );
-      continue;
-    }
-
-    const serverConfig = mcpServerConfigs[serverName];
-    const oauthAuthorized = serverConfig?.requiresOAuth
-      ? (oauthStatusMap.get(serverName) ?? false)
-      : undefined;
-
-    if (!isMCPServerAvailable(serverConfig, oauthAuthorized)) {
-      const reasons = [];
-      if (serverConfig?.inspectionFailed) {
-        reasons.push('inspectionFailed');
-      }
-      if (serverConfig?.requiresOAuth && oauthAuthorized === false) {
-        reasons.push('OAuth authorization expired/revoked');
-      }
-      logger.warn(
-        `[filterAuthorizedTools] Rejected MCP tool "${tool}" — server "${serverName}" unavailable: ${reasons.join(', ')}`,
       );
       continue;
     }

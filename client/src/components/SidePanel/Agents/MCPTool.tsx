@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { Constants } from 'librechat-data-provider';
-import { ChevronDown, Clock, Code2, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Clock, Code2 } from 'lucide-react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import {
   Label,
@@ -61,42 +61,6 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
   const currentServerName = serverInfo.serverName;
   const tools = serverInfo.tools || [];
 
-  const isInspectionFailed = serverInfo.inspectionFailed ?? false;
-  const requiresOAuth = serverInfo.requiresOAuth ?? false;
-  const oauthAuthorized = serverInfo.oauthAuthorized ?? true;
-  const hasOAuthFailure = requiresOAuth && !oauthAuthorized;
-  const isServerUnavailable = serverInfo.available === false;
-
-  const getDisabledReason = (): string => {
-    const reason = serverInfo.availability_reason;
-    if (reason === 'permission_denied') {
-      return localize('com_ui_mcp_permission_denied');
-    }
-    if (reason === 'inspection_failed') {
-      return localize('com_ui_mcp_inspection_failed');
-    }
-    if (reason === 'oauth_unauthorized') {
-      return localize('com_ui_mcp_oauth_unauthorized');
-    }
-    if (reason === 'not_found') {
-      return localize('com_ui_mcp_server_unavailable');
-    }
-    if (reason === 'registry_unavailable') {
-      return localize('com_ui_mcp_server_unavailable');
-    }
-    // Legacy fallbacks
-    if (isInspectionFailed) {
-      return localize('com_ui_mcp_inspection_failed');
-    }
-    if (hasOAuthFailure) {
-      return localize('com_ui_mcp_oauth_unauthorized');
-    }
-    return '';
-  };
-
-  const disabledReason = getDisabledReason();
-  const availableTools = isServerUnavailable ? [] : tools;
-
   const getSelectedTools = () => {
     const formTools = getValues('tools') || [];
     return tools.filter((t) => formTools.includes(t.tool_id)).map((t) => t.tool_id);
@@ -120,11 +84,6 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
   const isExpanded = accordionValue === currentServerName;
   const allDeferred = areAllToolsDeferred(tools);
   const allProgrammatic = areAllToolsProgrammatic(tools);
-
-  const availableToolIds = availableTools.map((t) => t.tool_id);
-  const selectedAvailableTools = selectedTools.filter((id) => availableToolIds.includes(id));
-  const allAvailableSelected =
-    availableTools.length > 0 && selectedAvailableTools.length === availableTools.length;
 
   const statusIconProps = getServerStatusIconProps(currentServerName);
   const configDialogProps = getConfigDialogProps();
@@ -172,18 +131,10 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
                   </div>
                 )}
                 <div
-                  className="grow px-2 py-1.5 flex items-center gap-1.5"
+                  className="grow px-2 py-1.5"
                   style={{ textOverflow: 'ellipsis', wordBreak: 'break-all', overflow: 'hidden' }}
                 >
-                  <span className="truncate">{currentServerName}</span>
-                  {isServerUnavailable && disabledReason && (
-                    <TooltipAnchor description={disabledReason}>
-                      <AlertTriangle
-                        className="h-3.5 w-3.5 flex-shrink-0 text-red-500"
-                        aria-hidden="true"
-                      />
-                    </TooltipAnchor>
-                  )}
+                  {currentServerName}
                 </div>
                 <div className="flex items-center">
                   <div className="relative flex items-center">
@@ -203,43 +154,33 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
                         >
                           <Checkbox
                             id={`select-all-${currentServerName}`}
-                            checked={allAvailableSelected}
-                            disabled={isServerUnavailable}
+                            checked={
+                              selectedTools.length === tools.length && selectedTools.length > 0
+                            }
                             onCheckedChange={(checked) => {
-                              if (isServerUnavailable) {
-                                return;
-                              }
-                              const currentSelectedUnavailable = selectedTools.filter(
-                                (id) => !availableToolIds.includes(id),
-                              );
                               const newSelectedTools = checked
-                                ? [...availableToolIds, ...currentSelectedUnavailable]
+                                ? tools.map((t) => t.tool_id)
                                 : [
                                     `${Constants.mcp_server}${Constants.mcp_delimiter}${currentServerName}`,
-                                    ...currentSelectedUnavailable,
                                   ];
                               updateFormTools(newSelectedTools);
                             }}
                             className={cn(
-                              'h-4 w-4 rounded border border-border-medium transition-all duration-200',
+                              'h-4 w-4 rounded border border-border-medium transition-all duration-200 hover:border-border-heavy',
                               isExpanded ? 'visible' : 'pointer-events-none invisible',
-                              !isServerUnavailable && 'hover:border-border-heavy cursor-pointer',
-                              isServerUnavailable && 'cursor-not-allowed opacity-50',
                             )}
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                if (!isServerUnavailable) {
-                                  const checkbox = e.currentTarget as HTMLButtonElement;
-                                  checkbox.click();
-                                }
+                                const checkbox = e.currentTarget as HTMLButtonElement;
+                                checkbox.click();
                               }
                             }}
                             tabIndex={isExpanded ? 0 : -1}
                             aria-label={
-                              allAvailableSelected
+                              selectedTools.length === tools.length && selectedTools.length > 0
                                 ? localize('com_ui_deselect_all')
                                 : localize('com_ui_select_all')
                             }
@@ -382,25 +323,20 @@ export default function MCPTool({ serverInfo }: { serverInfo?: MCPServerInfo }) 
 
           <AccordionContent className="relative ml-1 pt-1 before:absolute before:bottom-2 before:left-0 before:top-0 before:w-0.5 before:bg-border-medium">
             <div className="space-y-1">
-              {tools.map((tool) => {
-                const toolDisabled = isServerUnavailable;
-                return (
-                  <MCPToolItem
-                    key={tool.tool_id}
-                    tool={tool}
-                    isSelected={selectedTools.includes(tool.tool_id)}
-                    isDeferred={deferredToolsEnabled && isToolDeferred(tool.tool_id)}
-                    isProgrammatic={programmaticToolsEnabled && isToolProgrammatic(tool.tool_id)}
-                    deferredToolsEnabled={deferredToolsEnabled}
-                    programmaticToolsEnabled={programmaticToolsEnabled}
-                    isDisabled={toolDisabled}
-                    disabledReason={toolDisabled ? disabledReason : ''}
-                    onToggleSelect={() => toggleToolSelect(tool.tool_id)}
-                    onToggleDefer={() => toggleToolDefer(tool.tool_id)}
-                    onToggleProgrammatic={() => toggleToolProgrammatic(tool.tool_id)}
-                  />
-                );
-              })}
+              {tools.map((tool) => (
+                <MCPToolItem
+                  key={tool.tool_id}
+                  tool={tool}
+                  isSelected={selectedTools.includes(tool.tool_id)}
+                  isDeferred={deferredToolsEnabled && isToolDeferred(tool.tool_id)}
+                  isProgrammatic={programmaticToolsEnabled && isToolProgrammatic(tool.tool_id)}
+                  deferredToolsEnabled={deferredToolsEnabled}
+                  programmaticToolsEnabled={programmaticToolsEnabled}
+                  onToggleSelect={() => toggleToolSelect(tool.tool_id)}
+                  onToggleDefer={() => toggleToolDefer(tool.tool_id)}
+                  onToggleProgrammatic={() => toggleToolProgrammatic(tool.tool_id)}
+                />
+              ))}
             </div>
           </AccordionContent>
         </AccordionItem>

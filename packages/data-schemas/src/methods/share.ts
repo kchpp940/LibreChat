@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { Constants } from 'librechat-data-provider';
+import { Constants, ContentTypes } from 'librechat-data-provider';
 import type { FilterQuery, Model } from 'mongoose';
 import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import type * as t from '~/types';
@@ -58,6 +58,8 @@ const SENSITIVE_SHARED_FILE_FIELDS = new Set([
   'storageRegion',
   'storageKey',
   'temp_file_id',
+  'file_id',
+  'id',
   'message',
   'source',
   'filterSource',
@@ -109,6 +111,256 @@ function anonymizeSharedModel(model?: string): string | undefined {
   return anonymizeAssistantId(model);
 }
 
+const anonymizeToolCallId = memoizedAnonymizeId('call');
+const anonymizeAgentId = memoizedAnonymizeId('ag');
+const anonymizeFileId = memoizedAnonymizeId('f');
+
+/**
+ * Sanitize sensitive fields from a tool_call object while preserving only the
+ * fields needed for rendering. Internal tool parameters (args), auth data, and
+ * expiration metadata are stripped entirely — these are implementation details
+ * that must not leak through public shared links.
+ */
+function sanitizeToolCall(toolCall: unknown): unknown {
+  if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) {
+    return undefined;
+  }
+
+  const tc = toolCall as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (typeof tc.name === 'string') {
+    if (tc.name.startsWith(Constants.LC_TRANSFER_TO_)) {
+      const agentId = tc.name.replace(Constants.LC_TRANSFER_TO_, '');
+      result.name = `${Constants.LC_TRANSFER_TO_}${anonymizeAgentId(agentId)}`;
+    } else {
+      result.name = tc.name;
+    }
+  }
+
+  if (typeof tc.id === 'string') {
+    result.id = anonymizeToolCallId(tc.id);
+  }
+
+  if (tc.output !== undefined) {
+    result.output = tc.output;
+  }
+
+  if (typeof tc.progress === 'number') {
+    result.progress = tc.progress;
+  }
+
+  if (tc.type !== undefined) {
+    result.type = tc.type;
+  }
+
+  if (tc.function !== undefined && typeof tc.function === 'object' && tc.function !== null) {
+    const fn = tc.function as Record<string, unknown>;
+    result.function = {
+      ...(fn.name !== undefined && { name: fn.name }),
+    };
+  }
+
+  if (tc.code_interpreter !== undefined && typeof tc.code_interpreter === 'object' && tc.code_interpreter !== null) {
+    const ci = tc.code_interpreter as Record<string, unknown>;
+    result.code_interpreter = {
+      ...(ci.input !== undefined && { input: ci.input }),
+      ...(ci.outputs !== undefined && { outputs: ci.outputs }),
+    };
+  }
+
+  if (tc.retrieval !== undefined && typeof tc.retrieval === 'object' && tc.retrieval !== null) {
+    result.retrieval = {};
+  }
+
+  if (tc.file_search !== undefined && typeof tc.file_search === 'object' && tc.file_search !== null) {
+    result.file_search = {};
+  }
+
+  if (Array.isArray(tc.subagent_content)) {
+    result.subagent_content = tc.subagent_content
+      .map((part) => sanitizeContentPart(part))
+      .filter((p) => p !== undefined);
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Sanitize an image_file content part, replacing the internal file_id with an
+ * anonymized version so storage identifiers are not disclosed.
+ */
+function sanitizeImageFile(imageFile: unknown): unknown {
+  if (!imageFile || typeof imageFile !== 'object' || Array.isArray(imageFile)) {
+    return undefined;
+  }
+
+  const img = imageFile as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (typeof img.file_id === 'string') {
+    result.file_id = anonymizeFileId(img.file_id);
+  }
+
+  if (img.detail !== undefined) {
+    result.detail = img.detail;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Sanitize an agent_update content part, stripping internal identifiers
+ * (runId, index) while preserving only the anonymized agentId for display.
+ */
+function sanitizeAgentUpdate(agentUpdate: unknown): unknown {
+  if (!agentUpdate || typeof agentUpdate !== 'object' || Array.isArray(agentUpdate)) {
+    return undefined;
+  }
+
+  const au = agentUpdate as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (typeof au.agentId === 'string') {
+    result.agentId = anonymizeAgentId(au.agentId);
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Sanitize a single content part for public shared view. Only fields needed for
+ * rendering are preserved; all internal metadata, tool parameters, auth data,
+ * and resource identifiers are stripped or anonymized.
+ */
+function sanitizeContentPart(part: unknown): unknown {
+  if (!part || typeof part !== 'object' || Array.isArray(part)) {
+    return undefined;
+  }
+
+  const p = part as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (typeof p.type === 'string') {
+    result.type = p.type;
+  }
+
+  switch (p.type) {
+    case ContentTypes.TEXT: {
+      if (typeof p.text === 'string') {
+        result.text = p.text;
+      } else if (p.text !== undefined && typeof p.text === 'object') {
+        result.text = p.text;
+      }
+      break;
+    }
+    case ContentTypes.THINK: {
+      if (typeof p.think === 'string') {
+        result.think = p.think;
+      } else if (p.think !== undefined && typeof p.think === 'object') {
+        result.think = p.think;
+      }
+      break;
+    }
+    case ContentTypes.ERROR: {
+      if (typeof p.error === 'string') {
+        result.error = p.error;
+      }
+      if (typeof p.text === 'string') {
+        result.text = p.text;
+      }
+      break;
+    }
+    case ContentTypes.SUMMARY: {
+      if (p.content !== undefined) {
+        result.content = p.content;
+      }
+      if (typeof p.model === 'string') {
+        result.model = anonymizeSharedModel(p.model);
+      }
+      if (typeof p.provider === 'string') {
+        result.provider = p.provider;
+      }
+      if (typeof p.tokenCount === 'number') {
+        result.tokenCount = p.tokenCount;
+      }
+      if (typeof p.summarizing === 'boolean') {
+        result.summarizing = p.summarizing;
+      }
+      break;
+    }
+    case ContentTypes.TOOL_CALL: {
+      const sanitized = sanitizeToolCall(p[ContentTypes.TOOL_CALL]);
+      if (sanitized !== undefined) {
+        result[ContentTypes.TOOL_CALL] = sanitized;
+      }
+      break;
+    }
+    case ContentTypes.IMAGE_FILE: {
+      const sanitized = sanitizeImageFile(p[ContentTypes.IMAGE_FILE]);
+      if (sanitized !== undefined) {
+        result[ContentTypes.IMAGE_FILE] = sanitized;
+      }
+      break;
+    }
+    case ContentTypes.IMAGE_URL: {
+      if (typeof p.image_url === 'string') {
+        result.image_url = p.image_url;
+      } else if (p.image_url !== undefined && typeof p.image_url === 'object') {
+        const urlObj = p.image_url as Record<string, unknown>;
+        result.image_url = {
+          ...(typeof urlObj.url === 'string' && { url: urlObj.url }),
+          ...(urlObj.detail !== undefined && { detail: urlObj.detail }),
+        };
+      }
+      break;
+    }
+    case ContentTypes.VIDEO_URL: {
+      if (p.video_url !== undefined && typeof p.video_url === 'object') {
+        const urlObj = p.video_url as Record<string, unknown>;
+        result.video_url = {
+          ...(typeof urlObj.url === 'string' && { url: urlObj.url }),
+        };
+      }
+      break;
+    }
+    case ContentTypes.INPUT_AUDIO: {
+      if (p.input_audio !== undefined && typeof p.input_audio === 'object') {
+        const audioObj = p.input_audio as Record<string, unknown>;
+        result.input_audio = {
+          ...(typeof audioObj.data === 'string' && { data: audioObj.data }),
+          ...(typeof audioObj.format === 'string' && { format: audioObj.format }),
+        };
+      }
+      break;
+    }
+    case ContentTypes.AGENT_UPDATE: {
+      const sanitized = sanitizeAgentUpdate(p[ContentTypes.AGENT_UPDATE]);
+      if (sanitized !== undefined) {
+        result[ContentTypes.AGENT_UPDATE] = sanitized;
+      }
+      break;
+    }
+    default: {
+      return undefined;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function sanitizeContent(content: unknown): unknown[] | undefined {
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const sanitized = content
+    .map((part) => sanitizeContentPart(part))
+    .filter((p): p is Record<string, unknown> => p !== undefined);
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
 /**
  * Build the public, anonymized view of shared messages. An allowlist of
  * render-relevant fields keeps internal message fields (endpoint,
@@ -127,11 +379,17 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
     const newMessageId = anonymizeMessageId(message.messageId);
     idMap.set(message.messageId, newMessageId);
 
-    const attachments = sanitizeSharedFiles(message.attachments)?.map((attachment) => ({
-      ...attachment,
-      messageId: newMessageId,
-      conversationId: newConvoId,
-    }));
+    const attachments = sanitizeSharedFiles(message.attachments)?.map((attachment) => {
+      const result: Record<string, unknown> = {
+        ...attachment,
+        messageId: newMessageId,
+        conversationId: newConvoId,
+      };
+      if (typeof attachment.toolCallId === 'string') {
+        result.toolCallId = anonymizeToolCallId(attachment.toolCallId);
+      }
+      return result as t.SharedFile;
+    });
     // Persisted file records can carry the original conversation/message ids;
     // rewrite them to the anonymized ids so shared files don't expose them.
     const files = sanitizeSharedFiles(message.files)?.map((file) => ({
@@ -140,6 +398,7 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
       ...(file.messageId !== undefined && { messageId: newMessageId }),
     }));
     const model = anonymizeSharedModel(message.model);
+    const sanitizedContent = sanitizeContent(message.content);
 
     return {
       messageId: newMessageId,
@@ -149,7 +408,7 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
       conversationId: newConvoId,
       sender: message.sender,
       text: message.text,
-      content: message.content,
+      ...(sanitizedContent && { content: sanitizedContent }),
       ...(message.iconURL && { iconURL: message.iconURL }),
       ...(model && { model }),
       isCreatedByUser: message.isCreatedByUser,
