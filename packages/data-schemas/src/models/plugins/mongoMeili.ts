@@ -464,12 +464,19 @@ const createMeiliMongooseModel = ({
       q: string,
       params: SearchParams & { contentTypes?: string[] },
       populate: boolean,
-    ): Promise<SearchResponse<MeiliIndexable, Record<string, unknown>> & { indexingStatus?: { hasLegacyDocs: boolean; needsReindex: boolean } }> {
+    ): Promise<
+      SearchResponse<MeiliIndexable, Record<string, unknown>> & {
+        indexingStatus?: { hasLegacyDocs: boolean; needsReindex: boolean };
+        degraded?: boolean;
+      }
+    > {
       const searchParams = { ...params };
       const requestedContentTypes = searchParams.contentTypes;
       delete searchParams.contentTypes;
 
-      if (requestedContentTypes && requestedContentTypes.length > 0) {
+      const isTypeFiltered = requestedContentTypes && requestedContentTypes.length > 0;
+
+      if (isTypeFiltered) {
         const contentTypeFilters = requestedContentTypes
           .map((type) => `contentTypes = '${type}'`)
           .join(' OR ');
@@ -484,6 +491,7 @@ const createMeiliMongooseModel = ({
       const data = await index.search(q, searchParams);
 
       const indexingStatus = { hasLegacyDocs: false, needsReindex: false };
+      let degraded = false;
 
       if (populate) {
         const query: Record<string, unknown> = {};
@@ -532,7 +540,11 @@ const createMeiliMongooseModel = ({
           return mergedHit;
         });
 
-        if (requestedContentTypes && requestedContentTypes.length > 0) {
+        if (isTypeFiltered && indexingStatus.hasLegacyDocs) {
+          degraded = true;
+          indexingStatus.needsReindex = true;
+          data.hits = populatedHits;
+        } else if (isTypeFiltered) {
           const typeSet = new Set(requestedContentTypes);
           data.hits = populatedHits.filter((hit) => {
             const typedHit = hit as Record<string, unknown>;
@@ -551,7 +563,7 @@ const createMeiliMongooseModel = ({
         indexingStatus.needsReindex = true;
       }
 
-      return { ...data, indexingStatus };
+      return { ...data, indexingStatus, degraded };
     }
 
     /**

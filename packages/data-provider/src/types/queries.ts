@@ -86,6 +86,7 @@ export type MessagesListResponse = {
   nextCursor: string | null;
   searchHits?: Record<string, SearchHit[]>;
   indexingStatus?: SearchIndexingStatus;
+  degraded?: boolean;
 };
 
 /* Shared Links */

@@ -215,6 +215,7 @@ router.get('/', async (req, res) => {
 
       const messages = searchResults.hits || [];
       const indexingStatus = searchResults.indexingStatus || null;
+      const degraded = searchResults.degraded || false;
 
       const result = await db.getConvosQueried(req.user.id, messages, cursor);
 
@@ -259,14 +260,15 @@ router.get('/', async (req, res) => {
       }
 
       const searchHits = {};
+      const hitTypesForFilter = degraded ? [] : parsedSearchTypes;
       for (const message of activeMessages) {
-        const hits = buildSearchHits(message, search, parsedSearchTypes);
+        const hits = buildSearchHits(message, search, hitTypesForFilter);
         if (hits.length > 0) {
           searchHits[message.messageId] = hits;
         }
       }
 
-      response = { messages: activeMessages, nextCursor: null, searchHits, indexingStatus };
+      response = { messages: activeMessages, nextCursor: null, searchHits, indexingStatus, degraded };
     } else {
       response = { messages: [], nextCursor: null };
     }

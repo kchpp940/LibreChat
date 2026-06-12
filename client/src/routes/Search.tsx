@@ -95,6 +95,7 @@ export default function Search() {
   const indexingStatus = useMemo(() => {
     let hasLegacyDocs = false;
     let needsReindex = false;
+    let degraded = false;
     searchMessages?.pages.forEach((page) => {
       if (page.indexingStatus) {
         if (page.indexingStatus.hasLegacyDocs) {
@@ -104,11 +105,14 @@ export default function Search() {
           needsReindex = true;
         }
       }
+      if (page.degraded) {
+        degraded = true;
+      }
     });
-    if (!hasLegacyDocs && !needsReindex) {
+    if (!hasLegacyDocs && !needsReindex && !degraded) {
       return null;
     }
-    return { hasLegacyDocs, needsReindex };
+    return { hasLegacyDocs, needsReindex, degraded };
   }, [searchMessages?.pages]);
 
   const messages = useMemo(() => {
@@ -189,7 +193,18 @@ export default function Search() {
         ))}
       </div>
 
-      {indexingStatus && indexingStatus.needsReindex && (
+      {indexingStatus && indexingStatus.degraded && (
+        <div className="mx-4 mt-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/30 dark:text-red-200">
+          <div className="font-medium">
+            {localize('com_nav_search_degraded_mode_title')}
+          </div>
+          <div className="mt-1 text-xs opacity-80">
+            {localize('com_nav_search_degraded_mode_desc')}
+          </div>
+        </div>
+      )}
+
+      {indexingStatus && !indexingStatus.degraded && indexingStatus.needsReindex && (
         <div className="mx-4 mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/30 dark:text-amber-200">
           <div className="font-medium">
             {localize('com_nav_search_indexing_warning_title')}
