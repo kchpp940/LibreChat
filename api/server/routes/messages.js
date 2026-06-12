@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
-const { ContentTypes, isAssistantsEndpoint } = require('librechat-data-provider');
+const { ContentTypes, isAssistantsEndpoint, SearchHitType } = require('librechat-data-provider');
 const {
   unescapeLaTeX,
   countTokens,
@@ -15,6 +15,166 @@ const db = require('~/models');
 const router = express.Router();
 router.use(requireJwtAuth);
 
+const SEARCH_SNIPPET_LENGTH = 150;
+
+function generateSnippet(text, query, maxLength = SEARCH_SNIPPET_LENGTH) {
+  if (!text || !query) {
+    return text?.slice(0, maxLength) || '';
+  }
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const index = lowerText.indexOf(lowerQuery);
+  if (index === -1) {
+    return text.slice(0, maxLength);
+  }
+  const halfLength = Math.floor(maxLength / 2);
+  const start = Math.max(0, index - halfLength);
+  const end = Math.min(text.length, index + query.length + halfLength);
+  let snippet = text.slice(start, end);
+  if (start > 0) {
+    snippet = '...' + snippet;
+  }
+  if (end < text.length) {
+    snippet = snippet + '...';
+  }
+  return snippet;
+}
+
+function extractArtifactTitle(text) {
+  if (!text) return null;
+  const match = text.match(/<artifact_identifier[^>]*title="([^"]*)"/);
+  if (match) return match[1];
+  const codeMatch = text.match(/```(\w+)\s*title="([^"]*)"/);
+  if (codeMatch) return codeMatch[2];
+  return null;
+}
+
+function buildSearchHits(message, query) {
+  const hits = [];
+  const { text, content, files, attachments, error } = message;
+
+  if (text && text.toLowerCase().includes(query.toLowerCase())) {
+    const artifactTitle = extractArtifactTitle(text);
+    hits.push({
+      type: artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT,
+      snippet: generateSnippet(text, query),
+      field: 'text',
+      artifactTitle: artifactTitle || undefined,
+    });
+  }
+
+  if (error && text) {
+    hits.push({
+      type: SearchHitType.ERROR,
+      snippet: generateSnippet(text, query),
+      field: 'error',
+    });
+  }
+
+  if (Array.isArray(content) && content.length > 0) {
+    content.forEach((part, partIndex) => {
+      if (!part) return;
+
+      if (part.type === ContentTypes.TEXT && part.text) {
+        const partText = typeof part.text === 'string' ? part.text : part.text?.text || '';
+        if (partText.toLowerCase().includes(query.toLowerCase())) {
+          const artifactTitle = extractArtifactTitle(partText);
+          hits.push({
+            type: artifactTitle ? SearchHitType.ARTIFACT : SearchHitType.TEXT,
+            snippet: generateSnippet(partText, query),
+            field: 'content',
+            partIndex,
+            artifactTitle: artifactTitle || undefined,
+          });
+        }
+      }
+
+      if (part.type === ContentTypes.TOOL_CALL && part.tool_call) {
+        const toolCall = part.tool_call;
+        const toolName = toolCall.name || toolCall.tool || '';
+        const toolInput = typeof toolCall.input === 'string' ? toolCall.input : JSON.stringify(toolCall.input || {});
+
+        if (toolName.toLowerCase().includes(query.toLowerCase()) ||
+            toolInput.toLowerCase().includes(query.toLowerCase())) {
+          hits.push({
+            type: SearchHitType.TOOL_CALL,
+            snippet: generateSnippet(toolInput || toolName, query),
+            field: 'content',
+            partIndex,
+            toolName,
+          });
+        }
+      }
+
+      if (part.type === ContentTypes.ERROR) {
+        const errorText = part.text || part.error || '';
+        const errText = typeof errorText === 'string' ? errorText : errorText?.text || '';
+        if (errText.toLowerCase().includes(query.toLowerCase())) {
+          hits.push({
+            type: SearchHitType.ERROR,
+            snippet: generateSnippet(errText, query),
+            field: 'content',
+            partIndex,
+          });
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(files) && files.length > 0) {
+    files.forEach((file) => {
+      const fileName = file.filename || file.file_name || '';
+      if (fileName.toLowerCase().includes(query.toLowerCase())) {
+        hits.push({
+          type: SearchHitType.FILE,
+          snippet: fileName,
+          fileName,
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    attachments.forEach((attachment) => {
+      const attName = attachment.name || attachment.filename || '';
+      const attType = attachment.type || '';
+      if (attName.toLowerCase().includes(query.toLowerCase()) ||
+          attType.toLowerCase().includes(query.toLowerCase())) {
+        hits.push({
+          type: SearchHitType.ATTACHMENT,
+          snippet: attName || attType,
+          fileName: attName || undefined,
+          toolName: attType || undefined,
+        });
+      }
+    });
+  }
+
+  return hits;
+}
+
+function filterMessagesByType(messages, searchTypes, query) {
+  if (!searchTypes || searchTypes.length === 0) {
+    return { filteredMessages: messages, searchHitsMap: {} };
+  }
+
+  const searchHitsMap = {};
+  const filteredMessages = [];
+  const typeSet = new Set(searchTypes);
+
+  for (const message of messages) {
+    const hits = buildSearchHits(message, query);
+    const matchingHits = hits.filter((hit) => typeSet.has(hit.type));
+
+    if (matchingHits.length > 0) {
+      filteredMessages.push(message);
+      searchHitsMap[message.messageId] = matchingHits;
+    }
+  }
+
+  return { filteredMessages, searchHitsMap };
+}
+
 router.get('/', async (req, res) => {
   try {
     const user = req.user.id ?? '';
@@ -26,6 +186,7 @@ router.get('/', async (req, res) => {
       conversationId,
       messageId,
       search,
+      searchTypes,
     } = req.query;
     const pageSize = parseInt(pageSizeRaw, 10) || 25;
 
@@ -83,10 +244,40 @@ router.get('/', async (req, res) => {
           isCreatedByUser: dbMessage?.isCreatedByUser,
           endpoint: dbMessage?.endpoint,
           iconURL: dbMessage?.iconURL,
+          content: dbMessage?.content,
+          files: dbMessage?.files,
+          attachments: dbMessage?.attachments,
+          error: dbMessage?.error,
         });
       }
 
-      response = { messages: activeMessages, nextCursor: null };
+      let finalMessages = activeMessages;
+      let searchHits = {};
+
+      const parsedSearchTypes = Array.isArray(searchTypes)
+        ? searchTypes
+        : searchTypes
+          ? [searchTypes]
+          : [];
+
+      if (parsedSearchTypes.length > 0) {
+        const { filteredMessages, searchHitsMap } = filterMessagesByType(
+          activeMessages,
+          parsedSearchTypes,
+          search,
+        );
+        finalMessages = filteredMessages;
+        searchHits = searchHitsMap;
+      } else {
+        for (const message of activeMessages) {
+          const hits = buildSearchHits(message, search);
+          if (hits.length > 0) {
+            searchHits[message.messageId] = hits;
+          }
+        }
+      }
+
+      response = { messages: finalMessages, nextCursor: null, searchHits };
     } else {
       response = { messages: [], nextCursor: null };
     }

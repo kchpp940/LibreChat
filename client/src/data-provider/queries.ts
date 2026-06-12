@@ -115,12 +115,12 @@ export const useMessagesInfiniteQuery = (
   params: MessagesListParams,
   config?: UseInfiniteQueryOptions<MessagesListResponse, unknown>,
 ) => {
-  const { sortBy, sortDirection, pageSize, conversationId, messageId, search } = params;
+  const { sortBy, sortDirection, pageSize, conversationId, messageId, search, searchTypes } = params;
 
   return useInfiniteQuery<MessagesListResponse>({
     queryKey: [
       QueryKeys.messages,
-      { sortBy, sortDirection, pageSize, conversationId, messageId, search },
+      { sortBy, sortDirection, pageSize, conversationId, messageId, search, searchTypes },
     ],
     queryFn: ({ pageParam }) =>
       dataService.listMessages({
@@ -130,6 +130,7 @@ export const useMessagesInfiniteQuery = (
         conversationId,
         messageId,
         search,
+        searchTypes,
         cursor: pageParam?.toString(),
       }),
     getNextPageParam: (lastPage) => lastPage?.nextCursor ?? undefined,

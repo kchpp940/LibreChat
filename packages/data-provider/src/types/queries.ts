@@ -53,6 +53,26 @@ export type ProjectListResponse = {
 
 export type ProjectData = InfiniteData<ProjectListResponse>;
 
+export enum SearchHitType {
+  TEXT = 'text',
+  TOOL_CALL = 'tool_call',
+  TOOL_OUTPUT = 'tool_output',
+  ATTACHMENT = 'attachment',
+  ARTIFACT = 'artifact',
+  ERROR = 'error',
+  FILE = 'file',
+}
+
+export type SearchHit = {
+  type: SearchHitType;
+  snippet: string;
+  field?: string;
+  partIndex?: number;
+  toolName?: string;
+  fileName?: string;
+  artifactTitle?: string;
+};
+
 /* Messages */
 export type MessagesListParams = {
   cursor?: string | null;
@@ -62,11 +82,13 @@ export type MessagesListParams = {
   conversationId?: string;
   messageId?: string;
   search?: string;
+  searchTypes?: SearchHitType[];
 };
 
 export type MessagesListResponse = {
   messages: s.TMessage[];
   nextCursor: string | null;
+  searchHits?: Record<string, SearchHit[]>;
 };
 
 /* Shared Links */

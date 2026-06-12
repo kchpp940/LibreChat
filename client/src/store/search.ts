@@ -1,4 +1,5 @@
 import { atom } from 'recoil';
+import { SearchHitType } from 'librechat-data-provider';
 
 export type SearchState = {
   enabled: boolean | null;
@@ -6,6 +7,7 @@ export type SearchState = {
   debouncedQuery: string;
   isSearching: boolean;
   isTyping: boolean;
+  selectedTypes: SearchHitType[];
 };
 
 export const search = atom<SearchState>({
@@ -16,6 +18,7 @@ export const search = atom<SearchState>({
     debouncedQuery: '',
     isSearching: false,
     isTyping: false,
+    selectedTypes: [],
   },
 });
 

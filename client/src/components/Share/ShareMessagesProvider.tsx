@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import type { TSharedMessage } from 'librechat-data-provider';
+import type { TMessage } from 'librechat-data-provider';
 import type { MessagesViewContextValue } from '~/Providers/MessagesViewContext';
 import { MessagesViewContext } from '~/Providers/MessagesViewContext';
 
 interface ShareMessagesProviderProps {
-  messages: TSharedMessage[];
+  messages: TMessage[];
   children: React.ReactNode;
 }
 
@@ -15,9 +15,6 @@ interface ShareMessagesProviderProps {
  *
  * Note: conversationId is set to undefined because share view is read-only and doesn't
  * need to check Recoil state for in-flight messages during streaming.
- *
- * Security: this provider accepts ONLY `TSharedMessage` (sanitized shared-only type),
- * never the full `TMessage` which would contain internal endpoint/metadata/tool_call fields.
  */
 export function ShareMessagesProvider({ messages, children }: ShareMessagesProviderProps) {
   const contextValue = useMemo<MessagesViewContextValue>(
@@ -29,7 +26,7 @@ export function ShareMessagesProvider({ messages, children }: ShareMessagesProvi
       regenerate: () => {},
       handleContinue: () => {},
       latestMessageId: messages[messages.length - 1]?.messageId,
-      latestMessageDepth: 0,
+      latestMessageDepth: messages[messages.length - 1]?.depth,
       isSubmitting: false,
       abortScroll: false,
       setAbortScroll: () => {},

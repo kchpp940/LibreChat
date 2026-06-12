@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useRecoilState } from 'recoil';
-import type { TSharedMessage } from 'librechat-data-provider';
+import type { TMessage } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
 
 import Message from './Message';
@@ -12,7 +12,7 @@ export default function MultiMessage({
   messagesTree,
   currentEditId,
   setCurrentEditId,
-}: TMessageProps & { messagesTree?: TSharedMessage[] | null }) {
+}: TMessageProps) {
   const [siblingIdx, setSiblingIdx] = useRecoilState(store.messagesSiblingIdxFamily(messageId));
 
   const setSiblingIdxRev = (value: number) => {
@@ -35,7 +35,7 @@ export default function MultiMessage({
     return null;
   }
 
-  const message = messagesTree[messagesTree.length - siblingIdx - 1] as TSharedMessage | null;
+  const message = messagesTree[messagesTree.length - siblingIdx - 1] as TMessage | null;
   if (!message) {
     return null;
   }
