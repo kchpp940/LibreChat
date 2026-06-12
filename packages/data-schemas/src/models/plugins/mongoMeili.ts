@@ -118,9 +118,14 @@ function extractArtifactTitle(text?: string): string | null {
   return null;
 }
 
-function analyzeContentTypes(doc: DocumentWithMeiliIndex): string[] {
+function analyzeContentTypes(doc: DocumentWithMeiliIndex | Record<string, unknown>): string[] {
   const types = new Set<string>();
-  const { text, content, files, attachments, error } = doc as IMessage;
+  const typedDoc = doc as Record<string, unknown>;
+  const text = typedDoc.text as string | undefined;
+  const content = typedDoc.content as unknown[] | undefined;
+  const files = typedDoc.files as unknown[] | undefined;
+  const attachments = typedDoc.attachments as unknown[] | undefined;
+  const error = typedDoc.error as boolean | undefined;
 
   if (text) {
     const artifactTitle = extractArtifactTitle(text);
@@ -131,7 +136,7 @@ function analyzeContentTypes(doc: DocumentWithMeiliIndex): string[] {
     }
   }
 
-  if (error && text) {
+  if (error) {
     types.add(SearchHitType.ERROR);
   }
 
@@ -461,14 +466,21 @@ const createMeiliMongooseModel = ({
       populate: boolean,
     ): Promise<SearchResponse<MeiliIndexable, Record<string, unknown>>> {
       const searchParams = { ...params };
-      if (searchParams.contentTypes && searchParams.contentTypes.length > 0) {
-        const contentTypeFilters = searchParams.contentTypes
+      const requestedContentTypes = searchParams.contentTypes;
+      const originalLimit = searchParams.limit;
+      if (requestedContentTypes && requestedContentTypes.length > 0) {
+        const contentTypeFilters = requestedContentTypes
           .map((type) => `contentTypes = '${type}'`)
           .join(' OR ');
+        const fallbackFilter = `contentTypes IS EMPTY OR contentTypes NOT EXISTS`;
+        const combinedFilter = `(${contentTypeFilters}) OR (${fallbackFilter})`;
         if (searchParams.filter) {
-          searchParams.filter = `${searchParams.filter} AND (${contentTypeFilters})`;
+          searchParams.filter = `${searchParams.filter} AND (${combinedFilter})`;
         } else {
-          searchParams.filter = contentTypeFilters;
+          searchParams.filter = combinedFilter;
+        }
+        if (typeof originalLimit === 'number') {
+          searchParams.limit = Math.min(originalLimit * 3, 1000);
         }
         delete searchParams.contentTypes;
       }
@@ -498,12 +510,48 @@ const createMeiliMongooseModel = ({
             return typedItem[primaryKey] === hit[primaryKey];
           });
 
-          return {
+          const mergedHit = {
             ...(originalHit && typeof originalHit === 'object' ? originalHit : {}),
             ...hit,
-          };
+          } as Record<string, unknown>;
+
+          if (
+            requestedContentTypes &&
+            requestedContentTypes.length > 0 &&
+            (!mergedHit.contentTypes ||
+              !Array.isArray(mergedHit.contentTypes) ||
+              mergedHit.contentTypes.length === 0)
+          ) {
+            mergedHit.contentTypes = analyzeContentTypes(
+              (originalHit && typeof originalHit === 'object' ? originalHit : {}) as Record<
+                string,
+                unknown
+              >,
+            );
+          }
+
+          return mergedHit;
         });
-        data.hits = populatedHits;
+
+        if (requestedContentTypes && requestedContentTypes.length > 0) {
+          const typeSet = new Set(requestedContentTypes);
+          const filteredHits = populatedHits.filter((hit) => {
+            const typedHit = hit as Record<string, unknown>;
+            const hitTypes = typedHit.contentTypes as string[] | undefined;
+            if (!hitTypes || hitTypes.length === 0) {
+              return false;
+            }
+            return hitTypes.some((t) => typeSet.has(t));
+          });
+          if (typeof originalLimit === 'number') {
+            data.hits = filteredHits.slice(0, originalLimit);
+          } else {
+            data.hits = filteredHits;
+          }
+          data.estimatedTotalHits = filteredHits.length;
+        } else {
+          data.hits = populatedHits;
+        }
       }
 
       return data;
@@ -530,7 +578,7 @@ const createMeiliMongooseModel = ({
         delete object.content;
       }
 
-      if (object.text && !object.contentTypes) {
+      if (!object.contentTypes || !Array.isArray(object.contentTypes) || object.contentTypes.length === 0) {
         object.contentTypes = analyzeContentTypes(this);
       }
 
