@@ -458,10 +458,15 @@ export default function useChatFunctions({
       currentMsg.files = fileList.map((file) => ({
         file_id: file.file_id,
         filepath: file.filepath,
-        type: file.type ?? '', // Ensure type is not undefined
+        type: file.type ?? '',
         height: file.height,
         width: file.width,
-        embedded: file.embedded,
+        embedded:
+          file.indexingStatus === FileIndexingStatus.INDEXED
+            ? true
+            : file.indexingStatus === FileIndexingStatus.SKIPPED
+              ? false
+              : file.embedded,
         indexingStatus: file.indexingStatus,
         indexingError: file.indexingError,
       }));

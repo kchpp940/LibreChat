@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useRecoilCallback, useSetRecoilState } from 'recoil';
-import type { TAttachment, TFile, TFilePreview } from 'librechat-data-provider';
+import type { TAttachment, TFile, TFilePreview, FileIndexingStatus } from 'librechat-data-provider';
 import { useFilePreview } from '~/data-provider';
 import store from '~/store';
 
@@ -167,12 +167,19 @@ export default function useAttachmentPreviewSync(
       const existingIndex = messageAttachments.findIndex(
         (a) => (a as Partial<TFile>).file_id === fileId,
       );
-      const resolvedFields = {
+      const resolvedFields: Record<string, unknown> = {
         status: polled.status,
         text: polled.text ?? null,
         textFormat: polled.textFormat ?? null,
         previewError: polled.previewError,
       };
+      const polledFile = polled as Partial<TFile>;
+      if (polledFile.indexingStatus !== undefined) {
+        resolvedFields.indexingStatus = polledFile.indexingStatus;
+      }
+      if (polledFile.indexingError !== undefined) {
+        resolvedFields.indexingError = polledFile.indexingError;
+      }
       if (existingIndex >= 0) {
         const existing = messageAttachments[existingIndex] as Partial<TFile> & TAttachment;
         const merged = [...messageAttachments];

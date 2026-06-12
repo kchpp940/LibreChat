@@ -1,4 +1,4 @@
-import { EToolResources, FileContext } from 'librechat-data-provider';
+import { EToolResources, FileContext, FileIndexingStatus } from 'librechat-data-provider';
 import type { FilterQuery, SortOrder, Model } from 'mongoose';
 import type { IMongoFile } from '~/types/file';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
@@ -128,7 +128,12 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
         orConditions.push({ text: { $exists: true, $ne: null }, context: FileContext.agents });
       }
       if (toolResourceSet.has(EToolResources.file_search)) {
-        orConditions.push({ embedded: true });
+        orConditions.push({
+          $or: [
+            { indexingStatus: FileIndexingStatus.INDEXED },
+            { embedded: true, indexingStatus: { $exists: false } },
+          ],
+        });
       }
 
       // If no conditions to match, return empty

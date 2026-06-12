@@ -449,6 +449,8 @@ const DOWNLOAD_METADATA_FIELDS = [
   'bytes',
   'model',
   'embedded',
+  'indexingStatus',
+  'indexingError',
   'filename',
   'filepath',
   'storageKey',

@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { FileContext, FileSources } from 'librechat-data-provider';
+import { FileContext, FileIndexingStatus, FileSources } from 'librechat-data-provider';
 import type { IMongoFile } from '~/types';
 
 const file: Schema<IMongoFile> = new Schema(
@@ -52,6 +52,14 @@ const file: Schema<IMongoFile> = new Schema(
     },
     embedded: {
       type: Boolean,
+    },
+    indexingStatus: {
+      type: String,
+      enum: Object.values(FileIndexingStatus),
+    },
+    indexingError: {
+      type: String,
+      maxlength: 500,
     },
     type: {
       type: String,

@@ -646,7 +646,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
       height,
       width,
       tenantId: req.user.tenantId,
-      indexingStatus: FileIndexingStatus.SKIPPED,
+      indexingStatus: embedded === true ? FileIndexingStatus.INDEXED : FileIndexingStatus.SKIPPED,
     },
     true,
   );
