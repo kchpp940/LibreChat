@@ -499,14 +499,13 @@ export default function AgentPanel() {
           agent_id,
         });
 
-        const errors = result.items.filter((i) => i.severity === PrecheckSeverity.ERROR);
-        if (errors.length > 0) {
+        if (result.blockingErrors.length > 0) {
           setPrecheckItems(result.items);
           setShowPrecheckDialog(true);
           return;
         }
 
-        if (result.items.length > 0) {
+        if (result.warnings.length > 0) {
           setPrecheckItems(result.items);
           setPendingSubmitData(data);
           setShowPrecheckDialog(true);
@@ -514,8 +513,14 @@ export default function AgentPanel() {
         }
 
         doSubmit(data);
-      } catch {
-        doSubmit(data);
+      } catch (err) {
+        showToast({
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Precheck failed. Please check your configuration and try again.',
+          status: 'error',
+        });
       }
     },
     [

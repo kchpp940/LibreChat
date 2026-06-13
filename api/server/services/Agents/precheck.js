@@ -10,11 +10,19 @@ const {
   createMCPPermissionContext,
   resolveConfigServers,
   userCanUseMCPServers,
+  getServerConnectionStatus,
 } = require('~/server/services/MCP');
 const { getMCPServersRegistry, getMCPManager } = require('~/config');
 const { getCachedTools } = require('~/server/services/Config');
 const { getModelsConfig } = require('~/server/controllers/ModelController');
-const { filterAuthorizedTools } = require('~/server/controllers/agents/v1');
+const {
+  filterAuthorizedTools,
+  classifyAgentReferences,
+  isSubagentsCapabilityEnabled,
+} = require('~/server/controllers/agents/v1');
+const { collectEdgeAgentIds } = require('@librechat/data-schemas');
+const { getResourcePermissionsMap } = require('~/server/services/PermissionService');
+const { PermissionBits, ResourceType } = require('librechat-data-provider');
 const db = require('~/models');
 
 const PrecheckSeverity = {
@@ -31,6 +39,47 @@ const PrecheckCategory = {
   AGENT_REFERENCES: 'agent_references',
 };
 
+const PrecheckCode = {
+  REQUIRED_NAME_MISSING: 'required.name_missing',
+  REQUIRED_PROVIDER_MISSING: 'required.provider_missing',
+  REQUIRED_MODEL_MISSING: 'required.model_missing',
+  REQUIRED_CATEGORY_EMPTY: 'required.category_empty',
+  REQUIRED_INSTRUCTIONS_EMPTY: 'required.instructions_empty',
+  MODEL_CONFIG_NOT_LOADED: 'model.config_not_loaded',
+  MODEL_PROVIDER_UNAVAILABLE: 'model.provider_unavailable',
+  MODEL_NOT_AVAILABLE: 'model.not_available',
+  MODEL_VERIFY_FAILED: 'model.verify_failed',
+  TOOL_NOT_AVAILABLE: 'tool.not_available',
+  TOOL_MCP_PERMISSION_DENIED: 'tool.mcp_permission_denied',
+  TOOL_MCP_REGISTRY_UNAVAILABLE: 'tool.mcp_registry_unavailable',
+  TOOL_MCP_CONFIG_LOAD_FAILED: 'tool.mcp_config_load_failed',
+  TOOL_MCP_MALFORMED_KEY: 'tool.mcp_malformed_key',
+  TOOL_MCP_SERVER_NOT_ACCESSIBLE: 'tool.mcp_server_not_accessible',
+  TOOL_VERIFY_FAILED: 'tool.verify_failed',
+  MCP_NO_CONNECTION: 'mcp.no_connection',
+  MCP_DISCONNECTED: 'mcp.disconnected',
+  MCP_CONNECTING: 'mcp.connecting',
+  MCP_OAUTH_FAILED: 'mcp.oauth_failed',
+  MCP_OAUTH_REQUIRED: 'mcp.oauth_required',
+  MCP_INSPECTION_FAILED: 'mcp.inspection_failed',
+  MCP_STATUS_CHECK_FAILED: 'mcp.status_check_failed',
+  FILE_NOT_FOUND: 'file.not_found',
+  FILE_PERMISSION_DENIED: 'file.permission_denied',
+  FILE_INDEX_PENDING: 'file.index_pending',
+  FILE_INDEX_FAILED: 'file.index_failed',
+  FILE_INDEX_SKIPPED: 'file.index_skipped',
+  FILE_NOT_INDEXED: 'file.not_indexed',
+  FILE_VERIFY_FAILED: 'file.verify_failed',
+  SKILL_INVALID_ID: 'skill.invalid_id',
+  SKILL_NOT_FOUND: 'skill.not_found',
+  SKILL_PERMISSION_DENIED: 'skill.permission_denied',
+  SKILL_VERIFY_FAILED: 'skill.verify_failed',
+  AGENT_EDGE_MISSING: 'agent.edge_missing',
+  AGENT_EDGE_UNAUTHORIZED: 'agent.edge_unauthorized',
+  AGENT_SUBAGENT_MISSING: 'agent.subagent_missing',
+  AGENT_SUBAGENT_UNAUTHORIZED: 'agent.subagent_unauthorized',
+};
+
 const systemTools = {
   [Tools.execute_code]: true,
   [Tools.file_search]: true,
@@ -40,47 +89,67 @@ const systemTools = {
 const isMCPTool = (t) =>
   typeof t === 'string' && t.includes(Constants.mcp_delimiter) && !isActionTool(t);
 
+function errorItem(category, code, message, options = {}) {
+  return {
+    category,
+    severity: PrecheckSeverity.ERROR,
+    code,
+    message,
+    ...options,
+  };
+}
+
+function warningItem(category, code, message, options = {}) {
+  return {
+    category,
+    severity: PrecheckSeverity.WARNING,
+    code,
+    message,
+    ...options,
+  };
+}
+
 async function checkRequiredFields(data) {
   const items = [];
   if (!data.name) {
-    items.push({
-      category: PrecheckCategory.REQUIRED_FIELDS,
-      severity: PrecheckSeverity.ERROR,
-      message: 'Agent name is required',
-      field: 'name',
-    });
+    items.push(errorItem(
+      PrecheckCategory.REQUIRED_FIELDS,
+      PrecheckCode.REQUIRED_NAME_MISSING,
+      'Agent name is required',
+      { field: 'name' },
+    ));
   }
   if (!data.provider) {
-    items.push({
-      category: PrecheckCategory.REQUIRED_FIELDS,
-      severity: PrecheckSeverity.ERROR,
-      message: 'Provider is required',
-      field: 'provider',
-    });
+    items.push(errorItem(
+      PrecheckCategory.REQUIRED_FIELDS,
+      PrecheckCode.REQUIRED_PROVIDER_MISSING,
+      'Provider is required',
+      { field: 'provider' },
+    ));
   }
   if (!data.model) {
-    items.push({
-      category: PrecheckCategory.REQUIRED_FIELDS,
-      severity: PrecheckSeverity.ERROR,
-      message: 'Model is required',
-      field: 'model',
-    });
+    items.push(errorItem(
+      PrecheckCategory.REQUIRED_FIELDS,
+      PrecheckCode.REQUIRED_MODEL_MISSING,
+      'Model is required',
+      { field: 'model' },
+    ));
   }
   if (!data.category) {
-    items.push({
-      category: PrecheckCategory.REQUIRED_FIELDS,
-      severity: PrecheckSeverity.WARNING,
-      message: 'Category is not set — will default to "general"',
-      field: 'category',
-    });
+    items.push(warningItem(
+      PrecheckCategory.REQUIRED_FIELDS,
+      PrecheckCode.REQUIRED_CATEGORY_EMPTY,
+      'Category is not set — will default to "general"',
+      { field: 'category' },
+    ));
   }
   if (!data.instructions) {
-    items.push({
-      category: PrecheckCategory.REQUIRED_FIELDS,
-      severity: PrecheckSeverity.WARNING,
-      message: 'System instructions are empty — the agent may not behave as expected',
-      field: 'instructions',
-    });
+    items.push(warningItem(
+      PrecheckCategory.REQUIRED_FIELDS,
+      PrecheckCode.REQUIRED_INSTRUCTIONS_EMPTY,
+      'System instructions are empty — the agent may not behave as expected',
+      { field: 'instructions' },
+    ));
   }
   return items;
 }
@@ -93,43 +162,40 @@ async function checkModelAvailability(data, req) {
   try {
     const modelsConfig = await getModelsConfig(req);
     if (!modelsConfig) {
-      items.push({
-        category: PrecheckCategory.MODEL_AVAILABILITY,
-        severity: PrecheckSeverity.ERROR,
-        message: 'Models configuration not loaded',
-        field: 'model',
-      });
+      items.push(errorItem(
+        PrecheckCategory.MODEL_AVAILABILITY,
+        PrecheckCode.MODEL_CONFIG_NOT_LOADED,
+        'Models configuration not loaded',
+        { field: 'model' },
+      ));
       return items;
     }
     const availableModels = modelsConfig[data.provider];
     if (!availableModels) {
-      items.push({
-        category: PrecheckCategory.MODEL_AVAILABILITY,
-        severity: PrecheckSeverity.ERROR,
-        message: `No models available for provider "${data.provider}"`,
-        detail: data.provider,
-        field: 'provider',
-      });
+      items.push(errorItem(
+        PrecheckCategory.MODEL_AVAILABILITY,
+        PrecheckCode.MODEL_PROVIDER_UNAVAILABLE,
+        `No models available for provider "${data.provider}"`,
+        { detail: data.provider, field: 'provider' },
+      ));
       return items;
     }
     const modelExists = availableModels.some((m) => m === data.model);
     if (!modelExists) {
-      items.push({
-        category: PrecheckCategory.MODEL_AVAILABILITY,
-        severity: PrecheckSeverity.ERROR,
-        message: `Model "${data.model}" is not available for provider "${data.provider}"`,
-        detail: `${data.provider}|${data.model}`,
-        field: 'model',
-      });
+      items.push(errorItem(
+        PrecheckCategory.MODEL_AVAILABILITY,
+        PrecheckCode.MODEL_NOT_AVAILABLE,
+        `Model "${data.model}" is not available for provider "${data.provider}"`,
+        { detail: `${data.provider}|${data.model}`, field: 'model' },
+      ));
     }
   } catch (err) {
-    items.push({
-      category: PrecheckCategory.MODEL_AVAILABILITY,
-      severity: PrecheckSeverity.WARNING,
-      message: 'Could not verify model availability',
-      detail: err.message,
-      field: 'model',
-    });
+    items.push(warningItem(
+      PrecheckCategory.MODEL_AVAILABILITY,
+      PrecheckCode.MODEL_VERIFY_FAILED,
+      'Could not verify model availability',
+      { detail: err.message, field: 'model' },
+    ));
   }
   return items;
 }
@@ -147,13 +213,12 @@ async function checkToolPermissions(data, req) {
 
     for (const tool of nonMcpTools) {
       if (!availableTools[tool] && !systemTools[tool] && !isActionTool(tool)) {
-        items.push({
-          category: PrecheckCategory.TOOL_PERMISSIONS,
-          severity: PrecheckSeverity.ERROR,
-          message: `Tool "${tool}" is not available or not authorized`,
-          detail: tool,
-          field: 'tools',
-        });
+        items.push(errorItem(
+          PrecheckCategory.TOOL_PERMISSIONS,
+          PrecheckCode.TOOL_NOT_AVAILABLE,
+          `Tool "${tool}" is not available or not authorized`,
+          { detail: tool, field: 'tools' },
+        ));
       }
     }
 
@@ -164,12 +229,12 @@ async function checkToolPermissions(data, req) {
     const mcpPermissionContext = createMCPPermissionContext(req);
     const canUseMCP = await mcpPermissionContext.canUseServers(req.user);
     if (!canUseMCP) {
-      items.push({
-        category: PrecheckCategory.TOOL_PERMISSIONS,
-        severity: PrecheckSeverity.ERROR,
-        message: 'You do not have permission to use MCP servers',
-        field: 'tools',
-      });
+      items.push(errorItem(
+        PrecheckCategory.TOOL_PERMISSIONS,
+        PrecheckCode.TOOL_MCP_PERMISSION_DENIED,
+        'You do not have permission to use MCP servers',
+        { field: 'tools' },
+      ));
       return items;
     }
 
@@ -177,13 +242,12 @@ async function checkToolPermissions(data, req) {
     try {
       configServers = await resolveConfigServers(req);
     } catch (e) {
-      items.push({
-        category: PrecheckCategory.MCP_STATUS,
-        severity: PrecheckSeverity.WARNING,
-        message: 'MCP server registry is unavailable — cannot verify MCP tool access',
-        detail: e.message,
-        field: 'tools',
-      });
+      items.push(warningItem(
+        PrecheckCategory.MCP_STATUS,
+        PrecheckCode.TOOL_MCP_REGISTRY_UNAVAILABLE,
+        'MCP server registry is unavailable — cannot verify MCP tool access',
+        { detail: e.message, field: 'tools' },
+      ));
       return items;
     }
 
@@ -201,50 +265,43 @@ async function checkToolPermissions(data, req) {
               configServers,
             )) ?? {};
     } catch (e) {
-      items.push({
-        category: PrecheckCategory.MCP_STATUS,
-        severity: PrecheckSeverity.WARNING,
-        message: 'MCP server configs could not be loaded — cannot verify MCP tool access',
-        detail: e.message,
-        field: 'tools',
-      });
+      items.push(warningItem(
+        PrecheckCategory.MCP_STATUS,
+        PrecheckCode.TOOL_MCP_CONFIG_LOAD_FAILED,
+        'MCP server configs could not be loaded — cannot verify MCP tool access',
+        { detail: e.message, field: 'tools' },
+      ));
       return items;
     }
 
-    const rejectedMCPTools = [];
     for (const tool of mcpTools) {
       const parts = tool.split(Constants.mcp_delimiter);
       if (parts.length !== 2) {
-        rejectedMCPTools.push(tool);
-        items.push({
-          category: PrecheckCategory.TOOL_PERMISSIONS,
-          severity: PrecheckSeverity.ERROR,
-          message: `MCP tool key "${tool}" is malformed`,
-          detail: tool,
-          field: 'tools',
-        });
+        items.push(errorItem(
+          PrecheckCategory.TOOL_PERMISSIONS,
+          PrecheckCode.TOOL_MCP_MALFORMED_KEY,
+          `MCP tool key "${tool}" is malformed`,
+          { detail: tool, field: 'tools' },
+        ));
         continue;
       }
       const [, serverName] = parts;
       if (!serverName || !Object.hasOwn(mcpServerConfigs, serverName)) {
-        rejectedMCPTools.push(tool);
-        items.push({
-          category: PrecheckCategory.TOOL_PERMISSIONS,
-          severity: PrecheckSeverity.ERROR,
-          message: `MCP server "${serverName}" is not accessible for tool "${tool}"`,
-          detail: tool,
-          field: 'tools',
-        });
+        items.push(errorItem(
+          PrecheckCategory.TOOL_PERMISSIONS,
+          PrecheckCode.TOOL_MCP_SERVER_NOT_ACCESSIBLE,
+          `MCP server "${serverName}" is not accessible for tool "${tool}"`,
+          { detail: tool, field: 'tools' },
+        ));
       }
     }
   } catch (err) {
-    items.push({
-      category: PrecheckCategory.TOOL_PERMISSIONS,
-      severity: PrecheckSeverity.WARNING,
-      message: 'Could not verify tool permissions',
-      detail: err.message,
-      field: 'tools',
-    });
+    items.push(warningItem(
+      PrecheckCategory.TOOL_PERMISSIONS,
+      PrecheckCode.TOOL_VERIFY_FAILED,
+      'Could not verify tool permissions',
+      { detail: err.message, field: 'tools' },
+    ));
   }
   return items;
 }
@@ -266,6 +323,10 @@ async function checkMCPStatus(data, req) {
       .filter(Boolean),
   );
 
+  if (serverNames.size === 0) {
+    return items;
+  }
+
   try {
     const mcpPermissionContext = createMCPPermissionContext(req);
     const canUseMCP = await mcpPermissionContext.canUseServers(req.user);
@@ -273,36 +334,110 @@ async function checkMCPStatus(data, req) {
       return items;
     }
 
-    const mcpManager = getMCPManager(req.user.id);
-    if (!mcpManager) {
+    let configServers;
+    try {
+      configServers = await resolveConfigServers(req);
+    } catch (e) {
       return items;
     }
 
+    let mcpServerConfigs;
+    try {
+      mcpServerConfigs =
+        (req.user.role
+          ? await getMCPServersRegistry().getAllServerConfigs(
+              req.user.id,
+              configServers,
+              req.user.role,
+            )
+          : await getMCPServersRegistry().getAllServerConfigs(
+              req.user.id,
+              configServers,
+            )) ?? {};
+    } catch (e) {
+      return items;
+    }
+
+    const mcpManager = getMCPManager(req.user.id);
     let userConnections = new Map();
     let appConnections = new Map();
-    try {
-      userConnections = mcpManager.getUserConnections?.(req.user.id) || new Map();
-    } catch (e) {
-      // ignore
-    }
-    try {
-      appConnections = (await mcpManager.appConnections?.getLoaded?.()) || new Map();
-    } catch (e) {
-      // ignore
+    let oauthServers = new Set();
+
+    if (mcpManager) {
+      try {
+        userConnections = mcpManager.getUserConnections?.(req.user.id) || new Map();
+      } catch (e) { /* ignore */ }
+      try {
+        appConnections = (await mcpManager.appConnections?.getLoaded?.()) || new Map();
+      } catch (e) { /* ignore */ }
+      try {
+        oauthServers = (await mcpManager.getOAuthServers?.()) || new Set();
+      } catch (e) { /* ignore */ }
     }
 
     for (const serverName of serverNames) {
-      const userConn = userConnections.get?.(serverName);
-      const appConn = appConnections.get?.(serverName);
+      const config = mcpServerConfigs[serverName];
+      if (!config) {
+        continue;
+      }
 
-      if (!userConn && !appConn) {
-        items.push({
-          category: PrecheckCategory.MCP_STATUS,
-          severity: PrecheckSeverity.WARNING,
-          message: `MCP server "${serverName}" has no active connection`,
-          detail: serverName,
-          field: 'tools',
-        });
+      try {
+        const { requiresOAuth, connectionState } = await getServerConnectionStatus(
+          req.user.id,
+          serverName,
+          config,
+          appConnections,
+          userConnections,
+          oauthServers,
+        );
+
+        if (connectionState === 'disconnected') {
+          if (requiresOAuth) {
+            items.push(warningItem(
+              PrecheckCategory.MCP_STATUS,
+              PrecheckCode.MCP_OAUTH_REQUIRED,
+              `MCP server "${serverName}" requires OAuth authorization`,
+              { detail: serverName, field: 'tools' },
+            ));
+          } else {
+            items.push(warningItem(
+              PrecheckCategory.MCP_STATUS,
+              PrecheckCode.MCP_DISCONNECTED,
+              `MCP server "${serverName}" is disconnected`,
+              { detail: serverName, field: 'tools' },
+            ));
+          }
+        } else if (connectionState === 'connecting') {
+          items.push(warningItem(
+            PrecheckCategory.MCP_STATUS,
+            PrecheckCode.MCP_CONNECTING,
+            `MCP server "${serverName}" is connecting — may not be immediately available`,
+            { detail: serverName, field: 'tools' },
+          ));
+        } else if (connectionState === 'error') {
+          if (requiresOAuth) {
+            items.push(warningItem(
+              PrecheckCategory.MCP_STATUS,
+              PrecheckCode.MCP_OAUTH_FAILED,
+              `MCP server "${serverName}" OAuth authorization failed or expired`,
+              { detail: serverName, field: 'tools' },
+            ));
+          } else {
+            items.push(warningItem(
+              PrecheckCategory.MCP_STATUS,
+              PrecheckCode.MCP_INSPECTION_FAILED,
+              `MCP server "${serverName}" connection inspection failed`,
+              { detail: serverName, field: 'tools' },
+            ));
+          }
+        }
+      } catch (err) {
+        items.push(warningItem(
+          PrecheckCategory.MCP_STATUS,
+          PrecheckCode.MCP_STATUS_CHECK_FAILED,
+          `Could not verify MCP server "${serverName}" connection status`,
+          { detail: err.message, field: 'tools' },
+        ));
       }
     }
   } catch (err) {
@@ -311,7 +446,7 @@ async function checkMCPStatus(data, req) {
   return items;
 }
 
-async function checkFileIndexStatus(data, existingAgentId) {
+async function checkFileIndexStatus(data, req, existingAgentId) {
   const items = [];
   const toolResources = data.tool_resources;
   if (!toolResources) {
@@ -346,59 +481,145 @@ async function checkFileIndexStatus(data, existingAgentId) {
       file_id: 1,
       embedded: 1,
       filename: 1,
+      user: 1,
+      status: 1,
     });
 
     const filesById = new Map((files ?? []).map((f) => [f.file_id, f]));
-    const unindexed = [];
+    const fileStatuses = [];
+
     for (const fileId of allFileIds) {
       const file = filesById.get(fileId);
+      const resources = fileIdToResource.get(fileId);
       if (!file) {
-        unindexed.push({ fileId, reason: 'not_found', resources: fileIdToResource.get(fileId) });
-      } else if (file.embedded !== true) {
-        unindexed.push({
+        fileStatuses.push({
           fileId,
-          reason: 'not_indexed',
+          status: 'not_found',
+          resources,
+        });
+        continue;
+      }
+
+      if (String(file.user) !== String(req.user.id)) {
+        fileStatuses.push({
+          fileId,
+          status: 'permission_denied',
           filename: file.filename,
-          resources: fileIdToResource.get(fileId),
+          resources,
+        });
+        continue;
+      }
+
+      if (file.status === 'failed') {
+        fileStatuses.push({
+          fileId,
+          status: 'failed',
+          filename: file.filename,
+          resources,
+        });
+      } else if (file.status === 'pending') {
+        fileStatuses.push({
+          fileId,
+          status: 'pending',
+          filename: file.filename,
+          resources,
+        });
+      } else if (file.embedded !== true) {
+        fileStatuses.push({
+          fileId,
+          status: 'skipped',
+          filename: file.filename,
+          resources,
+        });
+      } else {
+        fileStatuses.push({
+          fileId,
+          status: 'indexed',
+          filename: file.filename,
+          resources,
         });
       }
     }
 
-    if (unindexed.length > 0) {
-      const notFoundCount = unindexed.filter((f) => f.reason === 'not_found').length;
-      const notIndexedCount = unindexed.filter((f) => f.reason === 'not_indexed').length;
+    const notFound = fileStatuses.filter((f) => f.status === 'not_found');
+    const permissionDenied = fileStatuses.filter((f) => f.status === 'permission_denied');
+    const pending = fileStatuses.filter((f) => f.status === 'pending');
+    const failed = fileStatuses.filter((f) => f.status === 'failed');
+    const skipped = fileStatuses.filter((f) => f.status === 'skipped');
 
-      const parts = [];
-      if (notIndexedCount > 0) {
-        parts.push(`${notIndexedCount} file(s) not yet indexed for retrieval`);
+    const affectedResources = new Set();
+    for (const f of [...notFound, ...permissionDenied, ...pending, ...failed, ...skipped]) {
+      for (const r of f.resources ?? []) {
+        affectedResources.add(r);
       }
-      if (notFoundCount > 0) {
-        parts.push(`${notFoundCount} file reference(s) no longer exist`);
-      }
+    }
 
-      const affectedResources = new Set();
-      for (const f of unindexed) {
-        for (const r of f.resources ?? []) {
-          affectedResources.add(r);
-        }
-      }
+    for (const f of notFound) {
+      items.push(warningItem(
+        PrecheckCategory.FILE_INDEX,
+        PrecheckCode.FILE_NOT_FOUND,
+        `File reference "${f.fileId}" no longer exists`,
+        {
+          detail: f.fileId,
+          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
+        },
+      ));
+    }
 
-      items.push({
-        category: PrecheckCategory.FILE_INDEX,
-        severity: PrecheckSeverity.WARNING,
-        message: parts.join('; '),
-        detail: unindexed.map((f) => f.fileId).join(', '),
-        field: [...affectedResources].map((r) => `tool_resources.${r}`).join(', '),
-      });
+    for (const f of permissionDenied) {
+      items.push(errorItem(
+        PrecheckCategory.FILE_INDEX,
+        PrecheckCode.FILE_PERMISSION_DENIED,
+        `You do not have permission to use file "${f.filename}"`,
+        {
+          detail: f.fileId,
+          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
+        },
+      ));
+    }
+
+    for (const f of pending) {
+      items.push(warningItem(
+        PrecheckCategory.FILE_INDEX,
+        PrecheckCode.FILE_INDEX_PENDING,
+        `File "${f.filename}" is still being indexed`,
+        {
+          detail: f.fileId,
+          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
+        },
+      ));
+    }
+
+    for (const f of failed) {
+      items.push(warningItem(
+        PrecheckCategory.FILE_INDEX,
+        PrecheckCode.FILE_INDEX_FAILED,
+        `File "${f.filename}" failed to index`,
+        {
+          detail: f.fileId,
+          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
+        },
+      ));
+    }
+
+    for (const f of skipped) {
+      items.push(warningItem(
+        PrecheckCategory.FILE_INDEX,
+        PrecheckCode.FILE_INDEX_SKIPPED,
+        `File "${f.filename}" was skipped during indexing`,
+        {
+          detail: f.fileId,
+          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
+        },
+      ));
     }
   } catch (err) {
-    items.push({
-      category: PrecheckCategory.FILE_INDEX,
-      severity: PrecheckSeverity.WARNING,
-      message: 'Could not verify file index status',
-      detail: err.message,
-      field: 'tool_resources',
-    });
+    items.push(warningItem(
+      PrecheckCategory.FILE_INDEX,
+      PrecheckCode.FILE_VERIFY_FAILED,
+      'Could not verify file index status',
+      { detail: err.message, field: 'tool_resources' },
+    ));
   }
   return items;
 }
@@ -409,25 +630,22 @@ async function checkSkills(data, req) {
     return items;
   }
 
+  const { isValidObjectIdString } = require('@librechat/data-schemas');
+
   const skillIds = Array.isArray(data.skills) ? data.skills : [];
   if (skillIds.length === 0) {
     return items;
   }
 
-  const { PermissionBits, ResourceType } = require('librechat-data-provider');
-  const { isValidObjectIdString } = require('@librechat/data-schemas');
-  const { getResourcePermissionsMap } = require('~/server/services/PermissionService');
-
   const validSkillIds = [];
   for (const id of skillIds) {
     if (!isValidObjectIdString(id)) {
-      items.push({
-        category: PrecheckCategory.TOOL_PERMISSIONS,
-        severity: PrecheckSeverity.ERROR,
-        message: `Skill reference "${id}" is not a valid ID`,
-        detail: id,
-        field: 'skills',
-      });
+      items.push(errorItem(
+        PrecheckCategory.TOOL_PERMISSIONS,
+        PrecheckCode.SKILL_INVALID_ID,
+        `Skill reference "${id}" is not a valid ID`,
+        { detail: id, field: 'skills' },
+      ));
     } else {
       validSkillIds.push(id);
     }
@@ -444,13 +662,12 @@ async function checkSkills(data, req) {
     const missing = validSkillIds.filter((id) => !foundIds.has(id));
 
     for (const id of missing) {
-      items.push({
-        category: PrecheckCategory.TOOL_PERMISSIONS,
-        severity: PrecheckSeverity.ERROR,
-        message: `Skill "${id}" referenced no longer exists`,
-        detail: id,
-        field: 'skills',
-      });
+      items.push(errorItem(
+        PrecheckCategory.TOOL_PERMISSIONS,
+        PrecheckCode.SKILL_NOT_FOUND,
+        `Skill "${id}" referenced no longer exists`,
+        { detail: id, field: 'skills' },
+      ));
     }
 
     if (foundSkills.length > 0) {
@@ -465,25 +682,23 @@ async function checkSkills(data, req) {
         const skillIdStr = skill._id.toString();
         const bits = permissionsMap.get(skillIdStr) ?? 0;
         if ((bits & PermissionBits.USE) === 0) {
-          items.push({
-            category: PrecheckCategory.TOOL_PERMISSIONS,
-            severity: PrecheckSeverity.ERROR,
-            message: `You do not have USE permission for skill "${skill.metadata?.display_name ?? skill.name ?? skill._id}"`,
-            detail: skillIdStr,
-            field: 'skills',
-          });
+          items.push(errorItem(
+            PrecheckCategory.TOOL_PERMISSIONS,
+            PrecheckCode.SKILL_PERMISSION_DENIED,
+            `You do not have USE permission for skill "${skill.metadata?.display_name ?? skill.name ?? skill._id}"`,
+            { detail: skillIdStr, field: 'skills' },
+          ));
         }
       }
     }
   } catch (err) {
     logger.warn('[precheck] Skills validation failed', err.message);
-    items.push({
-      category: PrecheckCategory.TOOL_PERMISSIONS,
-      severity: PrecheckSeverity.WARNING,
-      message: 'Could not verify skill access permissions',
-      detail: err.message,
-      field: 'skills',
-    });
+    items.push(warningItem(
+      PrecheckCategory.TOOL_PERMISSIONS,
+      PrecheckCode.SKILL_VERIFY_FAILED,
+      'Could not verify skill access permissions',
+      { detail: err.message, field: 'skills' },
+    ));
   }
 
   return items;
@@ -493,112 +708,64 @@ async function checkAgentReferences(data, req) {
   const items = [];
   const { id: userId, role: userRole } = req.user;
 
-  const edgeAgentIds = new Set();
-  if (data.edges?.length) {
-    for (const edge of data.edges) {
-      const fromIds = Array.isArray(edge.from) ? edge.from : [edge.from];
-      const toIds = Array.isArray(edge.to) ? edge.to : [edge.to];
-      for (const id of [...fromIds, ...toIds]) {
-        if (id && id !== data.agent_id) {
-          edgeAgentIds.add(id);
-        }
-      }
-    }
-  }
-
-  if (edgeAgentIds.size > 0) {
-    const ids = [...edgeAgentIds];
-    const agents = await db.getAgents({ id: { $in: ids } });
-    const foundIds = new Set(agents.map((a) => a.id));
-    const missing = ids.filter((id) => !foundIds.has(id));
-
-    if (missing.length > 0) {
-      for (const id of missing) {
-        items.push({
-          category: PrecheckCategory.AGENT_REFERENCES,
-          severity: PrecheckSeverity.WARNING,
-          message: `Edge references agent "${id}" which does not exist yet`,
-          detail: id,
-          field: 'edges',
-        });
-      }
-    }
-
-    if (agents.length > 0) {
-      const {
-        getResourcePermissionsMap,
-      } = require('~/server/services/PermissionService');
-      const { ResourceType, PermissionBits } = require('librechat-data-provider');
-      const permissionsMap = await getResourcePermissionsMap({
+  const edgeAgentIdSet = collectEdgeAgentIds(data.edges);
+  if (edgeAgentIdSet.size > 0) {
+    const edgeAgentIds = [...edgeAgentIdSet].filter((id) => id !== data.agent_id);
+    if (edgeAgentIds.length > 0) {
+      const { missing, unauthorized } = await classifyAgentReferences(
+        edgeAgentIds,
         userId,
-        role: userRole,
-        resourceType: ResourceType.AGENT,
-        resourceIds: agents.map((a) => a._id),
-      });
+        userRole,
+      );
 
-      for (const agent of agents) {
-        const bits = permissionsMap.get(agent._id.toString()) ?? 0;
-        if ((bits & PermissionBits.VIEW) === 0) {
-          items.push({
-            category: PrecheckCategory.AGENT_REFERENCES,
-            severity: PrecheckSeverity.ERROR,
-            message: `You do not have access to agent "${agent.id}" referenced in edges`,
-            detail: agent.id,
-            field: 'edges',
-          });
-        }
+      for (const id of missing) {
+        items.push(warningItem(
+          PrecheckCategory.AGENT_REFERENCES,
+          PrecheckCode.AGENT_EDGE_MISSING,
+          `Edge references agent "${id}" which does not exist yet`,
+          { detail: id, field: 'edges' },
+        ));
+      }
+
+      for (const id of unauthorized) {
+        items.push(errorItem(
+          PrecheckCategory.AGENT_REFERENCES,
+          PrecheckCode.AGENT_EDGE_UNAUTHORIZED,
+          `You do not have access to agent "${id}" referenced in edges`,
+          { detail: id, field: 'edges' },
+        ));
       }
     }
   }
 
-  const capabilities = req.config?.endpoints?.[EModelEndpoint.agents]?.capabilities;
-  const subagentsEnabled =
-    Array.isArray(capabilities) && capabilities.includes(AgentCapabilities.subagents);
-
+  const subagentsEnabled = isSubagentsCapabilityEnabled(req);
   if (
     subagentsEnabled &&
     data.subagents?.enabled === true &&
     data.subagents?.agent_ids?.length
   ) {
-    const subAgentIds = data.subagents.agent_ids;
-    const agents = await db.getAgents({ id: { $in: subAgentIds } });
-    const foundIds = new Set(agents.map((a) => a.id));
-    const missing = subAgentIds.filter((id) => !foundIds.has(id));
+    const { missing, unauthorized } = await classifyAgentReferences(
+      data.subagents.agent_ids,
+      userId,
+      userRole,
+    );
 
     for (const id of missing) {
-      items.push({
-        category: PrecheckCategory.AGENT_REFERENCES,
-        severity: PrecheckSeverity.ERROR,
-        message: `Subagent references agent "${id}" which does not exist`,
-        detail: id,
-        field: 'subagents',
-      });
+      items.push(errorItem(
+        PrecheckCategory.AGENT_REFERENCES,
+        PrecheckCode.AGENT_SUBAGENT_MISSING,
+        `Subagent references agent "${id}" which does not exist`,
+        { detail: id, field: 'subagents' },
+      ));
     }
 
-    if (agents.length > 0) {
-      const {
-        getResourcePermissionsMap,
-      } = require('~/server/services/PermissionService');
-      const { ResourceType, PermissionBits } = require('librechat-data-provider');
-      const permissionsMap = await getResourcePermissionsMap({
-        userId,
-        role: userRole,
-        resourceType: ResourceType.AGENT,
-        resourceIds: agents.map((a) => a._id),
-      });
-
-      for (const agent of agents) {
-        const bits = permissionsMap.get(agent._id.toString()) ?? 0;
-        if ((bits & PermissionBits.VIEW) === 0) {
-          items.push({
-            category: PrecheckCategory.AGENT_REFERENCES,
-            severity: PrecheckSeverity.ERROR,
-            message: `You do not have access to agent "${agent.id}" referenced in subagents`,
-            detail: agent.id,
-            field: 'subagents',
-          });
-        }
-      }
+    for (const id of unauthorized) {
+      items.push(errorItem(
+        PrecheckCategory.AGENT_REFERENCES,
+        PrecheckCode.AGENT_SUBAGENT_UNAUTHORIZED,
+        `You do not have access to agent "${id}" referenced in subagents`,
+        { detail: id, field: 'subagents' },
+      ));
     }
   }
 
@@ -606,30 +773,32 @@ async function checkAgentReferences(data, req) {
 }
 
 async function performAgentPrecheck(data, req, existingAgentId) {
-  const allItems = [];
-
   const [required, model, tools, mcp, files, skills, agents] = await Promise.all([
     checkRequiredFields(data),
     checkModelAvailability(data, req),
     checkToolPermissions(data, req),
     checkMCPStatus(data, req),
-    checkFileIndexStatus(data, existingAgentId),
+    checkFileIndexStatus(data, req, existingAgentId),
     checkSkills(data, req),
     checkAgentReferences(data, req),
   ]);
 
-  allItems.push(...required, ...model, ...tools, ...mcp, ...files, ...skills, ...agents);
+  const allItems = [...required, ...model, ...tools, ...mcp, ...files, ...skills, ...agents];
 
-  const hasErrors = allItems.some((item) => item.severity === PrecheckSeverity.ERROR);
+  const blockingErrors = allItems.filter((item) => item.severity === PrecheckSeverity.ERROR);
+  const warnings = allItems.filter((item) => item.severity === PrecheckSeverity.WARNING);
 
   return {
-    valid: !hasErrors,
+    valid: blockingErrors.length === 0,
     items: allItems,
+    blockingErrors,
+    warnings,
   };
 }
 
 module.exports = {
   PrecheckSeverity,
   PrecheckCategory,
+  PrecheckCode,
   performAgentPrecheck,
 };
