@@ -1,5 +1,5 @@
 import { Document, Types } from 'mongoose';
-import type { CodeEnvRef } from 'librechat-data-provider';
+import type { CodeEnvRef, FileIndexingStatus as FileIndexingStatusType } from 'librechat-data-provider';
 
 export interface IMongoFile extends Omit<Document, 'model'> {
   user: Types.ObjectId;
@@ -55,6 +55,19 @@ export interface IMongoFile extends Omit<Document, 'model'> {
   storageRegion?: string;
   object: 'file';
   embedded?: boolean;
+  /**
+   * Unified indexing status for vector / RAG retrieval. Set by the
+   * upload pipeline at persist time; consumers (precheck, UI) MUST
+   * read this field instead of inferring from `embedded` / `source`.
+   *
+   * - `indexed`  – file is in the vector store and retrievable
+   * - `pending`  – embedding in progress
+   * - `failed`   – embedding attempted and failed
+   * - `skipped`  – file was stored as an attachment only (no embedding)
+   *
+   * Absent on legacy records; treat as `skipped`.
+   */
+  indexingStatus?: FileIndexingStatusType;
   type: string;
   context?: string;
   usage: number;

@@ -401,9 +401,7 @@ describe('Agent Precheck Service', () => {
           file_id: 'file-1',
           filename: 'test.pdf',
           user: 'other-user-id',
-          source: 'vectordb',
-          embedded: true,
-          status: 'ready',
+          indexingStatus: 'indexed',
         },
       ]);
 
@@ -427,15 +425,13 @@ describe('Agent Precheck Service', () => {
       expect(result.valid).toBe(false);
     });
 
-    test('reports pending indexing as WARNING', async () => {
+    test('reports pending indexingStatus as WARNING', async () => {
       getFiles.mockResolvedValueOnce([
         {
           file_id: 'file-1',
           filename: 'test.pdf',
           user: 'test-user-id',
-          source: 'local',
-          embedded: false,
-          status: 'pending',
+          indexingStatus: 'pending',
         },
       ]);
 
@@ -459,15 +455,13 @@ describe('Agent Precheck Service', () => {
       expect(result.valid).toBe(true);
     });
 
-    test('reports failed indexing as WARNING', async () => {
+    test('reports failed indexingStatus as WARNING', async () => {
       getFiles.mockResolvedValueOnce([
         {
           file_id: 'file-1',
           filename: 'test.pdf',
           user: 'test-user-id',
-          source: 'local',
-          embedded: false,
-          status: 'failed',
+          indexingStatus: 'failed',
         },
       ]);
 
@@ -490,15 +484,13 @@ describe('Agent Precheck Service', () => {
       expect(failedWarnings.length).toBe(1);
     });
 
-    test('reports skipped indexing as WARNING (not blocking)', async () => {
+    test('reports skipped indexingStatus as WARNING (not blocking)', async () => {
       getFiles.mockResolvedValueOnce([
         {
           file_id: 'file-1',
           filename: 'image.png',
           user: 'test-user-id',
-          source: 'local',
-          embedded: false,
-          status: 'ready',
+          indexingStatus: 'skipped',
         },
       ]);
 
@@ -522,15 +514,13 @@ describe('Agent Precheck Service', () => {
       expect(result.valid).toBe(true);
     });
 
-    test('vectordb source file is indexed (no warnings)', async () => {
+    test('indexingStatus=indexed produces no warnings', async () => {
       getFiles.mockResolvedValueOnce([
         {
           file_id: 'file-1',
           filename: 'test.pdf',
           user: 'test-user-id',
-          source: 'vectordb',
-          embedded: false,
-          status: 'ready',
+          indexingStatus: 'indexed',
         },
       ]);
 
@@ -552,15 +542,12 @@ describe('Agent Precheck Service', () => {
       expect(fileIndexItems.length).toBe(0);
     });
 
-    test('embedded=true with local source is indexed (no warnings)', async () => {
+    test('absent indexingStatus treated as skipped (legacy files)', async () => {
       getFiles.mockResolvedValueOnce([
         {
           file_id: 'file-1',
-          filename: 'test.pdf',
+          filename: 'legacy.pdf',
           user: 'test-user-id',
-          source: 'local',
-          embedded: true,
-          status: 'ready',
         },
       ]);
 
@@ -576,10 +563,11 @@ describe('Agent Precheck Service', () => {
 
       const result = await performAgentPrecheck(data, mockReq);
 
-      const fileIndexItems = result.items.filter(
-        (i) => i.category === PrecheckCategory.FILE_INDEX,
+      const skippedWarnings = result.warnings.filter(
+        (i) => i.category === PrecheckCategory.FILE_INDEX &&
+          i.code === PrecheckCode.FILE_INDEX_SKIPPED,
       );
-      expect(fileIndexItems.length).toBe(0);
+      expect(skippedWarnings.length).toBe(1);
     });
   });
 

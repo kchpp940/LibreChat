@@ -641,6 +641,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
       type: file.mimetype,
       ...(await getRetentionExpiry(req)),
       embedded,
+      indexingStatus: embedded === true ? 'indexed' : 'skipped',
       source,
       height,
       width,
@@ -772,6 +773,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
           filename: file.originalname,
           model: messageAttachment ? undefined : req.body.model,
           context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
+          indexingStatus: 'skipped',
           tenantId: req.user.tenantId,
         }),
         ...retentionExpiry,
@@ -918,9 +920,13 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
   } = storageResult;
   // For RAG files, use embedding result; for others, use storage result
   let embedded = storageResult.embedded;
+  let indexingStatus;
   if (tool_resource === EToolResources.file_search) {
     embedded = embeddingResult?.embedded;
     filename = embeddingResult?.filename || filename;
+    indexingStatus = embedded === true ? 'indexed' : 'failed';
+  } else {
+    indexingStatus = 'skipped';
   }
 
   let filepath = _filepath;
@@ -975,6 +981,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       metadata: fileInfoMetadata,
       type: file.mimetype,
       embedded,
+      indexingStatus,
       source,
       height,
       width,

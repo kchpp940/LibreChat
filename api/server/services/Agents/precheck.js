@@ -5,7 +5,6 @@ const {
   isActionTool,
   EModelEndpoint,
   AgentCapabilities,
-  FileSources,
 } = require('librechat-data-provider');
 const {
   createMCPPermissionContext,
@@ -594,136 +593,73 @@ async function checkFileIndexStatus(data, req, existingAgentId) {
   try {
     const files = await db.getFiles({ file_id: { $in: allFileIds } }, null, {
       file_id: 1,
-      embedded: 1,
       filename: 1,
       user: 1,
-      source: 1,
-      status: 1,
+      indexingStatus: 1,
     });
 
     const filesById = new Map((files ?? []).map((f) => [f.file_id, f]));
-    const fileStatuses = [];
 
     for (const fileId of allFileIds) {
       const file = filesById.get(fileId);
       const resources = fileIdToResource.get(fileId);
+      const fieldStr = [...new Set(resources)].map((r) => `tool_resources.${r}`).join(', ');
+
       if (!file) {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'not_found',
-          resources,
-        });
+        items.push(warningItem(
+          PrecheckCategory.FILE_INDEX,
+          PrecheckCode.FILE_NOT_FOUND,
+          `File reference "${fileId}" no longer exists`,
+          { detail: fileId, field: fieldStr },
+        ));
         continue;
       }
 
       if (String(file.user) !== String(req.user.id)) {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'permission_denied',
-          filename: file.filename,
-          resources,
-        });
-        continue;
-      }
-
-      const isFileSearch = resources.includes('file_search');
-      const isVectordbSource = file.source === FileSources.vectordb;
-      const isEmbedded = file.embedded === true;
-
-      if (isVectordbSource) {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'indexed',
-          filename: file.filename,
-          resources,
-        });
-      } else if (file.status === 'failed') {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'failed',
-          filename: file.filename,
-          resources,
-        });
-      } else if (file.status === 'pending') {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'pending',
-          filename: file.filename,
-          resources,
-        });
-      } else if (isEmbedded) {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'indexed',
-          filename: file.filename,
-          resources,
-        });
-      } else if (isFileSearch) {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'skipped',
-          filename: file.filename,
-          resources,
-        });
-      } else {
-        fileStatuses.push({
-          fileId,
-          indexingStatus: 'attachment_only',
-          filename: file.filename,
-          resources,
-        });
-      }
-    }
-
-    for (const f of fileStatuses) {
-      if (f.indexingStatus === 'indexed' || f.indexingStatus === 'attachment_only') {
-        continue;
-      }
-      const fieldStr = [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', ');
-
-      if (f.indexingStatus === 'not_found') {
-        items.push(warningItem(
-          PrecheckCategory.FILE_INDEX,
-          PrecheckCode.FILE_NOT_FOUND,
-          `File reference "${f.fileId}" no longer exists`,
-          { detail: f.fileId, field: fieldStr },
-        ));
-      } else if (f.indexingStatus === 'permission_denied') {
         items.push(errorItem(
           PrecheckCategory.FILE_INDEX,
           PrecheckCode.FILE_PERMISSION_DENIED,
-          `You do not have permission to use file "${f.filename}"`,
-          { detail: f.fileId, field: fieldStr },
+          `You do not have permission to use file "${file.filename}"`,
+          { detail: fileId, field: fieldStr },
         ));
-      } else if (f.indexingStatus === 'pending') {
+        continue;
+      }
+
+      const status = file.indexingStatus;
+
+      if (status === 'indexed') {
+        continue;
+      }
+
+      if (status === 'pending') {
         items.push(warningItem(
           PrecheckCategory.FILE_INDEX,
           PrecheckCode.FILE_INDEX_PENDING,
-          `File "${f.filename}" is still being indexed for retrieval`,
-          { detail: f.fileId, field: fieldStr },
+          `File "${file.filename}" is still being indexed for retrieval`,
+          { detail: fileId, field: fieldStr },
         ));
-      } else if (f.indexingStatus === 'failed') {
+      } else if (status === 'failed') {
         items.push(warningItem(
           PrecheckCategory.FILE_INDEX,
           PrecheckCode.FILE_INDEX_FAILED,
-          `File "${f.filename}" failed to index for retrieval`,
-          { detail: f.fileId, field: fieldStr },
+          `File "${file.filename}" failed to index for retrieval`,
+          { detail: fileId, field: fieldStr },
         ));
-      } else if (f.indexingStatus === 'skipped') {
-        const isFileSearch = f.resources.includes('file_search');
+      } else {
+        const isFileSearch = resources.includes('file_search');
         if (isFileSearch) {
           items.push(warningItem(
             PrecheckCategory.FILE_INDEX,
             PrecheckCode.FILE_INDEX_SKIPPED,
-            `File "${f.filename}" was not embedded — it is only attached, not indexed for retrieval`,
-            { detail: f.fileId, field: fieldStr },
+            `File "${file.filename}" was not embedded — it is only attached, not indexed for retrieval`,
+            { detail: fileId, field: fieldStr },
           ));
         } else {
           items.push(warningItem(
             PrecheckCategory.FILE_INDEX,
             PrecheckCode.FILE_INDEX_SKIPPED,
-            `File "${f.filename}" is attached but not indexed for retrieval`,
-            { detail: f.fileId, field: fieldStr },
+            `File "${file.filename}" is attached but not indexed for retrieval`,
+            { detail: fileId, field: fieldStr },
           ));
         }
       }

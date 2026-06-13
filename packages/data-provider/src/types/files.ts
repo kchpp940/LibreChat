@@ -18,6 +18,13 @@ export enum FileSources {
   document_parser = 'document_parser',
 }
 
+export enum FileIndexingStatus {
+  pending = 'pending',
+  failed = 'failed',
+  skipped = 'skipped',
+  indexed = 'indexed',
+}
+
 export const checkOpenAIStorage = (source: string) =>
   source === FileSources.openai || source === FileSources.azure;
 
