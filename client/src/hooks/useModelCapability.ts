@@ -1,94 +1,61 @@
-import { useMemo } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useMemo, useRef, useEffect } from 'react';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
 import {
   EModelEndpoint,
-  visionModels,
-  documentSupportedProviders,
   isModelInfoArray,
   findModelCapability,
-  ReasoningParameterFormat,
+  resolveCapability,
+  stripUnsupportedByCapability,
+  detectCapabilityChange,
+  type TModelCapability,
+  type TModelInfo,
+  type StripTarget,
 } from 'librechat-data-provider';
-import type { TModelCapability, TModelInfo } from 'librechat-data-provider';
-import store from '~/store';
 
-function getHeuristicCapability(
-  endpoint: string | null | undefined,
-  model: string | null | undefined,
-  endpointType?: string | null,
-): TModelCapability | null {
-  const resolvedEndpoint = endpointType ?? endpoint;
-  if (!resolvedEndpoint) {
-    return null;
-  }
+export { detectCapabilityChange, stripUnsupportedByCapability };
+export type { StripTarget };
 
-  const isVision =
-    model != null &&
-    model.length > 0 &&
-    visionModels.some((prefix) => model.includes(prefix));
+export function useCapabilityStripper(
+  capability: TModelCapability | null,
+  target: StripTarget | null,
+): StripTarget | null {
+  return useMemo(() => {
+    if (!capability || !target) {
+      return target;
+    }
+    return stripUnsupportedByCapability(target, capability);
+  }, [capability, target]);
+}
 
-  const supportsFiles = documentSupportedProviders.has(resolvedEndpoint);
+export function useCapabilityChange(
+  capability: TModelCapability | null,
+  onStrip: (change: {
+    needStripVision: boolean;
+    needStripTools: boolean;
+    needStripFileSearch: boolean;
+    needStripParams: boolean;
+  }) => void,
+  deps: React.DependencyList = [],
+) {
+  const prevCapability = useRef<TModelCapability | null>(null);
 
-  const defaultCapability: TModelCapability = {
-    vision: isVision,
-    file_upload: supportsFiles,
-    file_search: false,
-    audio_input: false,
-    video_input: false,
-    tool_calling:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.agents ||
-      resolvedEndpoint === EModelEndpoint.assistants ||
-      resolvedEndpoint === EModelEndpoint.azureAssistants ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI ||
-      resolvedEndpoint === EModelEndpoint.anthropic ||
-      resolvedEndpoint === EModelEndpoint.google ||
-      resolvedEndpoint === EModelEndpoint.bedrock ||
-      resolvedEndpoint === EModelEndpoint.custom,
-    web_search: false,
-    code_interpreter: false,
-    mcp: resolvedEndpoint === EModelEndpoint.agents,
-    skills: resolvedEndpoint === EModelEndpoint.agents,
-    agents: false,
-    subagents: resolvedEndpoint === EModelEndpoint.agents,
-    json_mode:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI ||
-      resolvedEndpoint === EModelEndpoint.anthropic ||
-      resolvedEndpoint === EModelEndpoint.google,
-    structured_output:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI ||
-      resolvedEndpoint === EModelEndpoint.google,
-    streaming: true,
-    thinking: false,
-    artifacts: resolvedEndpoint === EModelEndpoint.agents,
-    reasoning_effort: false,
-    reasoning_format: ReasoningParameterFormat.disabled,
-    supports_temperature: true,
-    supports_top_p: true,
-    supports_top_k: resolvedEndpoint === EModelEndpoint.google,
-    supports_frequency_penalty:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI,
-    supports_presence_penalty:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI,
-    supports_stop:
-      resolvedEndpoint === EModelEndpoint.openAI ||
-      resolvedEndpoint === EModelEndpoint.azureOpenAI ||
-      resolvedEndpoint === EModelEndpoint.anthropic,
-    supports_max_tokens: true,
-    anthropic_thinking: resolvedEndpoint === EModelEndpoint.anthropic,
-    anthropic_effort: resolvedEndpoint === EModelEndpoint.anthropic,
-    google_thinking: resolvedEndpoint === EModelEndpoint.google,
-    prompt_caching: resolvedEndpoint === EModelEndpoint.anthropic,
-    image_detail: isVision,
-    resend_files: true,
-    prompt_prefix: true,
-  };
-
-  return defaultCapability;
+  useEffect(() => {
+    if (!capability) {
+      prevCapability.current = null;
+      return;
+    }
+    const change = detectCapabilityChange(prevCapability.current, capability);
+    prevCapability.current = capability;
+    const needAction =
+      change.needStripVision ||
+      change.needStripTools ||
+      change.needStripFileSearch ||
+      change.needStripParams;
+    if (needAction) {
+      onStrip(change);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capability, ...deps]);
 }
 
 export default function useModelCapability(
@@ -96,10 +63,9 @@ export default function useModelCapability(
   model: string | null | undefined,
   endpointType?: string | null,
 ): TModelCapability | null {
-  const endpointsConfig = useRecoilValue(store.endpointsConfig);
   const modelsQuery = useGetModelsQuery();
 
-  const resolvedEndpoint = endpointType ?? endpoint;
+  const resolvedEndpoint = endpointType ?? endpoint ?? EModelEndpoint.custom;
 
   const capability = useMemo(() => {
     if (!resolvedEndpoint) {
@@ -114,8 +80,11 @@ export default function useModelCapability(
       }
     }
 
-    return getHeuristicCapability(endpoint, model, endpointType);
-  }, [resolvedEndpoint, model, endpointType, modelsQuery.data, endpointsConfig]);
+    return resolveCapability({
+      endpoint: resolvedEndpoint,
+      model: model ?? '',
+    });
+  }, [resolvedEndpoint, model, modelsQuery.data]);
 
   return capability;
 }

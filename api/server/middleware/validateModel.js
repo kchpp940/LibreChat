@@ -2,6 +2,7 @@ const { handleError } = require('@librechat/api');
 const {
   ViolationTypes,
   findModelCapability,
+  resolveCapability,
   extractModelNames,
 } = require('librechat-data-provider');
 const { getModelsConfig } = require('~/server/controllers/ModelController');
@@ -48,10 +49,9 @@ const validateModel = async (req, res, next) => {
   let validModel = modelNames.includes(model);
 
   if (validModel) {
-    const capability = findModelCapability(availableModels, model);
-    if (capability) {
-      req.body.modelCapability = capability;
-    }
+    const capability = findModelCapability(availableModels, model)
+      ?? resolveCapability({ endpoint, model });
+    req.body.modelCapability = capability;
     return next();
   }
 

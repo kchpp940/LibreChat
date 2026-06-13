@@ -3,15 +3,25 @@ import {
   TConversation,
   EModelEndpoint,
   tConvoUpdateSchema,
+  resolveCapability,
+  stripUnsupportedByCapability,
+  type TModelCapability,
+  type StripTarget,
 } from 'librechat-data-provider';
 import type { TSetExample, TSetOption, TSetOptionsPayload } from '~/common';
 import usePresetIndexOptions from './usePresetIndexOptions';
 import { useChatContext } from '~/Providers/ChatContext';
+import useModelCapability from '~/hooks/useModelCapability';
 
 type TUseSetOptions = (preset?: TPreset | boolean | null) => TSetOptionsPayload;
 
 const useSetIndexOptions: TUseSetOptions = (preset = false) => {
   const { conversation, setConversation } = useChatContext();
+  const currentCapability = useModelCapability(
+    conversation?.endpoint,
+    conversation?.model,
+    conversation?.endpointType,
+  );
 
   const result = usePresetIndexOptions(preset);
 
@@ -31,7 +41,6 @@ const useSetIndexOptions: TUseSetOptions = (preset = false) => {
       };
     }
 
-    // Auto-enable Responses API when web search is enabled (only for OpenAI/Azure/Custom endpoints)
     if (param === 'web_search' && newValue === true) {
       const currentEndpoint = conversation?.endpoint;
       const isOpenAICompatible =
@@ -45,6 +54,49 @@ const useSetIndexOptions: TUseSetOptions = (preset = false) => {
           update['useResponsesApi'] = true;
         }
       }
+    }
+
+    if (param === 'model' && conversation) {
+      const newModel = typeof newValue === 'string' ? newValue : conversation.model;
+      const resolvedEndpoint = (conversation.endpointType ?? conversation.endpoint ?? EModelEndpoint.custom) as string;
+      const newCapability: TModelCapability = resolveCapability({
+        endpoint: resolvedEndpoint,
+        model: newModel ?? '',
+      });
+      const stripped = stripUnsupportedByCapability(
+        {
+          ...(conversation as unknown as StripTarget),
+          ...(update as unknown as StripTarget),
+        },
+        newCapability,
+      ) as unknown as Partial<TConversation> & Record<string, unknown>;
+
+      if (currentCapability) {
+        const stripVision = currentCapability.vision && !newCapability.vision;
+        const stripFileSearch = currentCapability.file_search && !newCapability.file_search;
+        const stripTools = currentCapability.tool_calling && !newCapability.tool_calling;
+
+        if (stripVision) {
+          stripped.attachments = undefined;
+          stripped.files = undefined;
+        }
+        if (stripFileSearch) {
+          stripped.file_ids = undefined;
+        }
+        if (stripTools) {
+          stripped.tools = undefined;
+          stripped.tools_payload = undefined;
+        }
+      }
+
+      setConversation(
+        (prevState) =>
+          tConvoUpdateSchema.parse({
+            ...prevState,
+            ...stripped,
+          }) as TConversation,
+      );
+      return;
     }
 
     setConversation(
