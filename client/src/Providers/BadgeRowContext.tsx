@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useSetRecoilState } from 'recoil';
 import { Tools, Constants, LocalStorageKeys, AgentCapabilities } from 'librechat-data-provider';
-import type { TAgentsEndpoint, TEphemeralAgent } from 'librechat-data-provider';
+import type { TAgentsEndpoint, TEphemeralAgent, TModelCapability } from 'librechat-data-provider';
 import {
   useMCPServerManager,
   useSearchApiKeyForm,
@@ -16,6 +16,7 @@ interface BadgeRowContextType {
   conversationId?: string | null;
   storageContextKey?: string;
   agentsConfig?: TAgentsEndpoint | null;
+  capability?: TModelCapability | null;
   skills: ReturnType<typeof useToolToggle>;
   webSearch: ReturnType<typeof useToolToggle>;
   artifacts: ReturnType<typeof useToolToggle>;
@@ -36,6 +37,7 @@ interface BadgeRowProviderProps {
   isSubmitting?: boolean;
   conversationId?: string | null;
   specName?: string | null;
+  capability?: TModelCapability | null;
 }
 
 export default function BadgeRowProvider({
@@ -43,6 +45,7 @@ export default function BadgeRowProvider({
   isSubmitting,
   conversationId,
   specName,
+  capability,
 }: BadgeRowProviderProps) {
   const lastContextKeyRef = useRef<string>('');
   const hasInitializedRef = useRef(false);

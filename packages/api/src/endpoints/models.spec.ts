@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Time, EModelEndpoint, defaultModels, AuthType } from 'librechat-data-provider';
+import { Time, EModelEndpoint, defaultModels, AuthType, extractModelNames } from 'librechat-data-provider';
 import {
   fetchModels,
   splitAndTrim,
@@ -400,13 +400,14 @@ describe('getOpenAIModels sorting behavior', () => {
 
   it('ensures instruct models are listed last', async () => {
     const models = await getOpenAIModels({ user: 'user456' });
+    const modelNames = extractModelNames(models);
 
-    expect(models[models.length - 1]).toMatch(/instruct/);
+    expect(modelNames[modelNames.length - 1]).toMatch(/instruct/);
 
-    const instructIndexes = models
+    const instructIndexes = modelNames
       .map((model, index) => (model.includes('instruct') ? index : -1))
       .filter((index) => index !== -1);
-    const nonInstructIndexes = models
+    const nonInstructIndexes = modelNames
       .map((model, index) => (!model.includes('instruct') ? index : -1))
       .filter((index) => index !== -1);
 

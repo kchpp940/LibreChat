@@ -350,7 +350,10 @@ const createAgentHandler = async (req, res) => {
 
     const precheckData = { ...agentData, tools };
     const precheckResult = await performAgentPrecheck(precheckData, req);
-    if (precheckResult.blockingErrors.length > 0) {
+    const blockingErrors = precheckResult.items.filter(
+      (item) => item.severity === 'error' && item.category !== 'agent_references',
+    );
+    if (blockingErrors.length > 0) {
       return res.status(400).json({
         error: 'Agent configuration validation failed',
         precheck: precheckResult,
@@ -363,6 +366,54 @@ const createAgentHandler = async (req, res) => {
         ownerId: userId,
         logPrefix: '[/Agents]',
       });
+    }
+
+    if (agentData.edges?.length) {
+      const unauthorized = await validateEdgeAgentAccess(agentData.edges, userId, userRole);
+      if (unauthorized.length > 0) {
+        return res.status(403).json({
+          error: 'You do not have access to one or more agents referenced in edges',
+          agent_ids: unauthorized,
+        });
+      }
+    }
+
+    /**
+     * Only validate subagent ACL when the feature is actually enabled
+     * on BOTH the endpoint (capability flag in appConfig) AND the
+     * agent payload. Runtime (`initializeClient` + `run.ts`) checks
+     * `subagents?.enabled` as a truthy predicate — so `undefined` /
+     * `null` / missing `enabled` all disable the feature. The ACL
+     * check must match exactly: only enforce when `enabled === true`.
+     * Otherwise a payload that omits `enabled` (e.g. API clients, or
+     * legacy records that never set the field) could 403 here while
+     * runtime would happily no-op on the subagent tool. Disable-path
+     * is also untouched: toggling `enabled: false` always passes the
+     * gate, so a user who lost VIEW on a child can still save the
+     * disable edit.
+     */
+    if (
+      isSubagentsCapabilityEnabled(req) &&
+      agentData.subagents?.enabled === true &&
+      agentData.subagents?.agent_ids?.length
+    ) {
+      const { missing, unauthorized } = await validateSubagentReferences(
+        agentData.subagents,
+        userId,
+        userRole,
+      );
+      if (missing.length > 0) {
+        return res.status(400).json({
+          error: 'One or more agents referenced in subagents do not exist',
+          agent_ids: missing,
+        });
+      }
+      if (unauthorized.length > 0) {
+        return res.status(403).json({
+          error: 'You do not have access to one or more agents referenced in subagents',
+          agent_ids: unauthorized,
+        });
+      }
     }
 
     agentData.id = `agent_${nanoid()}`;
@@ -538,7 +589,6 @@ const updateAgentHandler = async (req, res) => {
     }
 
     const mergedForPrecheck = {
-      agent_id: id,
       provider: updateData.provider ?? existingAgent.provider,
       model: updateData.model ?? existingAgent.model,
       tools: updateData.tools ?? existingAgent.tools ?? [],
@@ -547,16 +597,59 @@ const updateAgentHandler = async (req, res) => {
       subagents: updateData.subagents ?? existingAgent.subagents,
       instructions: updateData.instructions ?? existingAgent.instructions,
       name: updateData.name ?? existingAgent.name,
-      category: updateData.category ?? existingAgent.category,
-      skills_enabled: updateData.skills_enabled ?? existingAgent.skills_enabled,
-      skills: updateData.skills ?? existingAgent.skills,
     };
     const precheckResult = await performAgentPrecheck(mergedForPrecheck, req, id);
-    if (precheckResult.blockingErrors.length > 0) {
+    const blockingErrors = precheckResult.items.filter(
+      (item) => item.severity === 'error' && item.category !== 'agent_references',
+    );
+    if (blockingErrors.length > 0) {
       return res.status(400).json({
         error: 'Agent configuration validation failed',
         precheck: precheckResult,
       });
+    }
+
+    if (updateData.edges?.length) {
+      const { id: userId, role: userRole } = req.user;
+      const unauthorized = await validateEdgeAgentAccess(updateData.edges, userId, userRole);
+      if (unauthorized.length > 0) {
+        return res.status(403).json({
+          error: 'You do not have access to one or more agents referenced in edges',
+          agent_ids: unauthorized,
+        });
+      }
+    }
+
+    /** Same guard as the create path: capability on the endpoint,
+     *  AND `subagents.enabled === true` on the payload (runtime's
+     *  truthy check treats `undefined` / `null` / `false` as
+     *  disabled, so the ACL check must too). Missing or explicitly-
+     *  disabled payloads always pass the gate — that preserves the
+     *  "can always save a disable edit" behavior a user might need
+     *  after losing VIEW on a referenced child. */
+    if (
+      isSubagentsCapabilityEnabled(req) &&
+      updateData.subagents?.enabled === true &&
+      updateData.subagents?.agent_ids?.length
+    ) {
+      const { id: userId, role: userRole } = req.user;
+      const { missing, unauthorized } = await validateSubagentReferences(
+        updateData.subagents,
+        userId,
+        userRole,
+      );
+      if (missing.length > 0) {
+        return res.status(400).json({
+          error: 'One or more agents referenced in subagents do not exist',
+          agent_ids: missing,
+        });
+      }
+      if (unauthorized.length > 0) {
+        return res.status(403).json({
+          error: 'You do not have access to one or more agents referenced in subagents',
+          agent_ids: unauthorized,
+        });
+      }
     }
 
     // Convert OCR to context in incoming updateData
@@ -1279,7 +1372,4 @@ module.exports = {
   getAgentCategories,
   filterAuthorizedTools,
   precheckAgent: precheckAgentHandler,
-  classifyAgentReferences,
-  collectEdgeAgentIds,
-  isSubagentsCapabilityEnabled,
 };

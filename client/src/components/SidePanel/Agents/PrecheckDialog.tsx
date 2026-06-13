@@ -3,9 +3,8 @@ import { OGDialog, OGDialogTemplate, Button } from '@librechat/client';
 import { PrecheckSeverity, PrecheckCategory } from 'librechat-data-provider';
 import type { PrecheckItem } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
-import type { TranslationKeys } from '~/hooks/useLocalize';
 
-const categoryLabelKeys: Record<string, TranslationKeys> = {
+const categoryLabelKeys: Record<string, string> = {
   [PrecheckCategory.REQUIRED_FIELDS]: 'com_agents_precheck_category_required',
   [PrecheckCategory.MODEL_AVAILABILITY]: 'com_agents_precheck_category_model',
   [PrecheckCategory.TOOL_PERMISSIONS]: 'com_agents_precheck_category_tools',
@@ -77,13 +76,11 @@ export default function PrecheckDialog({
               </div>
             )}
 
-            {[...grouped.entries()].map(([category, categoryItems]) => {
-              const labelKey = categoryLabelKeys[category];
-              return (
-                <div key={category} className="mb-3">
-                  <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                    {labelKey ? localize(labelKey) : category}
-                  </h4>
+            {[...grouped.entries()].map(([category, categoryItems]) => (
+              <div key={category} className="mb-3">
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                  {localize(categoryLabelKeys[category] ?? category)}
+                </h4>
                 <div className="space-y-1.5">
                   {categoryItems.map((item, idx) => (
                     <div
@@ -101,8 +98,7 @@ export default function PrecheckDialog({
                   ))}
                 </div>
               </div>
-              );
-            })}
+            ))}
           </div>
         }
         selection={

@@ -10,11 +10,11 @@ import {
   PermissionTypes,
   defaultAgentCapabilities,
 } from 'librechat-data-provider';
-import { useLocalize, useHasAccess, useAgentCapabilities } from '~/hooks';
+import { useLocalize, useHasAccess, useAgentCapabilities, useModelCapability } from '~/hooks';
 import ArtifactsSubMenu from '~/components/Chat/Input/ArtifactsSubMenu';
 import MCPSubMenu from '~/components/Chat/Input/MCPSubMenu';
 import { useGetStartupConfig } from '~/data-provider';
-import { useBadgeRowContext } from '~/Providers';
+import { useBadgeRowContext, useChatContext } from '~/Providers';
 import { cn } from '~/utils';
 
 interface ToolsDropdownProps {
@@ -24,7 +24,13 @@ interface ToolsDropdownProps {
 const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
   const localize = useLocalize();
   const context = useBadgeRowContext();
+  const { conversation } = useChatContext();
   const { data: startupConfig } = useGetStartupConfig();
+  const capability = useModelCapability(
+    conversation?.endpoint,
+    conversation?.model,
+    conversation?.endpointType,
+  );
 
   const { codeEnabled, webSearchEnabled, artifactsEnabled, fileSearchEnabled, skillsEnabled } =
     useAgentCapabilities(context?.agentsConfig?.capabilities ?? defaultAgentCapabilities);
@@ -135,7 +141,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
 
   const dropdownItems: MenuItemProps[] = [];
 
-  if (fileSearchEnabled && canUseFileSearch) {
+  if (fileSearchEnabled && canUseFileSearch && (capability == null || capability.file_search)) {
     dropdownItems.push({
       onClick: handleFileSearchToggle,
       hideOnClick: false,
@@ -167,7 +173,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
     });
   }
 
-  if (canUseWebSearch && webSearchEnabled) {
+  if (canUseWebSearch && webSearchEnabled && (capability == null || capability.web_search)) {
     dropdownItems.push({
       onClick: handleWebSearchToggle,
       hideOnClick: false,
@@ -221,7 +227,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
     });
   }
 
-  if (canUseSkills && skillsEnabled) {
+  if (canUseSkills && skillsEnabled && (capability == null || capability.skills)) {
     dropdownItems.push({
       onClick: handleSkillsToggle,
       hideOnClick: false,
@@ -253,7 +259,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
     });
   }
 
-  if (canRunCode && codeEnabled) {
+  if (canRunCode && codeEnabled && (capability == null || capability.code_interpreter)) {
     dropdownItems.push({
       onClick: handleCodeInterpreterToggle,
       hideOnClick: false,
@@ -305,7 +311,7 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
   }
 
   const { availableMCPServers } = mcpServerManager ?? {};
-  if (canUseMcp && availableMCPServers && availableMCPServers.length > 0) {
+  if (canUseMcp && (capability == null || capability.mcp) && availableMCPServers && availableMCPServers.length > 0) {
     dropdownItems.push({
       hideOnClick: false,
       render: (props) => <MCPSubMenu {...props} placeholder={mcpPlaceholder} />,

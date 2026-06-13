@@ -1,5 +1,9 @@
 const { handleError } = require('@librechat/api');
-const { ViolationTypes } = require('librechat-data-provider');
+const {
+  ViolationTypes,
+  findModelCapability,
+  extractModelNames,
+} = require('librechat-data-provider');
 const { getModelsConfig } = require('~/server/controllers/ModelController');
 const { getEndpointsConfig } = require('~/server/services/Config');
 const { logViolation } = require('~/cache');
@@ -7,14 +11,6 @@ const { logViolation } = require('~/cache');
 const MAX_MODEL_STRING_LENGTH = 256;
 const MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.:/@+-]*$/;
 
-/**
- * Validates the model of the request.
- *
- * @async
- * @param {ServerRequest} req - The Express request object.
- * @param {Express.Response} res - The Express response object.
- * @param {Function} next - The Express next function.
- */
 const validateModel = async (req, res, next) => {
   const { endpoint } = req.body;
   const rawModel = req.body.model;
@@ -48,9 +44,14 @@ const validateModel = async (req, res, next) => {
     return handleError(res, { text: 'Endpoint models not loaded' });
   }
 
-  let validModel = !!availableModels.find((availableModel) => availableModel === model);
+  const modelNames = extractModelNames(availableModels);
+  let validModel = modelNames.includes(model);
 
   if (validModel) {
+    const capability = findModelCapability(availableModels, model);
+    if (capability) {
+      req.body.modelCapability = capability;
+    }
     return next();
   }
 

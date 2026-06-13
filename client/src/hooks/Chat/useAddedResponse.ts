@@ -6,6 +6,7 @@ import {
   LocalStorageKeys,
   isAssistantsEndpoint,
   getDefaultParamsEndpoint,
+  extractModelNames,
 } from 'librechat-data-provider';
 import type { TEndpointsConfig, EModelEndpoint, TConversation } from 'librechat-data-provider';
 import type { AssistantListItem, NewConversationParams } from '~/common';
@@ -88,7 +89,7 @@ export default function useAddedResponse() {
         newConversation.assistant_id = undefined;
       }
 
-      const models = modelsConfig?.[defaultEndpoint ?? ''] ?? [];
+      const models = extractModelNames(modelsConfig?.[defaultEndpoint ?? ''] ?? []);
       const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, defaultEndpoint);
       newConversation = buildDefaultConvo({
         conversation: newConversation,

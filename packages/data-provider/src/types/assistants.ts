@@ -401,14 +401,11 @@ export type PrecheckItem = {
   message: string;
   detail?: string;
   field?: string;
-  code?: string;
 };
 
 export type AgentPrecheckResult = {
   valid: boolean;
   items: PrecheckItem[];
-  blockingErrors: PrecheckItem[];
-  warnings: PrecheckItem[];
 };
 
 export type AgentPrecheckParams = {

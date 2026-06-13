@@ -9,6 +9,8 @@ import type {
   TBanner,
   ReasoningResponseKey,
   ReasoningParameterFormat,
+  TModelCapability,
+  TModelInfo,
 } from './schemas';
 import type { RefillIntervalUnit } from './balance';
 import type { SettingDefinition } from './generate';
@@ -452,7 +454,37 @@ export type TEndpointsConfig =
   | Record<EModelEndpoint | string, TConfig | null | undefined>
   | undefined;
 
-export type TModelsConfig = Record<string, string[]>;
+export type TModelsConfig = Record<string, string[] | TModelInfo[]>;
+
+export function isModelInfoArray(
+  models: string[] | TModelInfo[] | undefined,
+): models is TModelInfo[] {
+  return Array.isArray(models) && models.length > 0 && typeof models[0] === 'object';
+}
+
+export function extractModelNames(models: string[] | TModelInfo[] | undefined): string[] {
+  if (!Array.isArray(models) || models.length === 0) {
+    return [];
+  }
+  if (typeof models[0] === 'string') {
+    return models as string[];
+  }
+  return (models as TModelInfo[]).map((m) => m.model);
+}
+
+export function findModelCapability(
+  models: string[] | TModelInfo[] | undefined,
+  modelName: string | null | undefined,
+): TModelCapability | null {
+  if (!modelName || !Array.isArray(models) || models.length === 0) {
+    return null;
+  }
+  if (typeof models[0] !== 'object') {
+    return null;
+  }
+  const info = (models as TModelInfo[]).find((m) => m.model === modelName);
+  return info?.capabilities ?? null;
+}
 
 export type TUpdateTokenCountResponse = {
   count: number;

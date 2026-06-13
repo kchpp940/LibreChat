@@ -137,6 +137,74 @@ async function buildEndpointOption(req, res, next) {
       });
     }
 
+    const cap = req.body.modelCapability;
+    if (cap) {
+      const ep = req.body.endpointOption;
+      if (!cap.supports_temperature && ep.temperature != null) {
+        delete ep.temperature;
+      }
+      if (!cap.supports_top_p && ep.top_p != null && ep.topP == null) {
+        delete ep.top_p;
+      }
+      if (!cap.supports_top_p && ep.topP != null) {
+        delete ep.topP;
+      }
+      if (!cap.supports_top_k && ep.topK != null) {
+        delete ep.topK;
+      }
+      if (!cap.supports_frequency_penalty && ep.frequency_penalty != null) {
+        delete ep.frequency_penalty;
+      }
+      if (!cap.supports_presence_penalty && ep.presence_penalty != null) {
+        delete ep.presence_penalty;
+      }
+      if (!cap.supports_stop && ep.stop != null) {
+        delete ep.stop;
+      }
+      if (!cap.supports_max_tokens && ep.max_tokens != null && ep.maxOutputTokens == null) {
+        delete ep.max_tokens;
+      }
+      if (!cap.supports_max_tokens && ep.maxOutputTokens != null) {
+        delete ep.maxOutputTokens;
+      }
+      if (!cap.reasoning_effort && ep.reasoning_effort != null) {
+        delete ep.reasoning_effort;
+      }
+      if (!cap.anthropic_thinking && ep.thinking != null) {
+        delete ep.thinking;
+      }
+      if (!cap.anthropic_thinking && ep.thinkingBudget != null) {
+        delete ep.thinkingBudget;
+      }
+      if (!cap.anthropic_thinking && ep.effort != null) {
+        delete ep.effort;
+      }
+      if (!cap.google_thinking && ep.thinking != null) {
+        delete ep.thinking;
+      }
+      if (!cap.google_thinking && ep.thinkingBudget != null) {
+        delete ep.thinkingBudget;
+      }
+      if (!cap.google_thinking && ep.thinkingLevel != null) {
+        delete ep.thinkingLevel;
+      }
+      if (!cap.prompt_caching && ep.promptCache != null) {
+        delete ep.promptCache;
+      }
+      if (!cap.image_detail && ep.imageDetail != null) {
+        delete ep.imageDetail;
+      }
+      if (!cap.resend_files && ep.resendFiles != null) {
+        delete ep.resendFiles;
+      }
+      if (!cap.streaming && ep.stream != null) {
+        delete ep.stream;
+      }
+      if (!cap.tool_calling && ep.tools != null) {
+        delete ep.tools;
+      }
+    }
+
     next();
   } catch (error) {
     logger.error(

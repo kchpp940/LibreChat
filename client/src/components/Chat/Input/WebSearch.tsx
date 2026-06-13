@@ -2,8 +2,8 @@ import React, { memo } from 'react';
 import { Globe } from 'lucide-react';
 import { CheckboxButton } from '@librechat/client';
 import { Permissions, PermissionTypes } from 'librechat-data-provider';
-import { useLocalize, useHasAccess } from '~/hooks';
-import { useBadgeRowContext } from '~/Providers';
+import { useLocalize, useHasAccess, useModelCapability } from '~/hooks';
+import { useBadgeRowContext, useChatContext } from '~/Providers';
 
 function WebSearch() {
   const localize = useLocalize();
@@ -12,7 +12,19 @@ function WebSearch() {
     permission: Permissions.USE,
   });
   const context = useBadgeRowContext();
+  const { conversation } = useChatContext();
+
+  const capability = useModelCapability(
+    conversation?.endpoint,
+    conversation?.model,
+    conversation?.endpointType,
+  );
+
   if (!canUseWebSearch) {
+    return null;
+  }
+
+  if (capability != null && !capability.web_search) {
     return null;
   }
   if (!context) {

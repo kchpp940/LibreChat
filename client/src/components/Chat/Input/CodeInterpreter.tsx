@@ -2,12 +2,13 @@ import React, { memo } from 'react';
 import { TerminalSquareIcon } from 'lucide-react';
 import { CheckboxButton } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
-import { useLocalize, useHasAccess } from '~/hooks';
-import { useBadgeRowContext } from '~/Providers';
+import { useLocalize, useHasAccess, useModelCapability } from '~/hooks';
+import { useBadgeRowContext, useChatContext } from '~/Providers';
 
 function CodeInterpreter() {
   const localize = useLocalize();
   const context = useBadgeRowContext();
+  const { conversation } = useChatContext();
   const { toggleState: runCode, debouncedChange, isPinned } = context?.codeInterpreter ?? {};
 
   const canRunCode = useHasAccess({
@@ -15,7 +16,17 @@ function CodeInterpreter() {
     permission: Permissions.USE,
   });
 
+  const capability = useModelCapability(
+    conversation?.endpoint,
+    conversation?.model,
+    conversation?.endpointType,
+  );
+
   if (!canRunCode) {
+    return null;
+  }
+
+  if (capability != null && !capability.code_interpreter) {
     return null;
   }
 

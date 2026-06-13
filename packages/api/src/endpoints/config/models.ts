@@ -6,7 +6,7 @@ import {
   extractEnvVariable,
   normalizeEndpointName,
 } from 'librechat-data-provider';
-import type { TModelsConfig, TEndpoint } from 'librechat-data-provider';
+import type { TModelsConfig, TModelInfo, TEndpoint } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { ServerRequest, GetUserKeyValuesFunction, UserKeyValues } from '~/types';
 import type { FetchModelsParams } from '~/endpoints/models';
@@ -46,7 +46,7 @@ export interface LoadConfigModelsDeps {
     tenantId?: string;
   }) => Promise<AppConfig>;
   getUserKeyValues: GetUserKeyValuesFunction;
-  fetchModels?: (params: FetchModelsParams) => Promise<string[]>;
+  fetchModels?: (params: FetchModelsParams) => Promise<string[] | TModelInfo[]>;
 }
 
 export function createLoadConfigModels(deps: LoadConfigModelsDeps) {

@@ -405,7 +405,7 @@ export const useRevertAgentVersionMutation = (
 
 export const usePrecheckAgentMutation = (
   options?: t.AgentPrecheckOptions,
-): UseMutationResult<t.AgentPrecheckResult, unknown, t.AgentPrecheckParams> => {
+): UseMutationResult<t.AgentPrecheckResult, Error, t.AgentPrecheckParams> => {
   return useMutation(
     (params: t.AgentPrecheckParams) => dataService.precheckAgent(params),
     {
