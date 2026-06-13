@@ -49,8 +49,20 @@ const validateModel = async (req, res, next) => {
   let validModel = modelNames.includes(model);
 
   if (validModel) {
+    const endpointCapabilities = endpointConfig?.capabilities;
+    const modelConfigs = endpointConfig && typeof endpointConfig.models === 'object' && endpointConfig.models !== null
+      ? endpointConfig.models
+      : null;
+    const modelCapabilities = modelConfigs && modelConfigs[model] ? modelConfigs[model].capabilities : undefined;
+    const capsArray = Array.isArray(modelCapabilities) ? modelCapabilities : (Array.isArray(endpointCapabilities) ? endpointCapabilities : undefined);
+    const configOverride = capsArray ? capsArray.reduce((acc, key) => {
+      acc[key.toLowerCase()] = true;
+      return acc;
+    }, {}) : undefined;
+    const baseURL = typeof endpointConfig?.baseURL === 'string' ? endpointConfig.baseURL : undefined;
+
     const capability = findModelCapability(availableModels, model)
-      ?? resolveCapability({ endpoint, model });
+      ?? resolveCapability({ endpoint, model, baseURL, configOverride });
     req.body.modelCapability = capability;
     return next();
   }

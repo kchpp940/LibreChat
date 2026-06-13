@@ -10,6 +10,7 @@ import type { TModelsConfig, TModelInfo, TEndpoint } from 'librechat-data-provid
 import type { AppConfig } from '@librechat/data-schemas';
 import type { ServerRequest, GetUserKeyValuesFunction, UserKeyValues } from '~/types';
 import type { FetchModelsParams } from '~/endpoints/models';
+import { enrichModelsWithCapabilities } from '~/endpoints/capabilities';
 import { fetchModels as defaultFetchModels } from '~/endpoints/models';
 import { isUserProvided } from '~/utils';
 
@@ -224,9 +225,19 @@ export function createLoadConfigModels(deps: LoadConfigModelsDeps) {
       }
 
       if (Array.isArray(models?.default)) {
-        modelsConfig[name] = models.default.map((model) =>
+        const modelNames = models.default.map((model) =>
           typeof model === 'string' ? model : model.name,
         );
+        if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
+          modelsConfig[name] = modelNames;
+        } else {
+          modelsConfig[name] = enrichModelsWithCapabilities(
+            modelNames,
+            name,
+            BASE_URL,
+            endpoint,
+          );
+        }
       }
     }
 
@@ -247,7 +258,21 @@ export function createLoadConfigModels(deps: LoadConfigModelsDeps) {
         const defaults = (endpoint.models?.default ?? []).map((m) =>
           typeof m === 'string' ? m : m.name,
         );
-        modelsConfig[name] = !modelData?.length ? defaults : modelData;
+        const data = !modelData?.length ? defaults : modelData;
+        if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
+          modelsConfig[name] = data;
+        } else if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'string') {
+          const resolvedBase = (resolved as unknown as Array<{name: string; baseURL?: string}>)
+            .find((r) => r.name === name)?.baseURL;
+          modelsConfig[name] = enrichModelsWithCapabilities(
+            data as string[],
+            name,
+            resolvedBase,
+            endpoint,
+          );
+        } else {
+          modelsConfig[name] = data;
+        }
       }
     }
 

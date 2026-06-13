@@ -16,7 +16,7 @@ import useModelCapability from '~/hooks/useModelCapability';
 type TUseSetOptions = (preset?: TPreset | boolean | null) => TSetOptionsPayload;
 
 const useSetIndexOptions: TUseSetOptions = (preset = false) => {
-  const { conversation, setConversation } = useChatContext();
+  const { conversation, setConversation, setFiles, capabilityChangeHandlers } = useChatContext();
   const currentCapability = useModelCapability(
     conversation?.endpoint,
     conversation?.model,
@@ -58,34 +58,32 @@ const useSetIndexOptions: TUseSetOptions = (preset = false) => {
 
     if (param === 'model' && conversation) {
       const newModel = typeof newValue === 'string' ? newValue : conversation.model;
-      const resolvedEndpoint = (conversation.endpointType ?? conversation.endpoint ?? EModelEndpoint.custom) as string;
+      const resolvedEndpoint = (conversation.endpointType ??
+        conversation.endpoint ??
+        EModelEndpoint.custom) as string;
       const newCapability: TModelCapability = resolveCapability({
         endpoint: resolvedEndpoint,
         model: newModel ?? '',
       });
-      const stripped = stripUnsupportedByCapability(
+
+      const merged = stripUnsupportedByCapability(
         {
           ...(conversation as unknown as StripTarget),
           ...(update as unknown as StripTarget),
         },
         newCapability,
-      ) as unknown as Partial<TConversation> & Record<string, unknown>;
+      ) as unknown as Partial<TConversation>;
 
       if (currentCapability) {
-        const stripVision = currentCapability.vision && !newCapability.vision;
-        const stripFileSearch = currentCapability.file_search && !newCapability.file_search;
+        const stripFileSearch =
+          currentCapability.file_search && !newCapability.file_search;
         const stripTools = currentCapability.tool_calling && !newCapability.tool_calling;
 
-        if (stripVision) {
-          stripped.attachments = undefined;
-          stripped.files = undefined;
-        }
         if (stripFileSearch) {
-          stripped.file_ids = undefined;
+          merged.file_ids = undefined;
         }
         if (stripTools) {
-          stripped.tools = undefined;
-          stripped.tools_payload = undefined;
+          merged.tools = undefined;
         }
       }
 
@@ -93,9 +91,50 @@ const useSetIndexOptions: TUseSetOptions = (preset = false) => {
         (prevState) =>
           tConvoUpdateSchema.parse({
             ...prevState,
-            ...stripped,
+            ...merged,
           }) as TConversation,
       );
+
+      if (currentCapability) {
+        const stripVision = currentCapability.vision && !newCapability.vision;
+        const stripFileSearch =
+          currentCapability.file_search && !newCapability.file_search;
+        const stripTools = currentCapability.tool_calling && !newCapability.tool_calling;
+        const stripParams =
+          currentCapability.supports_temperature !== newCapability.supports_temperature ||
+          currentCapability.supports_top_p !== newCapability.supports_top_p ||
+          currentCapability.supports_top_k !== newCapability.supports_top_k ||
+          currentCapability.supports_frequency_penalty !==
+            newCapability.supports_frequency_penalty ||
+          currentCapability.supports_presence_penalty !==
+            newCapability.supports_presence_penalty ||
+          currentCapability.reasoning_effort !== newCapability.reasoning_effort ||
+          currentCapability.thinking !== newCapability.thinking ||
+          currentCapability.anthropic_thinking !== newCapability.anthropic_thinking ||
+          currentCapability.google_thinking !== newCapability.google_thinking ||
+          currentCapability.json_mode !== newCapability.json_mode ||
+          currentCapability.prompt_caching !== newCapability.prompt_caching;
+
+        if (stripVision && setFiles) {
+          setFiles(new Map());
+        }
+
+        if (capabilityChangeHandlers) {
+          capabilityChangeHandlers.forEach((handler) => {
+            try {
+              handler({
+                stripVision,
+                stripFileSearch,
+                stripTools,
+                stripParams,
+                newCapability,
+              });
+            } catch (e) {
+              // no-op
+            }
+          });
+        }
+      }
       return;
     }
 
