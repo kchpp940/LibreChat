@@ -5,6 +5,7 @@ const {
   isActionTool,
   EModelEndpoint,
   AgentCapabilities,
+  FileSources,
 } = require('librechat-data-provider');
 const {
   createMCPPermissionContext,
@@ -13,7 +14,7 @@ const {
   getServerConnectionStatus,
 } = require('~/server/services/MCP');
 const { getMCPServersRegistry, getMCPManager } = require('~/config');
-const { getCachedTools } = require('~/server/services/Config');
+const { getCachedTools, getEndpointsConfig } = require('~/server/services/Config');
 const { getModelsConfig } = require('~/server/controllers/ModelController');
 const {
   filterAuthorizedTools,
@@ -48,6 +49,14 @@ const PrecheckCode = {
   MODEL_CONFIG_NOT_LOADED: 'model.config_not_loaded',
   MODEL_PROVIDER_UNAVAILABLE: 'model.provider_unavailable',
   MODEL_NOT_AVAILABLE: 'model.not_available',
+  MODEL_ENDPOINT_DISABLED: 'model.endpoint_disabled',
+  MODEL_CAPABILITY_FILE_SEARCH: 'model.capability_file_search',
+  MODEL_CAPABILITY_EXECUTE_CODE: 'model.capability_execute_code',
+  MODEL_CAPABILITY_WEB_SEARCH: 'model.capability_web_search',
+  MODEL_CAPABILITY_TOOLS: 'model.capability_tools',
+  MODEL_CAPABILITY_CONTEXT: 'model.capability_context',
+  MODEL_CAPABILITY_SUBAGENTS: 'model.capability_subagents',
+  MODEL_CAPABILITY_SKILLS: 'model.capability_skills',
   MODEL_VERIFY_FAILED: 'model.verify_failed',
   TOOL_NOT_AVAILABLE: 'tool.not_available',
   TOOL_MCP_PERMISSION_DENIED: 'tool.mcp_permission_denied',
@@ -160,6 +169,112 @@ async function checkModelAvailability(data, req) {
     return items;
   }
   try {
+    let endpointsConfig;
+    try {
+      endpointsConfig = await getEndpointsConfig(req);
+    } catch (e) {
+      logger.warn('[precheck] Could not load endpoints config', e.message);
+    }
+
+    if (endpointsConfig) {
+      const agentEndpoint = endpointsConfig[EModelEndpoint.agents];
+      if (!agentEndpoint || agentEndpoint === false || agentEndpoint === null) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_ENDPOINT_DISABLED,
+          'Agents endpoint is not enabled in this environment',
+          { field: 'provider' },
+        ));
+        return items;
+      }
+
+      const allowedProviders = agentEndpoint.allowedProviders;
+      if (
+        Array.isArray(allowedProviders) &&
+        allowedProviders.length > 0 &&
+        !allowedProviders.includes(data.provider) &&
+        !allowedProviders.includes(EModelEndpoint[data.provider])
+      ) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_PROVIDER_UNAVAILABLE,
+          `Provider "${data.provider}" is not in the allowed providers list`,
+          { detail: data.provider, field: 'provider' },
+        ));
+        return items;
+      }
+
+      const capabilities = new Set(agentEndpoint.capabilities ?? []);
+      const tools = data.tools ?? [];
+      const toolResources = data.tool_resources;
+
+      if (tools.includes(Tools.file_search) && !capabilities.has(AgentCapabilities.file_search)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_FILE_SEARCH,
+          'Agent uses file_search but the file_search capability is not enabled',
+          { detail: Tools.file_search, field: 'tools' },
+        ));
+      }
+
+      if (tools.includes(Tools.execute_code) && !capabilities.has(AgentCapabilities.execute_code)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_EXECUTE_CODE,
+          'Agent uses execute_code but the execute_code capability is not enabled',
+          { detail: Tools.execute_code, field: 'tools' },
+        ));
+      }
+
+      if (tools.includes(Tools.web_search) && !capabilities.has(AgentCapabilities.web_search)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_WEB_SEARCH,
+          'Agent uses web_search but the web_search capability is not enabled',
+          { detail: Tools.web_search, field: 'tools' },
+        ));
+      }
+
+      if (toolResources?.context && !capabilities.has(AgentCapabilities.context)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_CONTEXT,
+          'Agent has context files but the context capability is not enabled',
+          { field: 'tool_resources' },
+        ));
+      }
+
+      if (data.subagents?.enabled === true && !capabilities.has(AgentCapabilities.subagents)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_SUBAGENTS,
+          'Agent has subagents enabled but the subagents capability is not enabled',
+          { field: 'subagents' },
+        ));
+      }
+
+      if (data.skills_enabled === true && !capabilities.has(AgentCapabilities.skills)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_SKILLS,
+          'Agent has skills enabled but the skills capability is not enabled',
+          { field: 'skills' },
+        ));
+      }
+
+      const hasCustomTools = tools.some(
+        (t) => !systemTools[t] && !isMCPTool(t) && !isActionTool(t),
+      );
+      if (hasCustomTools && !capabilities.has(AgentCapabilities.tools)) {
+        items.push(errorItem(
+          PrecheckCategory.MODEL_AVAILABILITY,
+          PrecheckCode.MODEL_CAPABILITY_TOOLS,
+          'Agent uses custom tools but the tools capability is not enabled',
+          { field: 'tools' },
+        ));
+      }
+    }
+
     const modelsConfig = await getModelsConfig(req);
     if (!modelsConfig) {
       items.push(errorItem(
@@ -482,6 +597,7 @@ async function checkFileIndexStatus(data, req, existingAgentId) {
       embedded: 1,
       filename: 1,
       user: 1,
+      source: 1,
       status: 1,
     });
 
@@ -494,7 +610,7 @@ async function checkFileIndexStatus(data, req, existingAgentId) {
       if (!file) {
         fileStatuses.push({
           fileId,
-          status: 'not_found',
+          indexingStatus: 'not_found',
           resources,
         });
         continue;
@@ -503,115 +619,114 @@ async function checkFileIndexStatus(data, req, existingAgentId) {
       if (String(file.user) !== String(req.user.id)) {
         fileStatuses.push({
           fileId,
-          status: 'permission_denied',
+          indexingStatus: 'permission_denied',
           filename: file.filename,
           resources,
         });
         continue;
       }
 
-      if (file.status === 'failed') {
+      const isFileSearch = resources.includes('file_search');
+      const isVectordbSource = file.source === FileSources.vectordb;
+      const isEmbedded = file.embedded === true;
+
+      if (isVectordbSource) {
         fileStatuses.push({
           fileId,
-          status: 'failed',
+          indexingStatus: 'indexed',
+          filename: file.filename,
+          resources,
+        });
+      } else if (file.status === 'failed') {
+        fileStatuses.push({
+          fileId,
+          indexingStatus: 'failed',
           filename: file.filename,
           resources,
         });
       } else if (file.status === 'pending') {
         fileStatuses.push({
           fileId,
-          status: 'pending',
+          indexingStatus: 'pending',
           filename: file.filename,
           resources,
         });
-      } else if (file.embedded !== true) {
+      } else if (isEmbedded) {
         fileStatuses.push({
           fileId,
-          status: 'skipped',
+          indexingStatus: 'indexed',
+          filename: file.filename,
+          resources,
+        });
+      } else if (isFileSearch) {
+        fileStatuses.push({
+          fileId,
+          indexingStatus: 'skipped',
           filename: file.filename,
           resources,
         });
       } else {
         fileStatuses.push({
           fileId,
-          status: 'indexed',
+          indexingStatus: 'attachment_only',
           filename: file.filename,
           resources,
         });
       }
     }
 
-    const notFound = fileStatuses.filter((f) => f.status === 'not_found');
-    const permissionDenied = fileStatuses.filter((f) => f.status === 'permission_denied');
-    const pending = fileStatuses.filter((f) => f.status === 'pending');
-    const failed = fileStatuses.filter((f) => f.status === 'failed');
-    const skipped = fileStatuses.filter((f) => f.status === 'skipped');
-
-    const affectedResources = new Set();
-    for (const f of [...notFound, ...permissionDenied, ...pending, ...failed, ...skipped]) {
-      for (const r of f.resources ?? []) {
-        affectedResources.add(r);
+    for (const f of fileStatuses) {
+      if (f.indexingStatus === 'indexed' || f.indexingStatus === 'attachment_only') {
+        continue;
       }
-    }
+      const fieldStr = [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', ');
 
-    for (const f of notFound) {
-      items.push(warningItem(
-        PrecheckCategory.FILE_INDEX,
-        PrecheckCode.FILE_NOT_FOUND,
-        `File reference "${f.fileId}" no longer exists`,
-        {
-          detail: f.fileId,
-          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
-        },
-      ));
-    }
-
-    for (const f of permissionDenied) {
-      items.push(errorItem(
-        PrecheckCategory.FILE_INDEX,
-        PrecheckCode.FILE_PERMISSION_DENIED,
-        `You do not have permission to use file "${f.filename}"`,
-        {
-          detail: f.fileId,
-          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
-        },
-      ));
-    }
-
-    for (const f of pending) {
-      items.push(warningItem(
-        PrecheckCategory.FILE_INDEX,
-        PrecheckCode.FILE_INDEX_PENDING,
-        `File "${f.filename}" is still being indexed`,
-        {
-          detail: f.fileId,
-          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
-        },
-      ));
-    }
-
-    for (const f of failed) {
-      items.push(warningItem(
-        PrecheckCategory.FILE_INDEX,
-        PrecheckCode.FILE_INDEX_FAILED,
-        `File "${f.filename}" failed to index`,
-        {
-          detail: f.fileId,
-          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
-        },
-      ));
-    }
-
-    for (const f of skipped) {
-      items.push(warningItem(
-        PrecheckCategory.FILE_INDEX,
-        PrecheckCode.FILE_INDEX_SKIPPED,
-        `File "${f.filename}" was skipped during indexing`,
-        {
-          detail: f.fileId,
-          field: [...new Set(f.resources)].map((r) => `tool_resources.${r}`).join(', '),
-        },
-      ));
+      if (f.indexingStatus === 'not_found') {
+        items.push(warningItem(
+          PrecheckCategory.FILE_INDEX,
+          PrecheckCode.FILE_NOT_FOUND,
+          `File reference "${f.fileId}" no longer exists`,
+          { detail: f.fileId, field: fieldStr },
+        ));
+      } else if (f.indexingStatus === 'permission_denied') {
+        items.push(errorItem(
+          PrecheckCategory.FILE_INDEX,
+          PrecheckCode.FILE_PERMISSION_DENIED,
+          `You do not have permission to use file "${f.filename}"`,
+          { detail: f.fileId, field: fieldStr },
+        ));
+      } else if (f.indexingStatus === 'pending') {
+        items.push(warningItem(
+          PrecheckCategory.FILE_INDEX,
+          PrecheckCode.FILE_INDEX_PENDING,
+          `File "${f.filename}" is still being indexed for retrieval`,
+          { detail: f.fileId, field: fieldStr },
+        ));
+      } else if (f.indexingStatus === 'failed') {
+        items.push(warningItem(
+          PrecheckCategory.FILE_INDEX,
+          PrecheckCode.FILE_INDEX_FAILED,
+          `File "${f.filename}" failed to index for retrieval`,
+          { detail: f.fileId, field: fieldStr },
+        ));
+      } else if (f.indexingStatus === 'skipped') {
+        const isFileSearch = f.resources.includes('file_search');
+        if (isFileSearch) {
+          items.push(warningItem(
+            PrecheckCategory.FILE_INDEX,
+            PrecheckCode.FILE_INDEX_SKIPPED,
+            `File "${f.filename}" was not embedded — it is only attached, not indexed for retrieval`,
+            { detail: f.fileId, field: fieldStr },
+          ));
+        } else {
+          items.push(warningItem(
+            PrecheckCategory.FILE_INDEX,
+            PrecheckCode.FILE_INDEX_SKIPPED,
+            `File "${f.filename}" is attached but not indexed for retrieval`,
+            { detail: f.fileId, field: fieldStr },
+          ));
+        }
+      }
     }
   } catch (err) {
     items.push(warningItem(
