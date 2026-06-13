@@ -3,6 +3,7 @@ import { Constants } from 'librechat-data-provider';
 import type { FilterQuery, Model } from 'mongoose';
 import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import type * as t from '~/types';
+import { SHARED_MESSAGE_ALLOWED_FIELDS } from '~/types/share';
 import { activeExpirationFilter } from '~/utils/retention';
 import logger from '~/config/winston';
 
@@ -171,13 +172,67 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
  * Filter messages up to and including the target message (branch-specific)
  * Similar to getMessagesUpToTargetLevel from fork utilities
  */
+function assertSharedMessageFieldsOnly(
+  msg: t.SharedMessage,
+  context: string,
+): void {
+  const ownKeys = Object.keys(msg);
+  for (const key of ownKeys) {
+    if (!SHARED_MESSAGE_ALLOWED_FIELDS.has(key as keyof t.SharedMessage)) {
+      throw new Error(
+        `[buildTourData] Attempted to access non-whitelisted field "${key}" on SharedMessage in context "${context}". ` +
+          `Allowed fields: ${Array.from(SHARED_MESSAGE_ALLOWED_FIELDS).join(', ')}`,
+      );
+    }
+  }
+  const proto = Object.getPrototypeOf(msg);
+  if (proto && proto !== Object.prototype) {
+    throw new Error(
+      `[buildTourData] SharedMessage has unexpected prototype in context "${context}". ` +
+        `Only plain objects allowed to prevent access to mongoose/virtual fields.`,
+    );
+  }
+}
+
+function createGuardedSharedMessage(msg: t.SharedMessage, context: string): t.SharedMessage {
+  assertSharedMessageFieldsOnly(msg, context);
+  return new Proxy(msg, {
+    get(target, prop: string | symbol) {
+      if (typeof prop === 'string') {
+        if (!SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)) {
+          throw new Error(
+            `[buildTourData] Attempted to read non-whitelisted field "${prop}" on SharedMessage in context "${context}". ` +
+              `Allowed: ${Array.from(SHARED_MESSAGE_ALLOWED_FIELDS).join(', ')}`,
+          );
+        }
+      }
+      return target[prop as keyof t.SharedMessage];
+    },
+    has(target, prop: string | symbol) {
+      if (typeof prop === 'string' && !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)) {
+        return false;
+      }
+      return prop in target;
+    },
+    ownKeys(target) {
+      return Array.from(SHARED_MESSAGE_ALLOWED_FIELDS).filter((k) => k in target);
+    },
+    getOwnPropertyDescriptor(target, prop: string | symbol) {
+      if (typeof prop === 'string' && !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)) {
+        return undefined;
+      }
+      return Object.getOwnPropertyDescriptor(target, prop);
+    },
+  });
+}
+
 function extractToolCallsFromContent(
   content: unknown,
-): Array<{ toolName: string; toolCallId?: string; output?: string }> {
+): Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> {
   if (!Array.isArray(content)) {
     return [];
   }
-  const results: Array<{ toolName: string; toolCallId?: string; output?: string }> = [];
+  const results: Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> = [];
   for (const part of content) {
     if (!part || typeof part !== 'object') {
       continue;
@@ -192,11 +247,17 @@ function extractToolCallsFromContent(
             ? ((tc.function as Record<string, unknown>).name as string)
             : undefined;
       if (name) {
+        const rawOutput =
+          tc.output != null && typeof tc.output === 'string' ? tc.output : undefined;
+        let outputPreview: string | undefined;
+        if (rawOutput) {
+          const trimmed = rawOutput.replace(/\s+/g, ' ').trim();
+          outputPreview = trimmed.length > 100 ? trimmed.slice(0, 99) + '…' : trimmed;
+        }
         results.push({
           toolName: name,
           toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
-          output:
-            tc.output != null && typeof tc.output === 'string' ? tc.output : undefined,
+          outputPreview,
         });
       }
     }
@@ -221,7 +282,10 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
   let toolCallCount = 0;
   let fileCount = 0;
 
-  for (const msg of messages) {
+  for (const rawMsg of messages) {
+    const msg = createGuardedSharedMessage(rawMsg, `buildTourData@${rawMsg.messageId}`);
+    const anchorId = `share-msg-${msg.messageId}`;
+
     if (msg.isCreatedByUser) {
       const userFiles: t.TourFileRef[] = [];
       if (Array.isArray(msg.files)) {
@@ -239,6 +303,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
         fileCount += userFiles.length;
         items.push({
           messageId: msg.messageId,
+          anchorId,
           category: 'file',
           label: truncateLabel(userFiles.map((f) => f.filename || 'File').join(', ')),
           files: userFiles,
@@ -283,6 +348,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     if (msg.error) {
       items.push({
         messageId: msg.messageId,
+        anchorId,
         category: 'error',
         label: truncateLabel(msg.text || 'Error'),
       });
@@ -299,6 +365,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     if (hasArtifact) {
       items.push({
         messageId: msg.messageId,
+        anchorId,
         category: 'artifact',
         label,
         toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
@@ -307,6 +374,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     } else if (allToolCalls.length > 0) {
       items.push({
         messageId: msg.messageId,
+        anchorId,
         category: 'tool_call',
         label,
         toolCalls: allToolCalls,
@@ -315,6 +383,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     } else if (msgFiles.length > 0) {
       items.push({
         messageId: msg.messageId,
+        anchorId,
         category: 'file',
         label,
         files: msgFiles,
@@ -322,6 +391,7 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     } else {
       items.push({
         messageId: msg.messageId,
+        anchorId,
         category: 'assistant',
         label,
       });

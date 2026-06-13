@@ -72,7 +72,7 @@ export type TourItemCategory = 'assistant' | 'tool_call' | 'artifact' | 'file' |
 export interface TourToolCall {
   toolName: string;
   toolCallId?: string;
-  output?: string;
+  outputPreview?: string;
 }
 
 export interface TourFileRef {
@@ -82,6 +82,7 @@ export interface TourFileRef {
 
 export interface TourItem {
   messageId: string;
+  anchorId: string;
   category: TourItemCategory;
   label: string;
   toolCalls?: TourToolCall[];
@@ -95,6 +96,28 @@ export interface TourData {
   toolCallCount: number;
   fileCount: number;
 }
+
+export const SHARED_MESSAGE_ALLOWED_FIELDS: Set<keyof SharedMessage> = new Set<keyof SharedMessage>([
+  'messageId',
+  'parentMessageId',
+  'conversationId',
+  'sender',
+  'text',
+  'content',
+  'iconURL',
+  'isCreatedByUser',
+  'createdAt',
+  'updatedAt',
+  'tokenCount',
+  'unfinished',
+  'error',
+  'finish_reason',
+  'manualSkills',
+  'alwaysAppliedSkills',
+  'model',
+  'files',
+  'attachments',
+]);
 
 export interface SharedMessagesResult {
   conversationId: string;

@@ -54,7 +54,7 @@ function TourItemRow({
         <button
           type="button"
           className="flex flex-1 items-start gap-2 text-left"
-          onClick={() => onNavigate(item.messageId)}
+          onClick={() => onNavigate(item.anchorId)}
           aria-label={`Navigate to ${categoryLabel[item.category]}: ${item.label}`}
         >
           <span className="mt-0.5 shrink-0 text-text-secondary">
@@ -81,8 +81,8 @@ function TourItemRow({
               <div key={i} className="flex items-center gap-1.5 py-0.5 text-xs text-text-secondary">
                 <Wrench className="size-3 shrink-0" />
                 <span className="truncate">{tc.toolName}</span>
-                {tc.output && (
-                  <span className="truncate text-text-tertiary">→ {tc.output.slice(0, 50)}</span>
+                {tc.outputPreview && (
+                  <span className="truncate text-text-tertiary">→ {tc.outputPreview}</span>
                 )}
               </div>
             ))}
@@ -106,7 +106,7 @@ function TourItemRow({
 
 interface ShareTourPanelProps {
   tour: TTourData;
-  onNavigate: (messageId: string) => void;
+  onNavigate: (anchorId: string) => void;
   isOpen: boolean;
   onToggle: () => void;
 }

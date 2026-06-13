@@ -41,8 +41,8 @@ function SharedView() {
   const [tourPanelOpen, setTourPanelOpen] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
 
-  const handleTourNavigate = useCallback((messageId: string) => {
-    const el = document.getElementById(`share-msg-${messageId}`);
+  const handleTourNavigate = useCallback((anchorId: string) => {
+    const el = document.getElementById(anchorId);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('ring-2', 'ring-ring', 'ring-offset-2', 'rounded-lg', 'transition-all');
@@ -123,7 +123,7 @@ function SharedView() {
           onLangChange={handleLangChange}
           settingsLabel={localize('com_nav_settings')}
         />
-        <ShareMessagesProvider messages={data.messages}>
+        <ShareMessagesProvider messages={data.messages} tour={data.tour}>
           <MessagesView messagesTree={messagesTree} conversationId="shared-conversation" scrollRef={messagesScrollRef} />
         </ShareMessagesProvider>
       </>

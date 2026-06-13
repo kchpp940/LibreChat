@@ -54,10 +54,10 @@ export default function ToolOutputCollapsible({
                 <Wrench className="size-3 text-text-secondary" />
                 <span>{tc.toolName}</span>
               </div>
-              {tc.output && (
+              {tc.outputPreview && (
                 <div className="mt-0.5 rounded-md bg-surface-secondary px-2 py-1 text-xs text-text-secondary">
                   <pre className="whitespace-pre-wrap break-words font-mono text-[11px]">
-                    {tc.output.length > 500 ? tc.output.slice(0, 500) + '…' : tc.output}
+                    {tc.outputPreview}
                   </pre>
                 </div>
               )}

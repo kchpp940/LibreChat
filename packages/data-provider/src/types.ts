@@ -355,7 +355,7 @@ export type TTourItemCategory = 'assistant' | 'tool_call' | 'artifact' | 'file' 
 export type TTourToolCall = {
   toolName: string;
   toolCallId?: string;
-  output?: string;
+  outputPreview?: string;
 };
 
 export type TTourFileRef = {
@@ -365,6 +365,7 @@ export type TTourFileRef = {
 
 export type TTourItem = {
   messageId: string;
+  anchorId: string;
   category: TTourItemCategory;
   label: string;
   toolCalls?: TTourToolCall[];
