@@ -10,7 +10,7 @@ import {
   defaultModels,
   Providers,
 } from 'librechat-data-provider';
-import type { TModelInfo } from 'librechat-data-provider';
+import type { TModelInfo, TConfig } from 'librechat-data-provider';
 import type { IUser } from '@librechat/data-schemas';
 import { enrichModelsWithCapabilities } from './capabilities';
 import {
@@ -49,6 +49,8 @@ export interface FetchModelsParams {
   userObject?: Partial<IUser>;
   /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
   skipCache?: boolean;
+  /** Optional endpoint config for capability overrides */
+  endpointConfig?: Partial<TConfig> | null;
 }
 
 /**
@@ -117,6 +119,7 @@ export async function fetchModels({
   headers,
   userObject,
   skipCache = false,
+  endpointConfig,
 }: FetchModelsParams): Promise<string[] | TModelInfo[]> {
   let models: string[] = [];
   const baseURL = direct ? extractBaseURL(_baseURL ?? '') : _baseURL;
@@ -158,7 +161,7 @@ export async function fetchModels({
       if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
         return ollamaModels;
       }
-      return enrichModelsWithCapabilities(ollamaModels, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined);
+      return enrichModelsWithCapabilities(ollamaModels, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined, endpointConfig);
     }
   }
 
@@ -240,7 +243,7 @@ export async function fetchModels({
   ];
 
   if (enrichedEndpoints.includes((name ?? EModelEndpoint.custom) as EModelEndpoint)) {
-    return enrichModelsWithCapabilities(models, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined);
+    return enrichModelsWithCapabilities(models, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined, endpointConfig);
   }
 
   return models;
@@ -262,6 +265,12 @@ export interface GetOpenAIModelsOptions {
   openAIApiKey?: string;
   /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
   skipCache?: boolean;
+  /** Optional endpoint config for capability overrides */
+  endpointConfig?: Partial<TConfig> | null;
+  /** Optional base URL for capability heuristic */
+  baseURL?: string;
+  /** Whether to fetch models for Azure Assistants endpoint */
+  azureAssistants?: boolean;
 }
 
 function resolveOpenAIApiKey(opts: GetOpenAIModelsOptions): string | undefined {
@@ -281,17 +290,17 @@ export async function fetchOpenAIModels(
   let models: string[] = _models.slice() ?? [];
   const apiKey = resolveOpenAIApiKey(opts);
   const openaiBaseURL = 'https://api.openai.com/v1';
-  let baseURL = openaiBaseURL;
+  let baseURL = opts.baseURL ?? openaiBaseURL;
   let reverseProxyUrl = process.env.OPENAI_REVERSE_PROXY;
 
   if (opts.assistants && process.env.ASSISTANTS_BASE_URL) {
     reverseProxyUrl = process.env.ASSISTANTS_BASE_URL;
-  } else if (opts.azure) {
+  } else if (opts.azure || opts.azureAssistants) {
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return models;
     }
-    const endpoint = opts.assistants ? EModelEndpoint.azureAssistants : EModelEndpoint.azureOpenAI;
-    return enrichModelsWithCapabilities(models, endpoint);
+    const endpoint = opts.assistants || opts.azureAssistants ? EModelEndpoint.azureAssistants : EModelEndpoint.azureOpenAI;
+    return enrichModelsWithCapabilities(models, endpoint, baseURL, opts.endpointConfig);
   }
 
   if (reverseProxyUrl) {
@@ -306,6 +315,7 @@ export async function fetchOpenAIModels(
       user: opts.user,
       name: EModelEndpoint.openAI,
       skipCache: opts.skipCache,
+      endpointConfig: opts.endpointConfig,
     });
     if (Array.isArray(fetchedModels) && fetchedModels.length > 0 && typeof fetchedModels[0] === 'object') {
       if (_models.length === 0) {
@@ -332,7 +342,7 @@ export async function fetchOpenAIModels(
       : opts.azure
         ? EModelEndpoint.azureOpenAI
         : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(_models, endpoint);
+    return enrichModelsWithCapabilities(_models, endpoint, baseURL, opts.endpointConfig);
   }
 
   if (baseURL === openaiBaseURL) {
@@ -353,7 +363,7 @@ export async function fetchOpenAIModels(
     : opts.azure
       ? EModelEndpoint.azureOpenAI
       : EModelEndpoint.openAI;
-  return enrichModelsWithCapabilities(models, endpoint);
+  return enrichModelsWithCapabilities(models, endpoint, baseURL, opts.endpointConfig);
 }
 
 /**
@@ -386,24 +396,24 @@ export async function getOpenAIModels(
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return trimmed;
     }
-    const endpoint = opts.assistants
+    const endpoint = opts.assistants || opts.azureAssistants
       ? EModelEndpoint.assistants
       : opts.azure
         ? EModelEndpoint.azureOpenAI
         : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(trimmed, endpoint);
+    return enrichModelsWithCapabilities(trimmed, endpoint, opts.baseURL, opts.endpointConfig);
   }
 
   if (isUserProvided(resolveOpenAIApiKey(opts))) {
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return models;
     }
-    const endpoint = opts.assistants
+    const endpoint = opts.assistants || opts.azureAssistants
       ? EModelEndpoint.assistants
       : opts.azure
         ? EModelEndpoint.azureOpenAI
         : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(models, endpoint);
+    return enrichModelsWithCapabilities(models, endpoint, opts.baseURL, opts.endpointConfig);
   }
 
   return await fetchOpenAIModels(opts, models);
@@ -416,13 +426,13 @@ export async function getOpenAIModels(
  * @returns Promise resolving to array of model IDs
  */
 export async function fetchAnthropicModels(
-  opts: { user?: string; skipCache?: boolean } = {},
+  opts: { user?: string; skipCache?: boolean; endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
   _models: string[] = [],
 ): Promise<string[] | TModelInfo[]> {
   let models: string[] = _models.slice() ?? [];
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const anthropicBaseURL = 'https://api.anthropic.com/v1';
-  let baseURL = anthropicBaseURL;
+  let baseURL = opts.baseURL ?? anthropicBaseURL;
   const reverseProxyUrl = process.env.ANTHROPIC_REVERSE_PROXY;
 
   if (reverseProxyUrl) {
@@ -433,7 +443,7 @@ export async function fetchAnthropicModels(
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return models;
     }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 
   if (baseURL) {
@@ -444,6 +454,7 @@ export async function fetchAnthropicModels(
       name: EModelEndpoint.anthropic,
       tokenKey: EModelEndpoint.anthropic,
       skipCache: opts.skipCache,
+      endpointConfig: opts.endpointConfig,
     });
     if (Array.isArray(fetchedModels) && fetchedModels.length > 0 && typeof fetchedModels[0] === 'object') {
       return fetchedModels;
@@ -455,14 +466,14 @@ export async function fetchAnthropicModels(
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return _models;
     }
-    return enrichModelsWithCapabilities(_models, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(_models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 
   if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
     return models;
   }
 
-  return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic);
+  return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
 }
 
 /**
@@ -471,15 +482,16 @@ export async function fetchAnthropicModels(
  * @returns Promise resolving to array of model IDs
  */
 export async function getAnthropicModels(
-  opts: { user?: string; vertexModels?: string[] } = {},
+  opts: { user?: string; vertexModels?: string[]; endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
 ): Promise<string[] | TModelInfo[]> {
   const models = defaultModels[EModelEndpoint.anthropic];
+  const baseURL = opts.baseURL ?? 'https://api.anthropic.com/v1';
 
   if (opts.vertexModels && opts.vertexModels.length > 0) {
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return opts.vertexModels;
     }
-    return enrichModelsWithCapabilities(opts.vertexModels, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(opts.vertexModels, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 
   if (process.env.ANTHROPIC_MODELS) {
@@ -487,14 +499,14 @@ export async function getAnthropicModels(
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return trimmed;
     }
-    return enrichModelsWithCapabilities(trimmed, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(trimmed, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 
   if (isUserProvided(process.env.ANTHROPIC_API_KEY)) {
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return models;
     }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 
   try {
@@ -504,38 +516,46 @@ export async function getAnthropicModels(
     if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
       return models;
     }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic);
+    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
   }
 }
 
 /**
  * Gets Google models from environment or defaults.
+ * @param opts - Options for getting models
  * @returns Array of model IDs
  */
-export function getGoogleModels(): string[] | TModelInfo[] {
+export function getGoogleModels(
+  opts: { endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
+): string[] | TModelInfo[] {
   let models = defaultModels[EModelEndpoint.google];
+  const baseURL = opts.baseURL ?? 'https://generativelanguage.googleapis.com/v1beta';
   if (process.env.GOOGLE_MODELS) {
     models = splitAndTrim(process.env.GOOGLE_MODELS);
   }
   if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
     return models;
   }
-  return enrichModelsWithCapabilities(models, EModelEndpoint.google);
+  return enrichModelsWithCapabilities(models, EModelEndpoint.google, baseURL, opts.endpointConfig);
 }
 
 /**
  * Gets Bedrock models from environment or defaults.
+ * @param opts - Options for getting models
  * @returns Array of model IDs
  */
-export function getBedrockModels(): string[] | TModelInfo[] {
+export function getBedrockModels(
+  opts: { endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
+): string[] | TModelInfo[] {
   let models = defaultModels[EModelEndpoint.bedrock];
+  const baseURL = opts.baseURL;
   if (process.env.BEDROCK_AWS_MODELS) {
     models = splitAndTrim(process.env.BEDROCK_AWS_MODELS);
   }
   if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
     return models;
   }
-  return enrichModelsWithCapabilities(models, EModelEndpoint.bedrock);
+  return enrichModelsWithCapabilities(models, EModelEndpoint.bedrock, baseURL, opts.endpointConfig);
 }
 
 

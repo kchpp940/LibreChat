@@ -25,35 +25,65 @@ async function loadDefaultModels(req) {
       }));
     const vertexConfig = appConfig?.endpoints?.[EModelEndpoint.anthropic]?.vertexConfig;
 
+    const endpointsConfig = appConfig?.endpoints ?? {};
+
     const [openAI, anthropic, azureOpenAI, assistants, azureAssistants, google, bedrock] =
       await Promise.all([
-        getOpenAIModels({ user: req.user.id }).catch((error) => {
+        getOpenAIModels({
+          user: req.user.id,
+          endpointConfig: endpointsConfig[EModelEndpoint.openAI],
+          baseURL: endpointsConfig[EModelEndpoint.openAI]?.baseURL,
+        }).catch((error) => {
           logger.error('Error fetching OpenAI models:', error);
           return [];
         }),
-        getAnthropicModels({ user: req.user.id, vertexModels: vertexConfig?.modelNames }).catch(
+        getAnthropicModels({
+          user: req.user.id,
+          vertexModels: vertexConfig?.modelNames,
+          endpointConfig: endpointsConfig[EModelEndpoint.anthropic],
+          baseURL: endpointsConfig[EModelEndpoint.anthropic]?.baseURL,
+        }).catch(
           (error) => {
             logger.error('Error fetching Anthropic models:', error);
             return [];
           },
         ),
-        getOpenAIModels({ user: req.user.id, azure: true }).catch((error) => {
+        getOpenAIModels({
+          user: req.user.id,
+          azure: true,
+          endpointConfig: endpointsConfig[EModelEndpoint.azureOpenAI],
+          baseURL: endpointsConfig[EModelEndpoint.azureOpenAI]?.baseURL,
+        }).catch((error) => {
           logger.error('Error fetching Azure OpenAI models:', error);
           return [];
         }),
-        getOpenAIModels({ assistants: true }).catch((error) => {
+        getOpenAIModels({
+          assistants: true,
+          endpointConfig: endpointsConfig[EModelEndpoint.assistants],
+          baseURL: endpointsConfig[EModelEndpoint.assistants]?.baseURL,
+        }).catch((error) => {
           logger.error('Error fetching OpenAI Assistants API models:', error);
           return [];
         }),
-        getOpenAIModels({ azureAssistants: true }).catch((error) => {
+        getOpenAIModels({
+          azureAssistants: true,
+          endpointConfig: endpointsConfig[EModelEndpoint.azureAssistants],
+          baseURL: endpointsConfig[EModelEndpoint.azureAssistants]?.baseURL,
+        }).catch((error) => {
           logger.error('Error fetching Azure OpenAI Assistants API models:', error);
           return [];
         }),
-        Promise.resolve(getGoogleModels()).catch((error) => {
+        Promise.resolve(getGoogleModels({
+          endpointConfig: endpointsConfig[EModelEndpoint.google],
+          baseURL: endpointsConfig[EModelEndpoint.google]?.baseURL,
+        })).catch((error) => {
           logger.error('Error getting Google models:', error);
           return [];
         }),
-        Promise.resolve(getBedrockModels()).catch((error) => {
+        Promise.resolve(getBedrockModels({
+          endpointConfig: endpointsConfig[EModelEndpoint.bedrock],
+          baseURL: endpointsConfig[EModelEndpoint.bedrock]?.baseURL,
+        })).catch((error) => {
           logger.error('Error getting Bedrock models:', error);
           return [];
         }),

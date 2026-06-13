@@ -1,9 +1,15 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { QueryKeys, isAssistantsEndpoint, type TModelCapability } from 'librechat-data-provider';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  QueryKeys,
+  isAssistantsEndpoint,
+  type TModelCapability,
+  stripUnsupportedByCapability,
+} from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
 import type { ActiveJobsResponse } from '~/data-provider';
+import type { TOptionSettings } from '~/common';
 import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import { useAbortStreamMutation } from '~/data-provider';
 import useNewConvo from '~/hooks/useNewConvo';
@@ -230,6 +236,23 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   const [showPopover, setShowPopover] = useRecoilState(store.showPopoverFamily(index));
   const [abortScroll, setAbortScroll] = useRecoilState(store.abortScrollFamily(index));
   const [optionSettings, setOptionSettings] = useRecoilState(store.optionSettingsFamily(index));
+
+  useEffect(() => {
+    const unregister = registerCapabilityChangeHandler((event) => {
+      const { stripParams, newCapability } = event;
+
+      if (stripParams && optionSettings) {
+        const stripped = stripUnsupportedByCapability(
+          optionSettings as Record<string, unknown>,
+          newCapability,
+        ) as TOptionSettings;
+        if (JSON.stringify(stripped) !== JSON.stringify(optionSettings)) {
+          setOptionSettings(stripped);
+        }
+      }
+    });
+    return unregister;
+  }, [registerCapabilityChangeHandler, optionSettings, setOptionSettings]);
 
   return useMemo(
     () => ({
