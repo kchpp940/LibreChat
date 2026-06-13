@@ -6,7 +6,6 @@ import {
   LocalStorageKeys,
   isAssistantsEndpoint,
   getDefaultParamsEndpoint,
-  extractModelNames,
 } from 'librechat-data-provider';
 import type {
   TEndpointsConfig,
@@ -122,7 +121,7 @@ const useGenerateConvo = ({
         conversation.assistant_id = undefined;
       }
 
-      const models = extractModelNames(modelsConfig?.[defaultEndpoint ?? ''] ?? []);
+      const models = modelsConfig?.[defaultEndpoint ?? ''] ?? [];
       const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, defaultEndpoint);
       conversation = buildDefaultConvo({
         conversation,

@@ -94,6 +94,7 @@ export type MessagesListResponse = {
 /* Shared Links */
 export type SharedMessagesResponse = Omit<s.TSharedLink, 'messages'> & {
   messages: s.TMessage[];
+  tour?: t.TTourData;
 };
 
 export interface SharedLinksListParams {

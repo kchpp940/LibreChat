@@ -6,16 +6,26 @@ import { useLocalize } from '~/hooks';
 export default function MessagesView({
   messagesTree: _messagesTree,
   conversationId,
+  scrollRef,
 }: {
   messagesTree?: TMessage[] | null;
   conversationId: string;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const localize = useLocalize();
   const [currentEditId, setCurrentEditId] = useState<number | string | null>(-1);
+
+  const scrollRefCallback = (node: HTMLDivElement | null) => {
+    if (scrollRef && 'current' in scrollRef) {
+      (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    }
+  };
+
   return (
     <div className="min-h-0 flex-1 overflow-hidden" data-testid="messages-view">
       <div className="dark:gpt-dark-gray relative h-full">
         <div
+          ref={scrollRefCallback}
           style={{
             height: '100%',
             overflowY: 'auto',
@@ -31,7 +41,7 @@ export default function MessagesView({
               <>
                 <div>
                   <MultiMessage
-                    key={conversationId} // avoid internal state mixture
+                    key={conversationId}
                     messagesTree={_messagesTree}
                     messageId={conversationId ?? null}
                     setCurrentEditId={setCurrentEditId}

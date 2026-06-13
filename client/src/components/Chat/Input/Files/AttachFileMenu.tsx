@@ -24,7 +24,7 @@ import {
   bedrockDocumentExtensions,
   isDocumentSupportedProvider,
 } from 'librechat-data-provider';
-import type { EndpointFileConfig, TConversation, TModelCapability } from 'librechat-data-provider';
+import type { EndpointFileConfig, TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import {
   useAgentToolPermissions,
@@ -32,7 +32,6 @@ import {
   useGetAgentsConfig,
   useFileHandlingNoChatContext,
   useLocalize,
-  useModelCapability,
 } from '~/hooks';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
 import { SharePointPickerDialog } from '~/components/SharePoint';
@@ -107,8 +106,6 @@ const AttachFileMenu = ({
    * */
   const capabilities = useAgentCapabilities(agentsConfig?.capabilities ?? defaultAgentCapabilities);
 
-  const capability: TModelCapability | null = useModelCapability(endpoint, conversation?.model, endpointType);
-
   const { fileSearchAllowedByAgent, codeAllowedByAgent, provider } = useAgentToolPermissions(
     agentId,
     ephemeralAgent,
@@ -164,16 +161,11 @@ const AttachFileMenu = ({
           endpointType === EModelEndpoint.azureOpenAI) &&
         useResponsesApi === true;
 
-      const showImage = capability
-        ? capability.vision === true
-        : true;
-      const showDocument = capability
-        ? capability.file_upload === true
-        : isDocumentSupportedProvider(endpointType) ||
-          isDocumentSupportedProvider(currentProvider) ||
-          isAzureWithResponsesApi;
-
-      if (showImage && showDocument) {
+      if (
+        isDocumentSupportedProvider(endpointType) ||
+        isDocumentSupportedProvider(currentProvider) ||
+        isAzureWithResponsesApi
+      ) {
         items.push({
           label: localize('com_ui_upload_provider'),
           onClick: () => {
@@ -191,7 +183,7 @@ const AttachFileMenu = ({
           },
           icon: <FileImageIcon className="icon-md" />,
         });
-      } else if (showImage) {
+      } else {
         items.push({
           label: localize('com_ui_upload_image_input'),
           onClick: () => {
@@ -199,15 +191,6 @@ const AttachFileMenu = ({
             onAction('image');
           },
           icon: <ImageUpIcon className="icon-md" />,
-        });
-      } else if (showDocument) {
-        items.push({
-          label: localize('com_ui_upload_provider'),
-          onClick: () => {
-            setToolResource(undefined);
-            onAction('document');
-          },
-          icon: <FileImageIcon className="icon-md" />,
         });
       }
 
@@ -278,7 +261,6 @@ const AttachFileMenu = ({
     provider,
     endpointType,
     capabilities,
-    capability,
     useResponsesApi,
     handleUploadClick,
     setEphemeralAgent,

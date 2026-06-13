@@ -1,15 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  QueryKeys,
-  isAssistantsEndpoint,
-  type TModelCapability,
-  stripUnsupportedByCapability,
-} from 'librechat-data-provider';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { QueryKeys, isAssistantsEndpoint } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
 import type { ActiveJobsResponse } from '~/data-provider';
-import type { TOptionSettings } from '~/common';
 import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import { useAbortStreamMutation } from '~/data-provider';
 import useNewConvo from '~/hooks/useNewConvo';
@@ -17,44 +11,11 @@ import { useLatestMessage, useLatestMessageId } from '~/hooks/Messages/useLatest
 import { getMessageCacheIds } from './cache';
 import store from '~/store';
 
-export type TCapabilityChangeEvent = {
-  stripVision: boolean;
-  stripFileSearch: boolean;
-  stripTools: boolean;
-  stripParams: boolean;
-  newCapability: TModelCapability;
-};
-
-export type TCapabilityChangeHandler = (event: TCapabilityChangeEvent) => void;
-
 // this to be set somewhere else
 export default function useChatHelpers(index = 0, paramId?: string) {
   const clearAllSubmissions = store.useClearSubmissionState();
   const [files, setFiles] = useRecoilState(store.filesByIndex(index));
   const [filesLoading, setFilesLoading] = useState(false);
-  const capabilityChangeHandlersRef = useRef<TCapabilityChangeHandler[]>([]);
-
-  const registerCapabilityChangeHandler = useCallback(
-    (handler: TCapabilityChangeHandler) => {
-      capabilityChangeHandlersRef.current.push(handler);
-      return () => {
-        const idx = capabilityChangeHandlersRef.current.indexOf(handler);
-        if (idx >= 0) {
-          capabilityChangeHandlersRef.current.splice(idx, 1);
-        }
-      };
-    },
-    [],
-  );
-
-  const capabilityChangeHandlers = useMemo(
-    () => ({
-      forEach: (cb: (h: TCapabilityChangeHandler) => void) => {
-        capabilityChangeHandlersRef.current.forEach(cb);
-      },
-    }),
-    [],
-  );
 
   const queryClient = useQueryClient();
   const abortMutation = useAbortStreamMutation();
@@ -237,23 +198,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   const [abortScroll, setAbortScroll] = useRecoilState(store.abortScrollFamily(index));
   const [optionSettings, setOptionSettings] = useRecoilState(store.optionSettingsFamily(index));
 
-  useEffect(() => {
-    const unregister = registerCapabilityChangeHandler((event) => {
-      const { stripParams, newCapability } = event;
-
-      if (stripParams && optionSettings) {
-        const stripped = stripUnsupportedByCapability(
-          optionSettings as Record<string, unknown>,
-          newCapability,
-        ) as TOptionSettings;
-        if (JSON.stringify(stripped) !== JSON.stringify(optionSettings)) {
-          setOptionSettings(stripped);
-        }
-      }
-    });
-    return unregister;
-  }, [registerCapabilityChangeHandler, optionSettings, setOptionSettings]);
-
   return useMemo(
     () => ({
       newConversation,
@@ -285,8 +229,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
-      registerCapabilityChangeHandler,
-      capabilityChangeHandlers,
     }),
     [
       newConversation,
@@ -318,8 +260,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
-      registerCapabilityChangeHandler,
-      capabilityChangeHandlers,
     ],
   );
 }

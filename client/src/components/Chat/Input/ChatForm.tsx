@@ -3,7 +3,7 @@ import { useWatch } from 'react-hook-form';
 import { TextareaAutosize } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
-import type { TConversation, TModelCapability } from 'librechat-data-provider';
+import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter, ConvoGenerator } from '~/common';
 import {
   useChatContext,
@@ -20,7 +20,6 @@ import {
   useQueryParams,
   useSubmitMessage,
   useFocusChatEffect,
-  useModelCapability,
 } from '~/hooks';
 import PendingManualSkillsChips from './PendingManualSkillsChips';
 import { cn, getModelSpec, removeFocusRings } from '~/utils';
@@ -105,11 +104,6 @@ const ChatForm = memo(function ChatForm({
   const endpoint = useMemo(
     () => conversation?.endpointType ?? conversation?.endpoint,
     [conversation?.endpointType, conversation?.endpoint],
-  );
-  const capability: TModelCapability | null = useModelCapability(
-    conversation?.endpoint,
-    conversation?.model,
-    conversation?.endpointType,
   );
   const modelSpec = useMemo(
     () => getModelSpec({ specName: conversation?.spec, startupConfig }),

@@ -1,10 +1,5 @@
 const { handleError } = require('@librechat/api');
-const {
-  ViolationTypes,
-  findModelCapability,
-  resolveCapability,
-  extractModelNames,
-} = require('librechat-data-provider');
+const { ViolationTypes } = require('librechat-data-provider');
 const { getModelsConfig } = require('~/server/controllers/ModelController');
 const { getEndpointsConfig } = require('~/server/services/Config');
 const { logViolation } = require('~/cache');
@@ -12,6 +7,14 @@ const { logViolation } = require('~/cache');
 const MAX_MODEL_STRING_LENGTH = 256;
 const MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.:/@+-]*$/;
 
+/**
+ * Validates the model of the request.
+ *
+ * @async
+ * @param {ServerRequest} req - The Express request object.
+ * @param {Express.Response} res - The Express response object.
+ * @param {Function} next - The Express next function.
+ */
 const validateModel = async (req, res, next) => {
   const { endpoint } = req.body;
   const rawModel = req.body.model;
@@ -45,25 +48,9 @@ const validateModel = async (req, res, next) => {
     return handleError(res, { text: 'Endpoint models not loaded' });
   }
 
-  const modelNames = extractModelNames(availableModels);
-  let validModel = modelNames.includes(model);
+  let validModel = !!availableModels.find((availableModel) => availableModel === model);
 
   if (validModel) {
-    const endpointCapabilities = endpointConfig?.capabilities;
-    const modelConfigs = endpointConfig && typeof endpointConfig.models === 'object' && endpointConfig.models !== null
-      ? endpointConfig.models
-      : null;
-    const modelCapabilities = modelConfigs && modelConfigs[model] ? modelConfigs[model].capabilities : undefined;
-    const capsArray = Array.isArray(modelCapabilities) ? modelCapabilities : (Array.isArray(endpointCapabilities) ? endpointCapabilities : undefined);
-    const configOverride = capsArray ? capsArray.reduce((acc, key) => {
-      acc[key.toLowerCase()] = true;
-      return acc;
-    }, {}) : undefined;
-    const baseURL = typeof endpointConfig?.baseURL === 'string' ? endpointConfig.baseURL : undefined;
-
-    const capability = findModelCapability(availableModels, model)
-      ?? resolveCapability({ endpoint, model, baseURL, configOverride });
-    req.body.modelCapability = capability;
     return next();
   }
 

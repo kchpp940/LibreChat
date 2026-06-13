@@ -12,8 +12,6 @@ const {
   isAgentsEndpoint,
   parseCompactConvo,
   getDefaultParamsEndpoint,
-  stripUnsupportedByCapability,
-  resolveCapability,
 } = require('librechat-data-provider');
 const azureAssistants = require('~/server/services/Endpoints/azureAssistants');
 const assistants = require('~/server/services/Endpoints/assistants');
@@ -137,45 +135,6 @@ async function buildEndpointOption(req, res, next) {
       req.body.endpointOption.attachments = updateFilesUsage(req.body.files, undefined, {
         user: req.user.id,
       });
-    }
-
-    let cap = req.body.modelCapability;
-    const endpointConfig = endpointsConfig?.[endpoint];
-    const modelName = req.body.model;
-    if (endpointConfig && modelName) {
-      const endpointCapabilities = endpointConfig?.capabilities;
-      const modelConfigs =
-        endpointConfig &&
-        typeof endpointConfig.models === 'object' &&
-        endpointConfig.models !== null
-          ? endpointConfig.models
-          : null;
-      const modelCapabilities =
-        modelConfigs && modelConfigs[modelName]
-          ? modelConfigs[modelName].capabilities
-          : undefined;
-      const capsArray = Array.isArray(modelCapabilities)
-        ? modelCapabilities
-        : Array.isArray(endpointCapabilities)
-          ? endpointCapabilities
-          : undefined;
-      const configOverride = capsArray
-        ? capsArray.reduce((acc, key) => {
-            acc[key.toLowerCase()] = true;
-            return acc;
-          }, {})
-        : undefined;
-      const baseURL = typeof endpointConfig?.baseURL === 'string' ? endpointConfig.baseURL : undefined;
-      cap = resolveCapability({
-        endpoint,
-        model: modelName,
-        baseURL,
-        configOverride,
-      });
-      req.body.modelCapability = cap;
-    }
-    if (cap) {
-      req.body.endpointOption = stripUnsupportedByCapability(req.body.endpointOption, cap);
     }
 
     next();

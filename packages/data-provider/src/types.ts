@@ -9,8 +9,6 @@ import type {
   TBanner,
   ReasoningResponseKey,
   ReasoningParameterFormat,
-  TModelCapability,
-  TModelInfo,
 } from './schemas';
 import type { RefillIntervalUnit } from './balance';
 import type { SettingDefinition } from './generate';
@@ -352,8 +350,38 @@ export type TArchiveConversationRequest = {
 
 export type TArchiveConversationResponse = TConversation;
 
+export type TTourItemCategory = 'assistant' | 'tool_call' | 'artifact' | 'file' | 'error';
+
+export type TTourToolCall = {
+  toolName: string;
+  toolCallId?: string;
+  output?: string;
+};
+
+export type TTourFileRef = {
+  filename?: string;
+  filetype?: string;
+};
+
+export type TTourItem = {
+  messageId: string;
+  category: TTourItemCategory;
+  label: string;
+  toolCalls?: TTourToolCall[];
+  files?: TTourFileRef[];
+};
+
+export type TTourData = {
+  items: TTourItem[];
+  totalMessages: number;
+  assistantCount: number;
+  toolCallCount: number;
+  fileCount: number;
+};
+
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
   messages: TMessage[];
+  tour?: TTourData;
 };
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;
@@ -454,37 +482,7 @@ export type TEndpointsConfig =
   | Record<EModelEndpoint | string, TConfig | null | undefined>
   | undefined;
 
-export type TModelsConfig = Record<string, string[] | TModelInfo[]>;
-
-export function isModelInfoArray(
-  models: string[] | TModelInfo[] | undefined,
-): models is TModelInfo[] {
-  return Array.isArray(models) && models.length > 0 && typeof models[0] === 'object';
-}
-
-export function extractModelNames(models: string[] | TModelInfo[] | undefined): string[] {
-  if (!Array.isArray(models) || models.length === 0) {
-    return [];
-  }
-  if (typeof models[0] === 'string') {
-    return models as string[];
-  }
-  return (models as TModelInfo[]).map((m) => m.model);
-}
-
-export function findModelCapability(
-  models: string[] | TModelInfo[] | undefined,
-  modelName: string | null | undefined,
-): TModelCapability | null {
-  if (!modelName || !Array.isArray(models) || models.length === 0) {
-    return null;
-  }
-  if (typeof models[0] !== 'object') {
-    return null;
-  }
-  const info = (models as TModelInfo[]).find((m) => m.model === modelName);
-  return info?.capabilities ?? null;
-}
+export type TModelsConfig = Record<string, string[]>;
 
 export type TUpdateTokenCountResponse = {
   count: number;

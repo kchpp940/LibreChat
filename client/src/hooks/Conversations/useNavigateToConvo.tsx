@@ -8,7 +8,6 @@ import {
   dataService,
   getEndpointField,
   getDefaultParamsEndpoint,
-  extractModelNames,
 } from 'librechat-data-provider';
 import type {
   TEndpointsConfig,
@@ -106,7 +105,7 @@ const useNavigateToConvo = (index = 0) => {
         conversation.endpointType = endpointType;
       }
 
-      const models = extractModelNames(modelsConfig?.[defaultEndpoint ?? ''] ?? []);
+      const models = modelsConfig?.[defaultEndpoint ?? ''] ?? [];
 
       const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, defaultEndpoint);
       convo = buildDefaultConvo({

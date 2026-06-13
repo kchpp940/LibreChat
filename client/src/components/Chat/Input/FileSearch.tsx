@@ -1,13 +1,12 @@
 import React, { memo } from 'react';
 import { CheckboxButton, VectorIcon } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
-import { useLocalize, useHasAccess, useModelCapability } from '~/hooks';
-import { useBadgeRowContext, useChatContext } from '~/Providers';
+import { useLocalize, useHasAccess } from '~/hooks';
+import { useBadgeRowContext } from '~/Providers';
 
 function FileSearch() {
   const localize = useLocalize();
   const context = useBadgeRowContext();
-  const { conversation } = useChatContext();
   const { toggleState: fileSearchEnabled, debouncedChange, isPinned } = context?.fileSearch ?? {};
 
   const canUseFileSearch = useHasAccess({
@@ -15,17 +14,7 @@ function FileSearch() {
     permission: Permissions.USE,
   });
 
-  const capability = useModelCapability(
-    conversation?.endpoint,
-    conversation?.model,
-    conversation?.endpointType,
-  );
-
   if (!canUseFileSearch) {
-    return null;
-  }
-
-  if (capability != null && !capability.file_search) {
     return null;
   }
 

@@ -49,7 +49,5 @@ export { default as createPayload } from './createPayload';
 /* feedback */
 export * from './feedback';
 export * from './parameterSettings';
-/* capability resolver */
-export * from './capabilityResolver';
 /* code-execution sandbox */
 export * from './codeEnvRef';

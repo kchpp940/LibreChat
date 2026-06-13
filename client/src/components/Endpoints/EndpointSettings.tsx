@@ -1,6 +1,6 @@
 import { useRecoilValue } from 'recoil';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
-import { getEndpointField, SettingsViews, extractModelNames } from 'librechat-data-provider';
+import { getEndpointField, SettingsViews } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { TSettingsProps } from '~/common';
 import { useGetEndpointsQuery } from '~/data-provider';
@@ -25,7 +25,7 @@ export default function Settings({
 
   const { settings, multiViewSettings } = getSettings();
   const { endpoint: _endpoint } = conversation as TConversation;
-  const models = extractModelNames(modelsQuery.data?.[_endpoint ?? ''] ?? []);
+  const models = modelsQuery.data?.[_endpoint ?? ''] ?? [];
   const OptionComponent = settings[endpoint];
 
   if (OptionComponent) {

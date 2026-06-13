@@ -1929,7 +1929,7 @@ export const initialModelsConfig: TModelsConfig = {
   [EModelEndpoint.google]: defaultModels[EModelEndpoint.google],
   [EModelEndpoint.anthropic]: defaultModels[EModelEndpoint.anthropic],
   [EModelEndpoint.bedrock]: defaultModels[EModelEndpoint.bedrock],
-} as Record<string, string[]>;
+};
 
 export const EndpointURLs = {
   [EModelEndpoint.assistants]: `${apiBaseUrl()}/api/assistants/v2/chat`,

@@ -171,6 +171,172 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
  * Filter messages up to and including the target message (branch-specific)
  * Similar to getMessagesUpToTargetLevel from fork utilities
  */
+function extractToolCallsFromContent(
+  content: unknown,
+): Array<{ toolName: string; toolCallId?: string; output?: string }> {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  const results: Array<{ toolName: string; toolCallId?: string; output?: string }> = [];
+  for (const part of content) {
+    if (!part || typeof part !== 'object') {
+      continue;
+    }
+    const p = part as Record<string, unknown>;
+    if (p.type === 'tool_call' && p.tool_call && typeof p.tool_call === 'object') {
+      const tc = p.tool_call as Record<string, unknown>;
+      const name =
+        typeof tc.name === 'string'
+          ? tc.name
+          : tc.function && typeof tc.function === 'object' && typeof (tc.function as Record<string, unknown>).name === 'string'
+            ? ((tc.function as Record<string, unknown>).name as string)
+            : undefined;
+      if (name) {
+        results.push({
+          toolName: name,
+          toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
+          output:
+            tc.output != null && typeof tc.output === 'string' ? tc.output : undefined,
+        });
+      }
+    }
+  }
+  return results;
+}
+
+function truncateLabel(text: string, maxLen = 80): string {
+  if (!text) {
+    return '';
+  }
+  const cleaned = text.replace(/\n/g, ' ').trim();
+  if (cleaned.length <= maxLen) {
+    return cleaned;
+  }
+  return cleaned.slice(0, maxLen - 1) + '…';
+}
+
+function buildTourData(messages: t.SharedMessage[]): t.TourData {
+  const items: t.TourItem[] = [];
+  let assistantCount = 0;
+  let toolCallCount = 0;
+  let fileCount = 0;
+
+  for (const msg of messages) {
+    if (msg.isCreatedByUser) {
+      const userFiles: t.TourFileRef[] = [];
+      if (Array.isArray(msg.files)) {
+        for (const f of msg.files) {
+          const file = f as Record<string, unknown>;
+          if (file.filename || file.filepath) {
+            userFiles.push({
+              filename: typeof file.filename === 'string' ? file.filename : undefined,
+              filetype: typeof file.type === 'string' ? file.type : undefined,
+            });
+          }
+        }
+      }
+      if (userFiles.length > 0) {
+        fileCount += userFiles.length;
+        items.push({
+          messageId: msg.messageId,
+          category: 'file',
+          label: truncateLabel(userFiles.map((f) => f.filename || 'File').join(', ')),
+          files: userFiles,
+        });
+      }
+      continue;
+    }
+
+    const toolCalls = extractToolCallsFromContent(msg.content);
+    const msgFiles: t.TourFileRef[] = [];
+    if (Array.isArray(msg.files)) {
+      for (const f of msg.files) {
+        const file = f as Record<string, unknown>;
+        if (file.filename || file.filepath) {
+          msgFiles.push({
+            filename: typeof file.filename === 'string' ? file.filename : undefined,
+            filetype: typeof file.type === 'string' ? file.type : undefined,
+          });
+        }
+      }
+    }
+    const attachToolCalls: t.TourToolCall[] = [];
+    if (Array.isArray(msg.attachments)) {
+      for (const att of msg.attachments) {
+        const a = att as Record<string, unknown>;
+        if (typeof a.type === 'string' && a.type) {
+          attachToolCalls.push({
+            toolName: a.type,
+            toolCallId: typeof a.toolCallId === 'string' ? a.toolCallId : undefined,
+          });
+          toolCallCount++;
+        }
+      }
+    }
+
+    const allToolCalls = [...toolCalls, ...attachToolCalls];
+    if (allToolCalls.length > 0) {
+      toolCallCount += toolCalls.length;
+    }
+    fileCount += msgFiles.length;
+
+    if (msg.error) {
+      items.push({
+        messageId: msg.messageId,
+        category: 'error',
+        label: truncateLabel(msg.text || 'Error'),
+      });
+      continue;
+    }
+
+    assistantCount++;
+    const label = truncateLabel(msg.text || msg.sender || 'Assistant');
+
+    const hasArtifact = allToolCalls.some(
+      (tc) => tc.toolName === 'code_interpreter' || tc.toolName === 'artifacts',
+    );
+
+    if (hasArtifact) {
+      items.push({
+        messageId: msg.messageId,
+        category: 'artifact',
+        label,
+        toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
+        files: msgFiles.length > 0 ? msgFiles : undefined,
+      });
+    } else if (allToolCalls.length > 0) {
+      items.push({
+        messageId: msg.messageId,
+        category: 'tool_call',
+        label,
+        toolCalls: allToolCalls,
+        files: msgFiles.length > 0 ? msgFiles : undefined,
+      });
+    } else if (msgFiles.length > 0) {
+      items.push({
+        messageId: msg.messageId,
+        category: 'file',
+        label,
+        files: msgFiles,
+      });
+    } else {
+      items.push({
+        messageId: msg.messageId,
+        category: 'assistant',
+        label,
+      });
+    }
+  }
+
+  return {
+    items,
+    totalMessages: messages.length,
+    assistantCount,
+    toolCallCount,
+    fileCount,
+  };
+}
+
 function getMessagesUpToTarget(messages: t.IMessage[], targetMessageId: string): t.IMessage[] {
   if (!messages || messages.length === 0) {
     return [];
@@ -306,13 +472,16 @@ export function createShareMethods(mongoose: typeof import('mongoose')): {
       }
 
       const newConvoId = anonymizeConvoId(share.conversationId);
+      const anonymized = anonymizeMessages(messagesToShare, newConvoId);
+      const tour = buildTourData(anonymized);
       const result: t.SharedMessagesResult = {
         shareId: share.shareId || shareId,
         title: share.title,
         createdAt: share.createdAt,
         updatedAt: share.updatedAt,
         conversationId: newConvoId,
-        messages: anonymizeMessages(messagesToShare, newConvoId),
+        messages: anonymized,
+        tour,
       };
 
       return result;

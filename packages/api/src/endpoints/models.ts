@@ -8,11 +8,8 @@ import {
   KnownEndpoints,
   EModelEndpoint,
   defaultModels,
-  Providers,
 } from 'librechat-data-provider';
-import type { TModelInfo, TConfig } from 'librechat-data-provider';
 import type { IUser } from '@librechat/data-schemas';
-import { enrichModelsWithCapabilities } from './capabilities';
 import {
   processModelData,
   extractBaseURL,
@@ -49,8 +46,6 @@ export interface FetchModelsParams {
   userObject?: Partial<IUser>;
   /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
   skipCache?: boolean;
-  /** Optional endpoint config for capability overrides */
-  endpointConfig?: Partial<TConfig> | null;
 }
 
 /**
@@ -119,8 +114,7 @@ export async function fetchModels({
   headers,
   userObject,
   skipCache = false,
-  endpointConfig,
-}: FetchModelsParams): Promise<string[] | TModelInfo[]> {
+}: FetchModelsParams): Promise<string[]> {
   let models: string[] = [];
   const baseURL = direct ? extractBaseURL(_baseURL ?? '') : _baseURL;
 
@@ -132,6 +126,14 @@ export async function fetchModels({
     return models;
   }
 
+  // The MODEL_QUERIES cache is keyed by baseURL+apiKey only. That's safe
+  // when the response is identical for every caller, but fails when callers
+  // forward header templates that resolve to a user-bound value (e.g.
+  // `Authorization: Bearer {{LIBRECHAT_OPENID_ID_TOKEN}}`): one user's
+  // filtered list could otherwise be served to the next request that
+  // shares the same baseURL+apiKey. Skip the cache whenever both `headers`
+  // and `userObject` are supplied, since that's the signal the caller is
+  // resolving headers against a specific user's identity.
   const hasUserScopedHeaders = !!headers && Object.keys(headers).length > 0 && !!userObject;
   const shouldCache = !skipCache && !(userIdQuery && user) && !hasUserScopedHeaders;
   const cacheKey = shouldCache ? modelsCacheKey(baseURL ?? '', apiKey) : '';
@@ -158,14 +160,14 @@ export async function fetchModels({
       if (modelsCache && cacheKey && ollamaModels.length > 0) {
         await modelsCache.set(cacheKey, ollamaModels, Time.TWO_MINUTES);
       }
-      if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-        return ollamaModels;
-      }
-      return enrichModelsWithCapabilities(ollamaModels, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined, endpointConfig);
+      return ollamaModels;
     }
   }
 
   try {
+    // Resolve template variables (e.g. {{LIBRECHAT_OPENID_ID_TOKEN}}) in the
+    // configured headers, mirroring fetchOllamaModels above. Without this,
+    // placeholder strings are forwarded literally on the model-fetch path.
     const resolvedHeaders = resolveHeaders({
       headers: headers ?? undefined,
       user: userObject,
@@ -188,6 +190,10 @@ export async function fetchModels({
         'anthropic-version': process.env.ANTHROPIC_VERSION || '2023-06-01',
       };
     } else {
+      // Only fall back to the apiKey-based Bearer when the configured
+      // headers did not already supply an Authorization. This lets
+      // auth-aware proxies (e.g. LiteLLM with JWT auth) receive the user's
+      // token on /v1/models so they can return a per-user filtered list.
       const hasAuthHeader = Object.keys(options.headers).some(
         (k) => k.toLowerCase() === 'authorization',
       );
@@ -227,25 +233,6 @@ export async function fetchModels({
     await modelsCache.set(cacheKey, models, Time.TWO_MINUTES);
   }
 
-  if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-    return models;
-  }
-
-  const enrichedEndpoints = [
-    EModelEndpoint.openAI,
-    EModelEndpoint.azureOpenAI,
-    EModelEndpoint.assistants,
-    EModelEndpoint.azureAssistants,
-    EModelEndpoint.anthropic,
-    EModelEndpoint.google,
-    EModelEndpoint.bedrock,
-    EModelEndpoint.custom,
-  ];
-
-  if (enrichedEndpoints.includes((name ?? EModelEndpoint.custom) as EModelEndpoint)) {
-    return enrichModelsWithCapabilities(models, (name ?? EModelEndpoint.custom) as EModelEndpoint, baseURL ?? undefined, endpointConfig);
-  }
-
   return models;
 }
 
@@ -265,12 +252,6 @@ export interface GetOpenAIModelsOptions {
   openAIApiKey?: string;
   /** Skip MODEL_QUERIES cache (e.g., for user-provided keys) */
   skipCache?: boolean;
-  /** Optional endpoint config for capability overrides */
-  endpointConfig?: Partial<TConfig> | null;
-  /** Optional base URL for capability heuristic */
-  baseURL?: string;
-  /** Whether to fetch models for Azure Assistants endpoint */
-  azureAssistants?: boolean;
 }
 
 function resolveOpenAIApiKey(opts: GetOpenAIModelsOptions): string | undefined {
@@ -286,21 +267,17 @@ function resolveOpenAIApiKey(opts: GetOpenAIModelsOptions): string | undefined {
 export async function fetchOpenAIModels(
   opts: GetOpenAIModelsOptions,
   _models: string[] = [],
-): Promise<string[] | TModelInfo[]> {
-  let models: string[] = _models.slice() ?? [];
+): Promise<string[]> {
+  let models = _models.slice() ?? [];
   const apiKey = resolveOpenAIApiKey(opts);
   const openaiBaseURL = 'https://api.openai.com/v1';
-  let baseURL = opts.baseURL ?? openaiBaseURL;
+  let baseURL = openaiBaseURL;
   let reverseProxyUrl = process.env.OPENAI_REVERSE_PROXY;
 
   if (opts.assistants && process.env.ASSISTANTS_BASE_URL) {
     reverseProxyUrl = process.env.ASSISTANTS_BASE_URL;
-  } else if (opts.azure || opts.azureAssistants) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return models;
-    }
-    const endpoint = opts.assistants || opts.azureAssistants ? EModelEndpoint.azureAssistants : EModelEndpoint.azureOpenAI;
-    return enrichModelsWithCapabilities(models, endpoint, baseURL, opts.endpointConfig);
+  } else if (opts.azure) {
+    return models;
   }
 
   if (reverseProxyUrl) {
@@ -308,41 +285,18 @@ export async function fetchOpenAIModels(
   }
 
   if (baseURL || opts.azure) {
-    const fetchedModels = await fetchModels({
+    models = await fetchModels({
       apiKey: apiKey ?? '',
       baseURL,
       azure: opts.azure,
       user: opts.user,
       name: EModelEndpoint.openAI,
       skipCache: opts.skipCache,
-      endpointConfig: opts.endpointConfig,
     });
-    if (Array.isArray(fetchedModels) && fetchedModels.length > 0 && typeof fetchedModels[0] === 'object') {
-      if (_models.length === 0) {
-        return fetchedModels;
-      }
-      const modelNames = (fetchedModels as TModelInfo[]).map((m) => m.model);
-      const regex = /(text-davinci-003|gpt-|o\d+|chat-latest)/;
-      const excludeRegex = /audio|realtime/;
-      const filteredNames = modelNames.filter((model) => regex.test(model) && !excludeRegex.test(model));
-      const instructModels = filteredNames.filter((model) => model.includes('instruct'));
-      const otherModels = filteredNames.filter((model) => !model.includes('instruct'));
-      const orderedNames = otherModels.concat(instructModels);
-      return (fetchedModels as TModelInfo[]).filter((m) => orderedNames.includes(m.model));
-    }
-    models = fetchedModels as string[];
   }
 
   if (models.length === 0) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return _models;
-    }
-    const endpoint = opts.assistants
-      ? EModelEndpoint.assistants
-      : opts.azure
-        ? EModelEndpoint.azureOpenAI
-        : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(_models, endpoint, baseURL, opts.endpointConfig);
+    return _models;
   }
 
   if (baseURL === openaiBaseURL) {
@@ -354,16 +308,7 @@ export async function fetchOpenAIModels(
     models = otherModels.concat(instructModels);
   }
 
-  if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-    return models;
-  }
-
-  const endpoint = opts.assistants
-    ? EModelEndpoint.assistants
-    : opts.azure
-      ? EModelEndpoint.azureOpenAI
-      : EModelEndpoint.openAI;
-  return enrichModelsWithCapabilities(models, endpoint, baseURL, opts.endpointConfig);
+  return models;
 }
 
 /**
@@ -371,9 +316,7 @@ export async function fetchOpenAIModels(
  * @param opts - Options for getting models
  * @returns Promise resolving to array of model IDs
  */
-export async function getOpenAIModels(
-  opts: GetOpenAIModelsOptions = {},
-): Promise<string[] | TModelInfo[]> {
+export async function getOpenAIModels(opts: GetOpenAIModelsOptions = {}): Promise<string[]> {
   let models = defaultModels[EModelEndpoint.openAI];
 
   if (opts.assistants) {
@@ -392,28 +335,11 @@ export async function getOpenAIModels(
   }
 
   if (process.env[key]) {
-    const trimmed = splitAndTrim(process.env[key]);
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return trimmed;
-    }
-    const endpoint = opts.assistants || opts.azureAssistants
-      ? EModelEndpoint.assistants
-      : opts.azure
-        ? EModelEndpoint.azureOpenAI
-        : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(trimmed, endpoint, opts.baseURL, opts.endpointConfig);
+    return splitAndTrim(process.env[key]);
   }
 
   if (isUserProvided(resolveOpenAIApiKey(opts))) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return models;
-    }
-    const endpoint = opts.assistants || opts.azureAssistants
-      ? EModelEndpoint.assistants
-      : opts.azure
-        ? EModelEndpoint.azureOpenAI
-        : EModelEndpoint.openAI;
-    return enrichModelsWithCapabilities(models, endpoint, opts.baseURL, opts.endpointConfig);
+    return models;
   }
 
   return await fetchOpenAIModels(opts, models);
@@ -426,13 +352,13 @@ export async function getOpenAIModels(
  * @returns Promise resolving to array of model IDs
  */
 export async function fetchAnthropicModels(
-  opts: { user?: string; skipCache?: boolean; endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
+  opts: { user?: string; skipCache?: boolean } = {},
   _models: string[] = [],
-): Promise<string[] | TModelInfo[]> {
-  let models: string[] = _models.slice() ?? [];
+): Promise<string[]> {
+  let models = _models.slice() ?? [];
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const anthropicBaseURL = 'https://api.anthropic.com/v1';
-  let baseURL = opts.baseURL ?? anthropicBaseURL;
+  let baseURL = anthropicBaseURL;
   const reverseProxyUrl = process.env.ANTHROPIC_REVERSE_PROXY;
 
   if (reverseProxyUrl) {
@@ -440,40 +366,25 @@ export async function fetchAnthropicModels(
   }
 
   if (!apiKey) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return models;
-    }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return models;
   }
 
   if (baseURL) {
-    const fetchedModels = await fetchModels({
+    models = await fetchModels({
       apiKey,
       baseURL,
       user: opts.user,
       name: EModelEndpoint.anthropic,
       tokenKey: EModelEndpoint.anthropic,
       skipCache: opts.skipCache,
-      endpointConfig: opts.endpointConfig,
     });
-    if (Array.isArray(fetchedModels) && fetchedModels.length > 0 && typeof fetchedModels[0] === 'object') {
-      return fetchedModels;
-    }
-    models = fetchedModels as string[];
   }
 
   if (models.length === 0) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return _models;
-    }
-    return enrichModelsWithCapabilities(_models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return _models;
   }
 
-  if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-    return models;
-  }
-
-  return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+  return models;
 }
 
 /**
@@ -482,80 +393,51 @@ export async function fetchAnthropicModels(
  * @returns Promise resolving to array of model IDs
  */
 export async function getAnthropicModels(
-  opts: { user?: string; vertexModels?: string[]; endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
-): Promise<string[] | TModelInfo[]> {
+  opts: { user?: string; vertexModels?: string[] } = {},
+): Promise<string[]> {
   const models = defaultModels[EModelEndpoint.anthropic];
-  const baseURL = opts.baseURL ?? 'https://api.anthropic.com/v1';
 
+  // Vertex AI models from YAML config take priority
   if (opts.vertexModels && opts.vertexModels.length > 0) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return opts.vertexModels;
-    }
-    return enrichModelsWithCapabilities(opts.vertexModels, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return opts.vertexModels;
   }
 
   if (process.env.ANTHROPIC_MODELS) {
-    const trimmed = splitAndTrim(process.env.ANTHROPIC_MODELS);
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return trimmed;
-    }
-    return enrichModelsWithCapabilities(trimmed, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return splitAndTrim(process.env.ANTHROPIC_MODELS);
   }
 
   if (isUserProvided(process.env.ANTHROPIC_API_KEY)) {
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return models;
-    }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return models;
   }
 
   try {
     return await fetchAnthropicModels(opts, models);
   } catch (error) {
     logger.error('Error fetching Anthropic models:', error);
-    if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-      return models;
-    }
-    return enrichModelsWithCapabilities(models, EModelEndpoint.anthropic, baseURL, opts.endpointConfig);
+    return models;
   }
 }
 
 /**
  * Gets Google models from environment or defaults.
- * @param opts - Options for getting models
  * @returns Array of model IDs
  */
-export function getGoogleModels(
-  opts: { endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
-): string[] | TModelInfo[] {
+export function getGoogleModels(): string[] {
   let models = defaultModels[EModelEndpoint.google];
-  const baseURL = opts.baseURL ?? 'https://generativelanguage.googleapis.com/v1beta';
   if (process.env.GOOGLE_MODELS) {
     models = splitAndTrim(process.env.GOOGLE_MODELS);
   }
-  if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-    return models;
-  }
-  return enrichModelsWithCapabilities(models, EModelEndpoint.google, baseURL, opts.endpointConfig);
+  return models;
 }
 
 /**
  * Gets Bedrock models from environment or defaults.
- * @param opts - Options for getting models
  * @returns Array of model IDs
  */
-export function getBedrockModels(
-  opts: { endpointConfig?: Partial<TConfig> | null; baseURL?: string } = {},
-): string[] | TModelInfo[] {
+export function getBedrockModels(): string[] {
   let models = defaultModels[EModelEndpoint.bedrock];
-  const baseURL = opts.baseURL;
   if (process.env.BEDROCK_AWS_MODELS) {
     models = splitAndTrim(process.env.BEDROCK_AWS_MODELS);
   }
-  if (process.env.MODELS_CAPABILITIES_DISABLED === 'true') {
-    return models;
-  }
-  return enrichModelsWithCapabilities(models, EModelEndpoint.bedrock, baseURL, opts.endpointConfig);
+  return models;
 }
-
-

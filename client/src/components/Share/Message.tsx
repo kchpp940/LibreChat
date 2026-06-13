@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import type { TMessageProps } from '~/common';
+import { ContentTypes } from 'librechat-data-provider';
+import type { TMessageContentParts, TTourToolCall } from 'librechat-data-provider';
 import MinimalHoverButtons from '~/components/Chat/Messages/MinimalHoverButtons';
 import MessageContent from '~/components/Chat/Messages/Content/MessageContent';
 import SearchContent from '~/components/Chat/Messages/Content/SearchContent';
@@ -8,9 +11,41 @@ import SubRow from '~/components/Chat/Messages/SubRow';
 import { fontSizeAtom } from '~/store/fontSize';
 import { MessageContext } from '~/Providers';
 import MultiMessage from './MultiMessage';
+import ToolOutputCollapsible from './ToolOutputCollapsible';
 import { useAttachments } from '~/hooks';
 import Icon from './MessageIcon';
 import { cn } from '~/utils';
+
+function extractToolCallsFromContent(content?: TMessageContentParts[]): TTourToolCall[] {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  const results: TTourToolCall[] = [];
+  for (const part of content) {
+    if (!part || typeof part !== 'object') {
+      continue;
+    }
+    const p = part as Record<string, unknown>;
+    if (p.type === ContentTypes.TOOL_CALL && p.tool_call && typeof p.tool_call === 'object') {
+      const tc = p.tool_call as Record<string, unknown>;
+      const name =
+        typeof tc.name === 'string'
+          ? tc.name
+          : tc.function && typeof tc.function === 'object' && typeof (tc.function as Record<string, unknown>).name === 'string'
+            ? ((tc.function as Record<string, unknown>).name as string)
+            : undefined;
+      if (name) {
+        results.push({
+          toolName: name,
+          toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
+          output: tc.output != null && typeof tc.output === 'string' ? tc.output : undefined,
+        });
+      }
+    }
+  }
+  return results;
+}
+
 export default function Message(props: TMessageProps) {
   const fontSize = useAtomValue(fontSizeAtom);
   const {
@@ -27,6 +62,26 @@ export default function Message(props: TMessageProps) {
     messageId: message?.messageId,
     attachments: message?.attachments,
   });
+
+  const toolCalls = useMemo(() => {
+    if (!message || message.isCreatedByUser) {
+      return [];
+    }
+    const contentCalls = extractToolCallsFromContent(message.content);
+    const attachCalls: TTourToolCall[] = [];
+    if (Array.isArray(message.attachments)) {
+      for (const att of message.attachments) {
+        const a = att as Record<string, unknown>;
+        if (typeof a.type === 'string' && a.type) {
+          attachCalls.push({
+            toolName: a.type,
+            toolCallId: typeof a.toolCallId === 'string' ? a.toolCallId : undefined,
+          });
+        }
+      }
+    }
+    return [...contentCalls, ...attachCalls];
+  }, [message]);
 
   if (!message) {
     return null;
@@ -50,7 +105,10 @@ export default function Message(props: TMessageProps) {
 
   return (
     <>
-      <div className="text-token-text-primary w-full border-0 bg-transparent dark:border-0 dark:bg-transparent">
+      <div
+        id={`share-msg-${messageId}`}
+        className="text-token-text-primary w-full border-0 bg-transparent dark:border-0 dark:bg-transparent scroll-mt-4"
+      >
         <div className="m-auto justify-center p-4 py-2 md:gap-6">
           <div className="final-completion group mx-auto flex flex-1 gap-3 md:max-w-[47rem] md:px-5 lg:px-1 xl:max-w-[55rem] xl:px-5">
             <div className="relative flex flex-shrink-0 flex-col items-end">
@@ -73,8 +131,8 @@ export default function Message(props: TMessageProps) {
                       messageId,
                       isExpanded: false,
                       conversationId: conversation?.conversationId,
-                      isSubmitting: false, // Share view is always read-only
-                      isLatestMessage: false, // No concept of latest message in share view
+                      isSubmitting: false,
+                      isLatestMessage: false,
                     }}
                   >
                     {message.content ? (
@@ -100,6 +158,11 @@ export default function Message(props: TMessageProps) {
                       />
                     )}
                   </MessageContext.Provider>
+                  {toolCalls.length > 0 && !isCreatedByUser && (
+                    <div className="mt-2">
+                      <ToolOutputCollapsible toolCalls={toolCalls} />
+                    </div>
+                  )}
                 </div>
               </div>
               <SubRow classes="text-xs">

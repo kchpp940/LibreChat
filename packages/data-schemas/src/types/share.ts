@@ -67,6 +67,35 @@ export interface SharedLinksResult {
   hasNextPage: boolean;
 }
 
+export type TourItemCategory = 'assistant' | 'tool_call' | 'artifact' | 'file' | 'error';
+
+export interface TourToolCall {
+  toolName: string;
+  toolCallId?: string;
+  output?: string;
+}
+
+export interface TourFileRef {
+  filename?: string;
+  filetype?: string;
+}
+
+export interface TourItem {
+  messageId: string;
+  category: TourItemCategory;
+  label: string;
+  toolCalls?: TourToolCall[];
+  files?: TourFileRef[];
+}
+
+export interface TourData {
+  items: TourItem[];
+  totalMessages: number;
+  assistantCount: number;
+  toolCallCount: number;
+  fileCount: number;
+}
+
 export interface SharedMessagesResult {
   conversationId: string;
   messages: Array<SharedMessage>;
@@ -74,6 +103,7 @@ export interface SharedMessagesResult {
   title?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  tour?: TourData;
 }
 
 export interface CreateShareResult {

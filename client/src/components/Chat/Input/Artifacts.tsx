@@ -3,8 +3,8 @@ import * as Ariakit from '@ariakit/react';
 import { CheckboxButton } from '@librechat/client';
 import { ArtifactModes } from 'librechat-data-provider';
 import { WandSparkles, ChevronDown } from 'lucide-react';
-import { useBadgeRowContext, useChatContext } from '~/Providers';
-import { useLocalize, useModelCapability } from '~/hooks';
+import { useBadgeRowContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
 interface ArtifactsToggleState {
@@ -15,18 +15,7 @@ interface ArtifactsToggleState {
 function Artifacts() {
   const localize = useLocalize();
   const context = useBadgeRowContext();
-  const { conversation } = useChatContext();
   const { toggleState, debouncedChange, isPinned } = context?.artifacts ?? {};
-
-  const capability = useModelCapability(
-    conversation?.endpoint,
-    conversation?.model,
-    conversation?.endpointType,
-  );
-
-  if (capability != null && !capability.artifacts) {
-    return null;
-  }
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isButtonExpanded, setIsButtonExpanded] = useState(false);

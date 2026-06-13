@@ -8,7 +8,6 @@ import {
   isActionTool,
   ImageVisionTool,
   defaultAssistantFormValues,
-  extractModelNames,
 } from 'librechat-data-provider';
 import type { FunctionTool, TConfig } from 'librechat-data-provider';
 import type { AssistantForm, AssistantPanelProps } from '~/common';
@@ -364,7 +363,7 @@ export default function AssistantPanel({
                     emptyTitle={true}
                     value={field.value}
                     setValue={field.onChange}
-                    availableValues={extractModelNames(modelsQuery.data?.[endpoint] ?? [])}
+                    availableValues={modelsQuery.data?.[endpoint] ?? []}
                     showAbove={false}
                     showLabel={false}
                     className={cn(

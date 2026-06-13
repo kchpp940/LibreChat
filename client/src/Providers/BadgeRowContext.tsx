@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useSetRecoilState } from 'recoil';
 import { Tools, Constants, LocalStorageKeys, AgentCapabilities } from 'librechat-data-provider';
-import type { TAgentsEndpoint, TEphemeralAgent, TModelCapability } from 'librechat-data-provider';
+import type { TAgentsEndpoint, TEphemeralAgent } from 'librechat-data-provider';
 import {
   useMCPServerManager,
   useSearchApiKeyForm,
@@ -11,13 +11,11 @@ import {
 import { getTimestampedValue } from '~/utils/timestamps';
 import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
-import { useChatContext } from './ChatContext';
 
 interface BadgeRowContextType {
   conversationId?: string | null;
   storageContextKey?: string;
   agentsConfig?: TAgentsEndpoint | null;
-  capability?: TModelCapability | null;
   skills: ReturnType<typeof useToolToggle>;
   webSearch: ReturnType<typeof useToolToggle>;
   artifacts: ReturnType<typeof useToolToggle>;
@@ -38,7 +36,6 @@ interface BadgeRowProviderProps {
   isSubmitting?: boolean;
   conversationId?: string | null;
   specName?: string | null;
-  capability?: TModelCapability | null;
 }
 
 export default function BadgeRowProvider({
@@ -46,7 +43,6 @@ export default function BadgeRowProvider({
   isSubmitting,
   conversationId,
   specName,
-  capability,
 }: BadgeRowProviderProps) {
   const lastContextKeyRef = useRef<string>('');
   const hasInitializedRef = useRef(false);
@@ -255,66 +251,6 @@ export default function BadgeRowProvider({
   });
 
   const mcpServerManager = useMCPServerManager({ conversationId, storageContextKey });
-
-  const { registerCapabilityChangeHandler } = useChatContext();
-  useEffect(() => {
-    const unregister = registerCapabilityChangeHandler((event) => {
-      const { stripFileSearch, stripTools, stripParams, newCapability } = event;
-
-      if (stripFileSearch) {
-        fileSearch.setToggleState(false);
-        const storageKey = `${LocalStorageKeys.LAST_FILE_SEARCH_TOGGLE_}${key}`;
-        localStorage.removeItem(storageKey);
-        if (storageContextKey) {
-          localStorage.removeItem(`${LocalStorageKeys.LAST_FILE_SEARCH_TOGGLE_}${storageContextKey}`);
-        }
-      }
-
-      if (stripTools) {
-        if (!newCapability.web_search) {
-          webSearch.setToggleState(false);
-          const storageKey = `${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${key}`;
-          localStorage.removeItem(storageKey);
-          if (storageContextKey) {
-            localStorage.removeItem(`${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${storageContextKey}`);
-          }
-        }
-        if (!newCapability.code_interpreter) {
-          codeInterpreter.setToggleState(false);
-          const storageKey = `${LocalStorageKeys.LAST_CODE_TOGGLE_}${key}`;
-          localStorage.removeItem(storageKey);
-          if (storageContextKey) {
-            localStorage.removeItem(`${LocalStorageKeys.LAST_CODE_TOGGLE_}${storageContextKey}`);
-          }
-        }
-        if (!newCapability.skills) {
-          skills.setToggleState(false);
-          const storageKey = `${LocalStorageKeys.LAST_SKILLS_TOGGLE_}${key}`;
-          localStorage.removeItem(storageKey);
-          if (storageContextKey) {
-            localStorage.removeItem(`${LocalStorageKeys.LAST_SKILLS_TOGGLE_}${storageContextKey}`);
-          }
-        }
-        if (!newCapability.artifacts) {
-          artifacts.setToggleState('');
-          const storageKey = `${LocalStorageKeys.LAST_ARTIFACTS_TOGGLE_}${key}`;
-          localStorage.removeItem(storageKey);
-          if (storageContextKey) {
-            localStorage.removeItem(`${LocalStorageKeys.LAST_ARTIFACTS_TOGGLE_}${storageContextKey}`);
-          }
-        }
-        if (!newCapability.mcp) {
-          mcpServerManager.setMCPValues?.([]);
-          const mcpStorageKey = `${LocalStorageKeys.LAST_MCP_}${key}`;
-          localStorage.removeItem(mcpStorageKey);
-          if (storageContextKey) {
-            localStorage.removeItem(`${LocalStorageKeys.LAST_MCP_}${storageContextKey}`);
-          }
-        }
-      }
-    });
-    return unregister;
-  }, [registerCapabilityChangeHandler, fileSearch, webSearch, codeInterpreter, skills, artifacts, mcpServerManager, key, storageContextKey]);
 
   const value: BadgeRowContextType = {
     skills,

@@ -2,13 +2,12 @@ import React, { memo } from 'react';
 import { ScrollText } from 'lucide-react';
 import { CheckboxButton } from '@librechat/client';
 import { Permissions, PermissionTypes, defaultAgentCapabilities } from 'librechat-data-provider';
-import { useLocalize, useHasAccess, useAgentCapabilities, useModelCapability } from '~/hooks';
-import { useBadgeRowContext, useChatContext } from '~/Providers';
+import { useLocalize, useHasAccess, useAgentCapabilities } from '~/hooks';
+import { useBadgeRowContext } from '~/Providers';
 
 function Skills() {
   const localize = useLocalize();
   const context = useBadgeRowContext();
-  const { conversation } = useChatContext();
   const { toggleState: skillsActive, debouncedChange, isPinned } = context?.skills ?? {};
 
   const canUseSkills = useHasAccess({
@@ -20,17 +19,7 @@ function Skills() {
     context?.agentsConfig?.capabilities ?? defaultAgentCapabilities,
   );
 
-  const capability = useModelCapability(
-    conversation?.endpoint,
-    conversation?.model,
-    conversation?.endpointType,
-  );
-
   if (!canUseSkills || !skillsEnabled) {
-    return null;
-  }
-
-  if (capability != null && !capability.skills) {
     return null;
   }
 

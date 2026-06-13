@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useContext } from 'react';
+import { memo, useState, useCallback, useContext, useRef } from 'react';
 import Cookies from 'js-cookie';
 import { useRecoilState } from 'recoil';
 import { useParams } from 'react-router-dom';
@@ -19,6 +19,7 @@ import {
 import { ThemeSelector, LangSelector } from '~/components/Nav/SettingsTabs/General/General';
 import { ShareMessagesProvider } from './ShareMessagesProvider';
 import { ShareArtifactsContainer } from './ShareArtifacts';
+import ShareTourPanel from './ShareTourPanel';
 import { useLocalize, useDocumentTitle } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import { ShareContext } from '~/Providers';
@@ -37,6 +38,23 @@ function SharedView() {
   const messagesTree = dataTree?.length === 0 ? null : (dataTree ?? null);
 
   const [langcode, setLangcode] = useRecoilState(store.lang);
+  const [tourPanelOpen, setTourPanelOpen] = useState(false);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleTourNavigate = useCallback((messageId: string) => {
+    const el = document.getElementById(`share-msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-ring', 'ring-offset-2', 'rounded-lg', 'transition-all');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-ring', 'ring-offset-2', 'rounded-lg', 'transition-all');
+      }, 2000);
+    }
+  }, []);
+
+  const handleTourToggle = useCallback(() => {
+    setTourPanelOpen((prev) => !prev);
+  }, []);
 
   // configure document title
   let docTitle = '';
@@ -106,7 +124,7 @@ function SharedView() {
           settingsLabel={localize('com_nav_settings')}
         />
         <ShareMessagesProvider messages={data.messages}>
-          <MessagesView messagesTree={messagesTree} conversationId="shared-conversation" />
+          <MessagesView messagesTree={messagesTree} conversationId="shared-conversation" scrollRef={messagesScrollRef} />
         </ShareMessagesProvider>
       </>
     );
@@ -153,6 +171,14 @@ function SharedView() {
         <main className="relative flex w-full grow overflow-hidden dark:bg-surface-secondary">
           {artifactsContainer}
         </main>
+        {data?.tour && data.tour.items.length > 0 && (
+          <ShareTourPanel
+            tour={data.tour}
+            onNavigate={handleTourNavigate}
+            isOpen={tourPanelOpen}
+            onToggle={handleTourToggle}
+          />
+        )}
       </div>
     </ShareContext.Provider>
   );

@@ -11,7 +11,6 @@ import {
   PermissionBits,
   PrecheckSeverity,
   isAssistantsEndpoint,
-  extractModelNames,
 } from 'librechat-data-provider';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
 import type { Agent, PrecheckItem } from 'librechat-data-provider';
@@ -247,14 +246,7 @@ export default function AgentPanel() {
 
   const agentQuery = canEdit && expandedAgentQuery.data ? expandedAgentQuery : basicAgentQuery;
 
-  const models = useMemo(() => {
-    const data = modelsQuery.data ?? {};
-    const transformed: Record<string, string[]> = {};
-    for (const [key, value] of Object.entries(data)) {
-      transformed[key] = extractModelNames(value);
-    }
-    return transformed;
-  }, [modelsQuery.data]);
+  const models = useMemo(() => modelsQuery.data ?? {}, [modelsQuery.data]);
   const methods = useForm<AgentForm>({
     defaultValues: getDefaultAgentFormValues(),
     mode: 'onChange',
