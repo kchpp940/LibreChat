@@ -381,6 +381,37 @@ export type AgentFile = {
   purpose: 'fine-tune' | 'fine-tune-results' | 'agents' | 'agents_output';
 };
 
+export enum PrecheckSeverity {
+  ERROR = 'error',
+  WARNING = 'warning',
+}
+
+export enum PrecheckCategory {
+  REQUIRED_FIELDS = 'required_fields',
+  MODEL_AVAILABILITY = 'model_availability',
+  TOOL_PERMISSIONS = 'tool_permissions',
+  MCP_STATUS = 'mcp_status',
+  FILE_INDEX = 'file_index',
+  AGENT_REFERENCES = 'agent_references',
+}
+
+export type PrecheckItem = {
+  category: PrecheckCategory;
+  severity: PrecheckSeverity;
+  message: string;
+  detail?: string;
+  field?: string;
+};
+
+export type AgentPrecheckResult = {
+  valid: boolean;
+  items: PrecheckItem[];
+};
+
+export type AgentPrecheckParams = {
+  agent_id?: string;
+} & AgentCreateParams;
+
 /**
  * Details of the Code Interpreter tool call the run step was involved in.
  * Includes the tool call ID, the code interpreter definition, and the type of tool call.

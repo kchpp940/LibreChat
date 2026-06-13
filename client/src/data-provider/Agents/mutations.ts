@@ -403,6 +403,20 @@ export const useRevertAgentVersionMutation = (
   );
 };
 
+export const usePrecheckAgentMutation = (
+  options?: t.AgentPrecheckOptions,
+): UseMutationResult<t.AgentPrecheckResult, unknown, t.AgentPrecheckParams> => {
+  return useMutation(
+    (params: t.AgentPrecheckParams) => dataService.precheckAgent(params),
+    {
+      mutationKey: [MutationKeys.agentPrecheck],
+      onMutate: options?.onMutate,
+      onError: options?.onError,
+      onSuccess: options?.onSuccess,
+    },
+  );
+};
+
 export const invalidateAgentMarketplaceQueries = (queryClient: QueryClient) => {
   queryClient.invalidateQueries([QueryKeys.marketplaceAgents]);
 };

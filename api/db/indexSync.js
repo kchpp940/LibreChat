@@ -96,20 +96,12 @@ async function ensureFilterableAttributes(client) {
       const messagesIndex = client.index('messages');
       const settings = await messagesIndex.getSettings();
 
-      const requiredFilterable = ['user', 'contentTypes'];
-      const hasAllFilterable = requiredFilterable.every((attr) =>
-        settings.filterableAttributes?.includes(attr),
-      );
-
-      if (!hasAllFilterable) {
-        logger.info('[indexSync] Configuring messages index filterable attributes (user, contentTypes)...');
-        const mergedFilterable = Array.from(
-          new Set([...(settings.filterableAttributes || []), ...requiredFilterable]),
-        );
+      if (!settings.filterableAttributes || !settings.filterableAttributes.includes('user')) {
+        logger.info('[indexSync] Configuring messages index to filter by user...');
         await messagesIndex.updateSettings({
-          filterableAttributes: mergedFilterable,
+          filterableAttributes: ['user'],
         });
-        logger.info('[indexSync] Messages index configured with contentTypes filter support');
+        logger.info('[indexSync] Messages index configured for user filtering');
         settingsUpdated = true;
       }
 
@@ -121,15 +113,6 @@ async function ensureFilterableAttributes(client) {
             '[indexSync] Existing messages missing user field, will clean up orphaned documents...',
           );
           hasOrphanedDocs = true;
-        }
-        if (
-          searchResult.hits.length > 0 &&
-          (!searchResult.hits[0].contentTypes || searchResult.hits[0].contentTypes.length === 0)
-        ) {
-          logger.info(
-            '[indexSync] Existing messages missing contentTypes field, full reindex will be triggered',
-          );
-          settingsUpdated = true;
         }
       } catch (searchError) {
         logger.debug('[indexSync] Could not check message documents:', searchError.message);
@@ -398,6 +381,3 @@ process.on('exit', () => {
 });
 
 module.exports = indexSync;
-module.exports.performSync = performSync;
-module.exports.ensureFilterableAttributes = ensureFilterableAttributes;
-module.exports.MeiliSearchClient = MeiliSearchClient;

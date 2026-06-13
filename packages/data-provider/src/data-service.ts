@@ -491,6 +491,10 @@ export const createAgent = ({ ...data }: a.AgentCreateParams): Promise<a.Agent> 
   return request.post(endpoints.agents({}), data);
 };
 
+export const precheckAgent = (data: a.AgentPrecheckParams): Promise<a.AgentPrecheckResult> => {
+  return request.post(endpoints.agents({ path: 'precheck' }), data);
+};
+
 export const getAgentById = ({ agent_id }: { agent_id: string }): Promise<a.Agent> => {
   return request.get(
     endpoints.agents({

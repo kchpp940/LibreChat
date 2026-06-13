@@ -247,18 +247,6 @@ export enum ThinkingLevel {
   high = 'high',
 }
 
-export enum SearchHitType {
-  TEXT = 'text',
-  TOOL_CALL = 'tool_call',
-  TOOL_OUTPUT = 'tool_output',
-  ATTACHMENT = 'attachment',
-  ARTIFACT = 'artifact',
-  ERROR = 'error',
-  FILE = 'file',
-}
-
-export const SearchHitTypeValues: string[] = Object.values(SearchHitType);
-
 export const imageDetailNumeric = {
   [ImageDetail.low]: 0,
   [ImageDetail.auto]: 1,

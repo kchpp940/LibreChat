@@ -36,7 +36,6 @@ export interface IMessage extends Document {
   };
   plugins?: unknown[];
   content?: unknown[];
-  contentTypes?: string[];
   thread_id?: string;
   iconURL?: string;
   addedConvo?: boolean;

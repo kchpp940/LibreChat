@@ -41,6 +41,13 @@ router.use('/tools', configMiddleware, tools);
  */
 router.get('/categories', v1.getAgentCategories);
 /**
+ * Pre-checks agent configuration before saving.
+ * @route POST /agents/precheck
+ * @param {AgentPrecheckParams} req.body - The agent configuration to validate.
+ * @returns {AgentPrecheckResult} 200 - Precheck result with errors and warnings
+ */
+router.post('/precheck', checkAgentCreate, v1.precheckAgent);
+/**
  * Creates an agent.
  * @route POST /agents
  * @param {AgentCreateParams} req.body - The agent creation parameters.

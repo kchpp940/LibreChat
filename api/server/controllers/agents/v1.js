@@ -48,6 +48,7 @@ const {
   resolveConfigServers,
   userCanUseMCPServers,
 } = require('~/server/services/MCP');
+const { performAgentPrecheck } = require('~/server/services/Agents/precheck');
 const { getMCPServersRegistry } = require('~/config');
 const { getLogStores } = require('~/cache');
 const db = require('~/models');
@@ -347,6 +348,18 @@ const createAgentHandler = async (req, res) => {
 
     const { id: userId, role: userRole } = req.user;
 
+    const precheckData = { ...agentData, tools };
+    const precheckResult = await performAgentPrecheck(precheckData, req);
+    const blockingErrors = precheckResult.items.filter(
+      (item) => item.severity === 'error' && item.category !== 'agent_references',
+    );
+    if (blockingErrors.length > 0) {
+      return res.status(400).json({
+        error: 'Agent configuration validation failed',
+        precheck: precheckResult,
+      });
+    }
+
     if (agentData.tool_resources) {
       await pruneToolResourceFileIdsForOwner({
         tool_resources: agentData.tool_resources,
@@ -569,6 +582,36 @@ const updateAgentHandler = async (req, res) => {
       updateData.avatar = avatarField;
     }
 
+    const existingAgent = await db.getAgent({ id });
+
+    if (!existingAgent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const mergedForPrecheck = {
+      provider: updateData.provider ?? existingAgent.provider,
+      model: updateData.model ?? existingAgent.model,
+      tools: updateData.tools ?? existingAgent.tools ?? [],
+      tool_resources: updateData.tool_resources ?? existingAgent.tool_resources,
+      edges: updateData.edges ?? existingAgent.edges,
+      subagents: updateData.subagents ?? existingAgent.subagents,
+      instructions: updateData.instructions ?? existingAgent.instructions,
+      name: updateData.name ?? existingAgent.name,
+      category: updateData.category ?? existingAgent.category,
+      skills_enabled: updateData.skills_enabled ?? existingAgent.skills_enabled,
+      skills: updateData.skills ?? existingAgent.skills,
+    };
+    const precheckResult = await performAgentPrecheck(mergedForPrecheck, req, id);
+    const blockingErrors = precheckResult.items.filter(
+      (item) => item.severity === 'error' && item.category !== 'agent_references',
+    );
+    if (blockingErrors.length > 0) {
+      return res.status(400).json({
+        error: 'Agent configuration validation failed',
+        precheck: precheckResult,
+      });
+    }
+
     if (updateData.edges?.length) {
       const { id: userId, role: userRole } = req.user;
       const unauthorized = await validateEdgeAgentAccess(updateData.edges, userId, userRole);
@@ -614,12 +657,6 @@ const updateAgentHandler = async (req, res) => {
 
     // Convert OCR to context in incoming updateData
     convertOcrToContextInPlace(updateData);
-
-    const existingAgent = await db.getAgent({ id });
-
-    if (!existingAgent) {
-      return res.status(404).json({ error: 'Agent not found' });
-    }
 
     // Convert legacy OCR tool resource to context format in existing agent
     const ocrConversion = mergeAgentOcrConversion(existingAgent, updateData);
@@ -1304,6 +1341,28 @@ const getAgentCategories = async (_req, res) => {
     });
   }
 };
+const precheckAgentHandler = async (req, res) => {
+  try {
+    const validatedData = agentCreateSchema.parse(req.body);
+    const { tools = [], agent_id, ...agentData } = removeNullishValues(validatedData);
+
+    if (agentData.model_parameters && typeof agentData.model_parameters === 'object') {
+      agentData.model_parameters = removeNullishValues(agentData.model_parameters, true);
+    }
+
+    agentData.tools = tools;
+    const result = await performAgentPrecheck(agentData, req, agent_id);
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error('[/Agents/precheck] Validation error', error.errors);
+      return res.status(400).json({ error: 'Invalid request data', details: error.errors });
+    }
+    logger.error('[/Agents/precheck] Error during precheck', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createAgent: createAgentHandler,
   getAgent: getAgentHandler,
@@ -1315,4 +1374,5 @@ module.exports = {
   revertAgentVersion: revertAgentVersionHandler,
   getAgentCategories,
   filterAuthorizedTools,
+  precheckAgent: precheckAgentHandler,
 };

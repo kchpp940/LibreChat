@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { parseTextParts, ContentTypes, SearchHitType, SearchHitTypeValues } from 'librechat-data-provider';
+import { parseTextParts } from 'librechat-data-provider';
 import { MeiliSearch, MeiliSearchTimeOutError } from 'meilisearch';
 import type { SearchResponse, SearchParams, Index, MeiliSearchErrorInfo } from 'meilisearch';
 import type {
@@ -108,73 +108,6 @@ const buildIndexableQuery = (schema: Schema): FilterQuery<unknown> => {
 
 const hasActiveExpiration = (expiredAt?: Date | null): boolean =>
   _.isNil(expiredAt) || new Date(expiredAt).getTime() > Date.now();
-
-function extractArtifactTitle(text?: string): string | null {
-  if (!text) return null;
-  const match = text.match(/<artifact_identifier[^>]*title="([^"]*)"/);
-  if (match) return match[1];
-  const codeMatch = text.match(/```(\w+)\s*title="([^"]*)"/);
-  if (codeMatch) return codeMatch[2];
-  return null;
-}
-
-function analyzeContentTypes(doc: DocumentWithMeiliIndex | Record<string, unknown>): string[] {
-  const types = new Set<string>();
-  const typedDoc = doc as Record<string, unknown>;
-  const text = typedDoc.text as string | undefined;
-  const content = typedDoc.content as unknown[] | undefined;
-  const files = typedDoc.files as unknown[] | undefined;
-  const attachments = typedDoc.attachments as unknown[] | undefined;
-  const error = typedDoc.error as boolean | undefined;
-
-  if (text) {
-    const artifactTitle = extractArtifactTitle(text);
-    if (artifactTitle) {
-      types.add(SearchHitType.ARTIFACT);
-    } else {
-      types.add(SearchHitType.TEXT);
-    }
-  }
-
-  if (error) {
-    types.add(SearchHitType.ERROR);
-  }
-
-  if (Array.isArray(content) && content.length > 0) {
-    content.forEach((part) => {
-      if (!part) return;
-      const typedPart = part as Record<string, unknown>;
-
-      if (typedPart.type === ContentTypes.TEXT && typedPart.text) {
-        const partText = typeof typedPart.text === 'string' ? typedPart.text : (typedPart.text as Record<string, unknown>)?.text as string || '';
-        const artifactTitle = extractArtifactTitle(partText);
-        if (artifactTitle) {
-          types.add(SearchHitType.ARTIFACT);
-        } else {
-          types.add(SearchHitType.TEXT);
-        }
-      }
-
-      if (typedPart.type === ContentTypes.TOOL_CALL && typedPart.tool_call) {
-        types.add(SearchHitType.TOOL_CALL);
-      }
-
-      if (typedPart.type === ContentTypes.ERROR) {
-        types.add(SearchHitType.ERROR);
-      }
-    });
-  }
-
-  if (Array.isArray(files) && files.length > 0) {
-    types.add(SearchHitType.FILE);
-  }
-
-  if (Array.isArray(attachments) && attachments.length > 0) {
-    types.add(SearchHitType.ATTACHMENT);
-  }
-
-  return Array.from(types);
-}
 
 /**
  * `isTemporary` defaults to `false` on the schema, so hydrated legacy documents
@@ -462,36 +395,10 @@ const createMeiliMongooseModel = ({
     static async meiliSearch(
       this: SchemaWithMeiliMethods,
       q: string,
-      params: SearchParams & { contentTypes?: string[] },
+      params: SearchParams,
       populate: boolean,
-    ): Promise<
-      SearchResponse<MeiliIndexable, Record<string, unknown>> & {
-        indexingStatus?: { hasLegacyDocs: boolean; needsReindex: boolean };
-        degraded?: boolean;
-      }
-    > {
-      const searchParams = { ...params };
-      const requestedContentTypes = searchParams.contentTypes;
-      delete searchParams.contentTypes;
-
-      const isTypeFiltered = requestedContentTypes && requestedContentTypes.length > 0;
-
-      if (isTypeFiltered) {
-        const contentTypeFilters = requestedContentTypes
-          .map((type) => `contentTypes = '${type}'`)
-          .join(' OR ');
-        const fallbackFilter = `contentTypes IS EMPTY OR contentTypes NOT EXISTS`;
-        const combinedFilter = `(${contentTypeFilters}) OR (${fallbackFilter})`;
-        if (searchParams.filter) {
-          searchParams.filter = `${searchParams.filter} AND (${combinedFilter})`;
-        } else {
-          searchParams.filter = combinedFilter;
-        }
-      }
-      const data = await index.search(q, searchParams);
-
-      const indexingStatus = { hasLegacyDocs: false, needsReindex: false };
-      let degraded = false;
+    ): Promise<SearchResponse<MeiliIndexable, Record<string, unknown>>> {
+      const data = await index.search(q, params);
 
       if (populate) {
         const query: Record<string, unknown> = {};
@@ -517,53 +424,15 @@ const createMeiliMongooseModel = ({
             return typedItem[primaryKey] === hit[primaryKey];
           });
 
-          const mergedHit = {
+          return {
             ...(originalHit && typeof originalHit === 'object' ? originalHit : {}),
             ...hit,
-          } as Record<string, unknown>;
-
-          const hasContentTypes =
-            mergedHit.contentTypes &&
-            Array.isArray(mergedHit.contentTypes) &&
-            mergedHit.contentTypes.length > 0;
-
-          if (!hasContentTypes) {
-            indexingStatus.hasLegacyDocs = true;
-            mergedHit.contentTypes = analyzeContentTypes(
-              (originalHit && typeof originalHit === 'object' ? originalHit : {}) as Record<
-                string,
-                unknown
-              >,
-            );
-          }
-
-          return mergedHit;
+          };
         });
-
-        if (isTypeFiltered && indexingStatus.hasLegacyDocs) {
-          degraded = true;
-          indexingStatus.needsReindex = true;
-          data.hits = populatedHits;
-        } else if (isTypeFiltered) {
-          const typeSet = new Set(requestedContentTypes);
-          data.hits = populatedHits.filter((hit) => {
-            const typedHit = hit as Record<string, unknown>;
-            const hitTypes = typedHit.contentTypes as string[] | undefined;
-            if (!hitTypes || hitTypes.length === 0) {
-              return false;
-            }
-            return hitTypes.some((t) => typeSet.has(t));
-          });
-        } else {
-          data.hits = populatedHits;
-        }
+        data.hits = populatedHits;
       }
 
-      if (indexingStatus.hasLegacyDocs) {
-        indexingStatus.needsReindex = true;
-      }
-
-      return { ...data, indexingStatus, degraded };
+      return data;
     }
 
     /**
@@ -586,8 +455,6 @@ const createMeiliMongooseModel = ({
         object.text = parseTextParts(object.content);
         delete object.content;
       }
-
-      object.contentTypes = analyzeContentTypes(this);
 
       return object;
     }
@@ -816,9 +683,9 @@ export default function mongoMeili(schema: Schema, options: MongoMeiliOptions): 
 
     try {
       await index.updateSettings({
-        filterableAttributes: ['user', 'contentTypes'],
+        filterableAttributes: ['user'],
       });
-      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' and 'contentTypes' filterable`);
+      logger.debug(`[mongoMeili] Updated index ${indexName} settings to make 'user' filterable`);
     } catch (settingsError) {
       logger.error(`[mongoMeili] Error updating index settings for ${indexName}:`, settingsError);
     }

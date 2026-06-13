@@ -26,12 +26,14 @@ export default function AgentFooter({
   setActivePanel,
   setCurrentAgentId,
   isAvatarUploading = false,
+  isPrechecking = false,
 }: Pick<
   AgentPanelProps,
   'setCurrentAgentId' | 'createMutation' | 'activePanel' | 'setActivePanel'
 > & {
   updateMutation: ReturnType<typeof useUpdateAgentMutation>;
   isAvatarUploading?: boolean;
+  isPrechecking?: boolean;
 }) {
   const localize = useLocalize();
   const { user } = useAuthContext();
@@ -60,7 +62,7 @@ export default function AgentFooter({
   const canEditThisAgent = hasPermission(PermissionBits.EDIT);
   const canDeleteThisAgent = hasPermission(PermissionBits.DELETE);
   const canShareRemoteAgent = hasRemoteAgentPermission(PermissionBits.SHARE);
-  const isSaving = createMutation.isLoading || updateMutation.isLoading || isAvatarUploading;
+  const isSaving = createMutation.isLoading || updateMutation.isLoading || isAvatarUploading || isPrechecking;
   const renderSaveButton = () => {
     if (isSaving) {
       return <Spinner className="icon-md" aria-hidden="true" />;

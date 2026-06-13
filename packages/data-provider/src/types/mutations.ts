@@ -11,6 +11,8 @@ import {
   Agent,
   AgentCreateParams,
   AgentUpdateParams,
+  AgentPrecheckParams,
+  AgentPrecheckResult,
 } from './assistants';
 import { Action, ActionMetadata } from './agents';
 import type { InfiniteData, QueryKey } from '@tanstack/react-query';
@@ -184,6 +186,8 @@ export type RevertAgentVersionVariables = {
 };
 
 export type RevertAgentVersionOptions = MutationOptions<Agent, RevertAgentVersionVariables>;
+
+export type AgentPrecheckOptions = MutationOptions<AgentPrecheckResult, AgentPrecheckParams>;
 
 export type DeleteConversationOptions = MutationOptions<
   types.TDeleteConversationResponse,

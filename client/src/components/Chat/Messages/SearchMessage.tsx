@@ -86,19 +86,7 @@ const MessageAvatar = ({ iconData }: { iconData: TMessageIcon }) => (
   </div>
 );
 
-const MessageBody = ({
-  message,
-  messageLabel,
-  fontSize,
-  searchHits,
-  localize,
-}: {
-  message: TMessageProps['message'];
-  messageLabel: string;
-  fontSize: string;
-  searchHits?: SearchHit[];
-  localize: (key: string, vars?: Record<string, unknown>) => string;
-}) => (
+const MessageBody = ({ message, messageLabel, fontSize, searchHits, localize }) => (
   <div
     className={cn('relative flex w-11/12 flex-col', message.isCreatedByUser ? '' : 'agent-turn')}
   >

@@ -9,10 +9,11 @@ import {
   ResourceType,
   EModelEndpoint,
   PermissionBits,
+  PrecheckSeverity,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
-import type { Agent } from 'librechat-data-provider';
+import type { Agent, PrecheckItem } from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks/useLocalize';
 import type { AgentForm, StringOption } from '~/common';
 import {
@@ -21,6 +22,7 @@ import {
   useGetAgentByIdQuery,
   useGetExpandedAgentByIdQuery,
   useUploadAgentAvatarMutation,
+  usePrecheckAgentMutation,
 } from '~/data-provider';
 import { createProviderOption, getDefaultAgentFormValues } from '~/utils';
 import { useResourcePermissions } from '~/hooks/useResourcePermissions';
@@ -33,6 +35,7 @@ import AgentConfig from './AgentConfig';
 import AgentSelect from './AgentSelect';
 import AgentFooter from './AgentFooter';
 import ModelPanel from './ModelPanel';
+import PrecheckDialog from './PrecheckDialog';
 
 /* Helpers */
 function getUpdateToastMessage(
@@ -258,6 +261,10 @@ export default function AgentPanel() {
     formState: { dirtyFields },
   } = methods;
   const [isAvatarUploadInFlight, setIsAvatarUploadInFlight] = useState(false);
+  const [precheckItems, setPrecheckItems] = useState<PrecheckItem[]>([]);
+  const [showPrecheckDialog, setShowPrecheckDialog] = useState(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState<AgentForm | null>(null);
+  const precheckMutation = usePrecheckAgentMutation();
   const uploadAvatarMutation = useUploadAgentAvatarMutation({
     onSuccess: (updatedAgent) => {
       showToast({ message: localize('com_ui_upload_agent_avatar') });
@@ -407,6 +414,32 @@ export default function AgentPanel() {
     },
   });
 
+  const doSubmit = useCallback(
+    (data: AgentForm) => {
+      const tools = data.tools ?? [];
+
+      if (data.execute_code === true) {
+        tools.push(Tools.execute_code);
+      }
+      if (data.file_search === true) {
+        tools.push(Tools.file_search);
+      }
+      if (data.web_search === true) {
+        tools.push(Tools.web_search);
+      }
+
+      const { payload: basePayload, provider, model } = composeAgentUpdatePayload(data, agent_id);
+
+      if (agent_id) {
+        update.mutate({ agent_id, data: { ...basePayload, tools } });
+        return;
+      }
+
+      create.mutate({ ...basePayload, model, tools, provider });
+    },
+    [agent_id, create, update],
+  );
+
   const onSubmit = useCallback(
     async (data: AgentForm) => {
       const tools = data.tools ?? [];
@@ -442,27 +475,67 @@ export default function AgentPanel() {
           }
           return;
         }
-        update.mutate({ agent_id, data: { ...basePayload, tools } });
-        return;
       }
 
-      if (!provider || !model) {
+      if (!agent_id && (!provider || !model)) {
         return showToast({
           message: localize('com_agents_missing_provider_model'),
           status: 'error',
         });
       }
-      if (!data.name) {
+      if (!agent_id && !data.name) {
         return showToast({
           message: localize('com_agents_missing_name'),
           status: 'error',
         });
       }
 
-      create.mutate({ ...basePayload, model, tools, provider });
+      try {
+        const result = await precheckMutation.mutateAsync({
+          ...basePayload,
+          model: model ?? '',
+          provider: provider ?? '',
+          tools,
+          agent_id,
+        });
+
+        const errors = result.items.filter((i) => i.severity === PrecheckSeverity.ERROR);
+        if (errors.length > 0) {
+          setPrecheckItems(result.items);
+          setShowPrecheckDialog(true);
+          return;
+        }
+
+        if (result.items.length > 0) {
+          setPrecheckItems(result.items);
+          setPendingSubmitData(data);
+          setShowPrecheckDialog(true);
+          return;
+        }
+
+        doSubmit(data);
+      } catch {
+        doSubmit(data);
+      }
     },
-    [agent_id, create, dirtyFields, handleAvatarUpload, update, showToast, localize],
+    [
+      agent_id,
+      dirtyFields,
+      handleAvatarUpload,
+      precheckMutation,
+      doSubmit,
+      showToast,
+      localize,
+    ],
   );
+
+  const handlePrecheckProceed = useCallback(() => {
+    setShowPrecheckDialog(false);
+    if (pendingSubmitData) {
+      doSubmit(pendingSubmitData);
+      setPendingSubmitData(null);
+    }
+  }, [pendingSubmitData, doSubmit]);
 
   const handleSelectAgent = useCallback(() => {
     if (agent_id) {
@@ -555,12 +628,19 @@ export default function AgentPanel() {
             createMutation={create}
             updateMutation={update}
             isAvatarUploading={isAvatarUploadInFlight || uploadAvatarMutation.isLoading}
+            isPrechecking={precheckMutation.isLoading}
             activePanel={activePanel}
             setActivePanel={setActivePanel}
             setCurrentAgentId={setCurrentAgentId}
           />
         )}
       </form>
+      <PrecheckDialog
+        isOpen={showPrecheckDialog}
+        onOpenChange={setShowPrecheckDialog}
+        items={precheckItems}
+        onProceed={handlePrecheckProceed}
+      />
     </FormProvider>
   );
 }
