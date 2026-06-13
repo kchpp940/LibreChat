@@ -172,10 +172,7 @@ function anonymizeMessages(messages: t.IMessage[], newConvoId: string): t.Shared
  * Filter messages up to and including the target message (branch-specific)
  * Similar to getMessagesUpToTargetLevel from fork utilities
  */
-function assertSharedMessageFieldsOnly(
-  msg: t.SharedMessage,
-  context: string,
-): void {
+function assertSharedMessageFieldsOnly(msg: t.SharedMessage, context: string): void {
   const ownKeys = Object.keys(msg);
   for (const key of ownKeys) {
     if (!SHARED_MESSAGE_ALLOWED_FIELDS.has(key as keyof t.SharedMessage)) {
@@ -209,7 +206,10 @@ function createGuardedSharedMessage(msg: t.SharedMessage, context: string): t.Sh
       return target[prop as keyof t.SharedMessage];
     },
     has(target, prop: string | symbol) {
-      if (typeof prop === 'string' && !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)) {
+      if (
+        typeof prop === 'string' &&
+        !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)
+      ) {
         return false;
       }
       return prop in target;
@@ -218,51 +218,15 @@ function createGuardedSharedMessage(msg: t.SharedMessage, context: string): t.Sh
       return Array.from(SHARED_MESSAGE_ALLOWED_FIELDS).filter((k) => k in target);
     },
     getOwnPropertyDescriptor(target, prop: string | symbol) {
-      if (typeof prop === 'string' && !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)) {
+      if (
+        typeof prop === 'string' &&
+        !SHARED_MESSAGE_ALLOWED_FIELDS.has(prop as keyof t.SharedMessage)
+      ) {
         return undefined;
       }
       return Object.getOwnPropertyDescriptor(target, prop);
     },
   });
-}
-
-function extractToolCallsFromContent(
-  content: unknown,
-): Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> {
-  if (!Array.isArray(content)) {
-    return [];
-  }
-  const results: Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> = [];
-  for (const part of content) {
-    if (!part || typeof part !== 'object') {
-      continue;
-    }
-    const p = part as Record<string, unknown>;
-    if (p.type === 'tool_call' && p.tool_call && typeof p.tool_call === 'object') {
-      const tc = p.tool_call as Record<string, unknown>;
-      const name =
-        typeof tc.name === 'string'
-          ? tc.name
-          : tc.function && typeof tc.function === 'object' && typeof (tc.function as Record<string, unknown>).name === 'string'
-            ? ((tc.function as Record<string, unknown>).name as string)
-            : undefined;
-      if (name) {
-        const rawOutput =
-          tc.output != null && typeof tc.output === 'string' ? tc.output : undefined;
-        let outputPreview: string | undefined;
-        if (rawOutput) {
-          const trimmed = rawOutput.replace(/\s+/g, ' ').trim();
-          outputPreview = trimmed.length > 100 ? trimmed.slice(0, 99) + '…' : trimmed;
-        }
-        results.push({
-          toolName: name,
-          toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
-          outputPreview,
-        });
-      }
-    }
-  }
-  return results;
 }
 
 function truncateLabel(text: string, maxLen = 80): string {
@@ -274,6 +238,143 @@ function truncateLabel(text: string, maxLen = 80): string {
     return cleaned;
   }
   return cleaned.slice(0, maxLen - 1) + '…';
+}
+
+const CONTENT_PART_ALLOWED_KEYS = new Set([
+  'type',
+  'text',
+  'think',
+  'error',
+  'tool_call',
+  'image_file',
+]);
+
+const TOOL_CALL_OBJ_ALLOWED_KEYS = new Set(['type', 'id', 'name', 'output', 'function']);
+
+const TOOL_CALL_FUNCTION_ALLOWED_KEYS = new Set(['name']);
+
+const FILE_REF_ALLOWED_KEYS = new Set([
+  'filename',
+  'filepath',
+  'type',
+  'contentType',
+  'toolCallId',
+]);
+
+function truncateOutput(raw: unknown, maxLen = 100): string | undefined {
+  if (raw == null || typeof raw !== 'string') {
+    return undefined;
+  }
+  const trimmed = raw.replace(/\s+/g, ' ').trim();
+  return trimmed.length > maxLen ? trimmed.slice(0, maxLen - 1) + '…' : trimmed;
+}
+
+function sanitizeToolCallForTour(
+  tc: unknown,
+): { toolName: string; toolCallId?: string; outputPreview?: string } | null {
+  if (!tc || typeof tc !== 'object') {
+    return null;
+  }
+  const src = tc as Record<string, unknown>;
+  for (const key of Object.keys(src)) {
+    if (!TOOL_CALL_OBJ_ALLOWED_KEYS.has(key)) {
+      return null;
+    }
+  }
+  let name: string | undefined;
+  if (typeof src.name === 'string') {
+    name = src.name;
+  } else if (src.function && typeof src.function === 'object') {
+    const funcObj = src.function as Record<string, unknown>;
+    if (typeof funcObj.name === 'string') {
+      name = funcObj.name;
+    }
+  }
+  if (!name) {
+    return null;
+  }
+  const funcObj = src.function as Record<string, unknown> | undefined;
+  if (funcObj && typeof funcObj === 'object') {
+    for (const key of Object.keys(funcObj)) {
+      if (!TOOL_CALL_FUNCTION_ALLOWED_KEYS.has(key)) {
+        return null;
+      }
+    }
+  }
+  return {
+    toolName: name,
+    toolCallId: typeof src.id === 'string' ? src.id : undefined,
+    outputPreview: truncateOutput(src.output),
+  };
+}
+
+function sanitizeContentPartForTour(part: unknown): Record<string, unknown> | null {
+  if (!part || typeof part !== 'object') {
+    return null;
+  }
+  const src = part as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(src)) {
+    if (!CONTENT_PART_ALLOWED_KEYS.has(key)) {
+      continue;
+    }
+    result[key] = src[key];
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function sanitizeFileRefForTour(file: unknown): t.TourFileRef | null {
+  if (!file || typeof file !== 'object') {
+    return null;
+  }
+  const src = file as Record<string, unknown>;
+  const result: t.TourFileRef = {};
+  let hasRelevantField = false;
+  for (const key of Object.keys(src)) {
+    if (!FILE_REF_ALLOWED_KEYS.has(key)) {
+      continue;
+    }
+    if (key === 'filename' && typeof src[key] === 'string') {
+      result.filename = src[key] as string;
+      hasRelevantField = true;
+    } else if (key === 'type' && typeof src[key] === 'string') {
+      result.filetype = src[key] as string;
+      hasRelevantField = true;
+    } else if (key === 'contentType' && typeof src[key] === 'string' && !result.filetype) {
+      result.filetype = src[key] as string;
+      hasRelevantField = true;
+    } else if (key === 'filepath' && typeof src[key] === 'string' && !result.filename) {
+      hasRelevantField = true;
+    } else if (key === 'toolCallId') {
+      hasRelevantField = true;
+    }
+  }
+  return hasRelevantField ? result : null;
+}
+
+function extractToolCallsFromContent(
+  content: unknown,
+): Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  const results: Array<{ toolName: string; toolCallId?: string; outputPreview?: string }> = [];
+  for (const rawPart of content) {
+    const part = sanitizeContentPartForTour(rawPart);
+    if (
+      !part ||
+      part.type !== 'tool_call' ||
+      !part.tool_call ||
+      typeof part.tool_call !== 'object'
+    ) {
+      continue;
+    }
+    const sanitized = sanitizeToolCallForTour(part.tool_call);
+    if (sanitized) {
+      results.push(sanitized);
+    }
+  }
+  return results;
 }
 
 function buildTourData(messages: t.SharedMessage[]): t.TourData {
@@ -290,12 +391,9 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
       const userFiles: t.TourFileRef[] = [];
       if (Array.isArray(msg.files)) {
         for (const f of msg.files) {
-          const file = f as Record<string, unknown>;
-          if (file.filename || file.filepath) {
-            userFiles.push({
-              filename: typeof file.filename === 'string' ? file.filename : undefined,
-              filetype: typeof file.type === 'string' ? file.type : undefined,
-            });
+          const sanitized = sanitizeFileRefForTour(f);
+          if (sanitized && sanitized.filename) {
+            userFiles.push(sanitized);
           }
         }
       }
@@ -316,26 +414,30 @@ function buildTourData(messages: t.SharedMessage[]): t.TourData {
     const msgFiles: t.TourFileRef[] = [];
     if (Array.isArray(msg.files)) {
       for (const f of msg.files) {
-        const file = f as Record<string, unknown>;
-        if (file.filename || file.filepath) {
-          msgFiles.push({
-            filename: typeof file.filename === 'string' ? file.filename : undefined,
-            filetype: typeof file.type === 'string' ? file.type : undefined,
-          });
+        const sanitized = sanitizeFileRefForTour(f);
+        if (sanitized && sanitized.filename) {
+          msgFiles.push(sanitized);
         }
       }
     }
     const attachToolCalls: t.TourToolCall[] = [];
     if (Array.isArray(msg.attachments)) {
       for (const att of msg.attachments) {
-        const a = att as Record<string, unknown>;
-        if (typeof a.type === 'string' && a.type) {
-          attachToolCalls.push({
-            toolName: a.type,
-            toolCallId: typeof a.toolCallId === 'string' ? a.toolCallId : undefined,
-          });
-          toolCallCount++;
+        if (!att || typeof att !== 'object') {
+          continue;
         }
+        const src = att as Record<string, unknown>;
+        const toolName =
+          FILE_REF_ALLOWED_KEYS.has('type') && typeof src.type === 'string' ? src.type : undefined;
+        if (!toolName) {
+          continue;
+        }
+        const toolCallId =
+          FILE_REF_ALLOWED_KEYS.has('toolCallId') && typeof src.toolCallId === 'string'
+            ? src.toolCallId
+            : undefined;
+        attachToolCalls.push({ toolName, toolCallId });
+        toolCallCount++;
       }
     }
 
