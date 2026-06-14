@@ -828,6 +828,28 @@ export type TMessage = z.input<typeof tMessageSchema> & {
   feedback?: TFeedback;
 };
 
+/**
+ * @summary 公开/外发场景专用消息视图（脱敏 + 字段白名单）
+ *
+ * ## 边界约束
+ * - **只能消费于**：共享链接 (share)、搜索摘要 (search)、导出文件 (export)、
+ *   任何需要脱离登录态展示或传输到不可信上下文的场景。
+ * - **禁止用于**：登录态内的聊天运行时（消息编辑/重试/分支、工具调用恢复、
+ *   文件上传下载、流式渲染、metadata/endpoint/plugin 等内部字段需要存活的场景）。
+ *   运行时主消息接口 **必须** 继续返回完整 `TMessage` / `IMessage`，
+ *   不能被 `PublicMessage` 替换。
+ * - **类型派生**：唯一来源是 `@librechat/data-schemas` 的 `publicMessageSerializer`
+ *   四种场景方法 (forShare / forSearch / forExport / forDisplay) 的输出。
+ *   前端和公开路由 **禁止** 手工构造 `PublicMessage`，
+ *   禁止从 `TMessage` 直接强转为 `PublicMessage`。
+ *
+ * ## 保证
+ * - 敏感字段 (`_id`, `__v`, `user`, `tenantId`, `endpoint`,
+ *   `conversationSignature`, `clientId`, `invocationId`, `plugin`,
+ *   `plugins`, `metadata`, `contextMeta`, `thread_id` 等) 已被白名单剥离。
+ * - content parts 只保留公开允许的类型，tool outputs 已按最大长度截断。
+ * - 共享场景下 conversationId / messageId / assistantId / model 名经过匿名化。
+ */
 export enum SerializerContext {
   SHARE = 'share',
   SEARCH = 'search',
@@ -914,6 +936,13 @@ export interface ArtifactSummary {
   size?: number;
 }
 
+/**
+ * @summary 经过 publicMessageSerializer 统一脱敏和白名单过滤后的公开消息视图
+ *
+ * - **禁止手动构造**：必须由 `publicMessageSerializer.forShare | forSearch | forExport | forDisplay` 输出。
+ * - **禁止用于运行时**：不能用于登录态聊天主消息接口，那些接口必须返回完整 TMessage。
+ * - **禁止直接读取原始 message 字段**：消费方只能使用本接口列出的字段。
+ */
 export interface PublicMessage {
   messageId: string;
   conversationId: string;
@@ -965,6 +994,10 @@ export interface TExportConversationResponse {
     updatedAt?: string | Date;
   };
   messages: PublicMessage[];
+  warnings?: Array<{
+    messageId: string;
+    warnings: string[];
+  }>;
 }
 
 export const coerceNumber = z.union([z.number(), z.string()]).transform((val) => {

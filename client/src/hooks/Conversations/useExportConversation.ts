@@ -2,22 +2,21 @@ import download from 'downloadjs';
 import { useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import exportFromJSON from 'export-from-json';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   buildTree,
-  QueryKeys,
   ContentTypes,
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
+  useExportConversation as useExportConversationQuery,
+  type PublicMessage,
+  type PublicContentPart,
+  type TExportConversationResponse,
 } from 'librechat-data-provider';
 import type {
-  TMessageContentParts,
   TConversation,
-  TMessage,
   TPreset,
 } from 'librechat-data-provider';
-import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { useScreenshot } from '~/hooks/ScreenshotContext';
 import { useLocalize } from '~/hooks';
 import { cleanupPreset } from '~/utils';
@@ -43,22 +42,19 @@ export default function useExportConversation({
   exportBranches: boolean | 'indeterminate';
   recursive: boolean | 'indeterminate';
 }) {
-  const queryClient = useQueryClient();
   const { captureScreenshot } = useScreenshot();
-  const buildMessageTree = useBuildMessageTree();
   const localize = useLocalize();
 
   const { conversationId: paramId } = useParams();
+  const effectiveConvoId =
+    paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
 
-  const getMessageTree = useCallback(() => {
-    const queryParam =
-      paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
-    const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, queryParam]) ?? [];
-    const dataTree = buildTree({ messages });
-    return dataTree?.length === 0 ? null : (dataTree ?? null);
-  }, [paramId, conversation?.conversationId, queryClient]);
+  const { refetch: fetchExportData } = useExportConversationQuery(
+    effectiveConvoId && effectiveConvoId !== 'new' ? effectiveConvoId : '',
+    { enabled: false },
+  );
 
-  const getMessageText = (message: Partial<TMessage> | undefined, format = 'text') => {
+  const getMessageText = (message: Partial<PublicMessage> | undefined, format = 'text') => {
     if (!message) {
       return '';
     }
@@ -84,29 +80,21 @@ export default function useExportConversation({
       .join('\n\n\n');
   };
 
-  /**
-   * Format and return message texts according to the type of content.
-   * Currently, content whose type is `TOOL_CALL` basically returns JSON as is.
-   * In the future, different formatted text may be returned for each type.
-   */
-  const getMessageContent = (sender: string, content?: TMessageContentParts): string[] => {
+  const getMessageContent = (sender: string, content?: PublicContentPart): string[] => {
     if (!content) {
       return [];
     }
 
     if (content.type === ContentTypes.ERROR) {
-      // ERROR
+      const text = (content as { text?: string | { value?: string } }).text;
       return [
         sender,
-        typeof content[ContentTypes.TEXT] === 'object'
-          ? (content[ContentTypes.TEXT].value ?? '')
-          : (content[ContentTypes.TEXT] ?? ''),
+        typeof text === 'object' ? (text.value ?? '') : (text ?? ''),
       ];
     }
 
     if (content.type === ContentTypes.TEXT) {
-      // TEXT
-      const textPart = content[ContentTypes.TEXT];
+      const textPart = (content as { text?: string | { value?: string } }).text;
       const text = typeof textPart === 'string' ? textPart : (textPart?.value ?? '');
       if (text.trim().length === 0) {
         return [];
@@ -115,34 +103,29 @@ export default function useExportConversation({
     }
 
     if (content.type === ContentTypes.TOOL_CALL) {
-      const type = content[ContentTypes.TOOL_CALL].type;
+      const toolCall = (content as { tool_call: { type: string; [k: string]: unknown } }).tool_call;
+      const type = toolCall?.type;
 
       if (type === ToolCallTypes.CODE_INTERPRETER) {
-        // CODE_INTERPRETER
-        const toolCall = content[ContentTypes.TOOL_CALL];
         const code_interpreter = toolCall[ToolCallTypes.CODE_INTERPRETER];
         return [localize('com_ui_run_code'), JSON.stringify(code_interpreter)];
       }
 
       if (type === ToolCallTypes.RETRIEVAL) {
-        // RETRIEVAL
-        const toolCall = content[ContentTypes.TOOL_CALL];
         return ['Retrieval', JSON.stringify(toolCall)];
       }
 
+      const func = toolCall.function as { name?: string } | undefined;
       if (
         type === ToolCallTypes.FUNCTION &&
-        imageGenTools.has(content[ContentTypes.TOOL_CALL].function.name)
+        func?.name &&
+        imageGenTools.has(func.name)
       ) {
-        // IMAGE_GENERATION
-        const toolCall = content[ContentTypes.TOOL_CALL];
         return ['Tool', JSON.stringify(toolCall)];
       }
 
       if (type === ToolCallTypes.FUNCTION) {
-        // IMAGE_VISION
-        const toolCall = content[ContentTypes.TOOL_CALL];
-        if (isImageVisionTool(toolCall)) {
+        if (isImageVisionTool(toolCall as never)) {
           return ['Tool', JSON.stringify(toolCall)];
         }
         return ['Tool', JSON.stringify(toolCall)];
@@ -150,12 +133,39 @@ export default function useExportConversation({
     }
 
     if (content.type === ContentTypes.IMAGE_FILE) {
-      // IMAGE
-      const imageFile = content[ContentTypes.IMAGE_FILE];
+      const imageFile = (content as { image_file: unknown }).image_file;
       return ['Image', JSON.stringify(imageFile)];
     }
 
     return [sender, JSON.stringify(content)];
+  };
+
+  const buildExportMessages = (exportData: TExportConversationResponse): PublicMessage[] => {
+    const messagesWithChildren = [...exportData.messages] as Array<
+      PublicMessage & { children?: PublicMessage[] }
+    >;
+
+    const dataTree = buildTree({ messages: messagesWithChildren });
+    if (!dataTree || dataTree.length === 0) {
+      return exportData.messages;
+    }
+
+    const flatten = (nodes: PublicMessage[], acc: PublicMessage[] = []) => {
+      for (const node of nodes) {
+        acc.push(node);
+        const children = (node as { children?: PublicMessage[] }).children;
+        if (children && children.length > 0 && Boolean(exportBranches)) {
+          flatten(children, acc);
+        }
+      }
+      return acc;
+    };
+
+    if (Boolean(recursive) && Boolean(exportBranches)) {
+      return dataTree as PublicMessage[];
+    }
+
+    return flatten(dataTree as PublicMessage[]);
   };
 
   const exportScreenshot = async () => {
@@ -169,27 +179,9 @@ export default function useExportConversation({
     download(data, `${filename}.png`, 'image/png');
   };
 
-  const exportCSV = async () => {
-    const data: Partial<TMessage>[] = [];
-
-    const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
-      message: null,
-      messages: getMessageTree(),
-      branches: Boolean(exportBranches),
-      recursive: false,
-    });
-
-    if (Array.isArray(messages)) {
-      for (const message of messages) {
-        if (!message) {
-          continue;
-        }
-        data.push(message);
-      }
-    } else {
-      data.push(messages);
-    }
+  const exportCSV = async (exportData: TExportConversationResponse) => {
+    const messages = buildExportMessages(exportData);
+    const data: Partial<PublicMessage>[] = messages.filter(Boolean);
 
     exportFromJSON({
       data: data,
@@ -233,12 +225,13 @@ export default function useExportConversation({
     });
   };
 
-  const exportMarkdown = async () => {
+  const exportMarkdown = async (exportData: TExportConversationResponse) => {
+    const convo = exportData.conversation;
     let data =
       '# Conversation\n' +
-      `- conversationId: ${conversation?.conversationId}\n` +
-      `- endpoint: ${conversation?.endpoint}\n` +
-      `- title: ${conversation?.title}\n` +
+      `- conversationId: ${convo.conversationId}\n` +
+      `- endpoint: ${convo.endpoint}\n` +
+      `- title: ${convo.title}\n` +
       `- exportAt: ${new Date().toTimeString()}\n`;
 
     if (includeOptions === true) {
@@ -250,34 +243,18 @@ export default function useExportConversation({
       }
     }
 
-    const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
-      message: null,
-      messages: getMessageTree(),
-      branches: false,
-      recursive: false,
-    });
+    const messages = buildExportMessages(exportData);
 
     data += '\n## History\n';
-    if (Array.isArray(messages)) {
-      for (const message of messages) {
-        data += `${getMessageText(message, 'md')}\n`;
-        if (message?.error) {
-          data += '*(This is an error message)*\n';
-        }
-        if (message?.unfinished === true) {
-          data += '*(This is an unfinished message)*\n';
-        }
-        data += '\n\n';
-      }
-    } else {
-      data += `${getMessageText(messages, 'md')}\n`;
-      if (messages.error) {
+    for (const message of messages) {
+      data += `${getMessageText(message, 'md')}\n`;
+      if (message?.error) {
         data += '*(This is an error message)*\n';
       }
-      if (messages.unfinished === true) {
+      if (message?.unfinished === true) {
         data += '*(This is an unfinished message)*\n';
       }
+      data += '\n\n';
     }
 
     exportFromJSON({
@@ -288,13 +265,14 @@ export default function useExportConversation({
     });
   };
 
-  const exportText = async () => {
+  const exportText = async (exportData: TExportConversationResponse) => {
+    const convo = exportData.conversation;
     let data =
       'Conversation\n' +
       '########################\n' +
-      `conversationId: ${conversation?.conversationId}\n` +
-      `endpoint: ${conversation?.endpoint}\n` +
-      `title: ${conversation?.title}\n` +
+      `conversationId: ${convo.conversationId}\n` +
+      `endpoint: ${convo.endpoint}\n` +
+      `title: ${convo.title}\n` +
       `exportAt: ${new Date().toTimeString()}\n`;
 
     if (includeOptions === true) {
@@ -306,34 +284,18 @@ export default function useExportConversation({
       }
     }
 
-    const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
-      message: null,
-      messages: getMessageTree(),
-      branches: false,
-      recursive: false,
-    });
+    const messages = buildExportMessages(exportData);
 
     data += '\nHistory\n########################\n';
-    if (Array.isArray(messages)) {
-      for (const message of messages) {
-        data += `${getMessageText(message)}\n`;
-        if (message?.error) {
-          data += '(This is an error message)\n';
-        }
-        if (message?.unfinished === true) {
-          data += '(This is an unfinished message)\n';
-        }
-        data += '\n\n';
-      }
-    } else {
-      data += `${getMessageText(messages)}\n`;
-      if (messages.error) {
+    for (const message of messages) {
+      data += `${getMessageText(message)}\n`;
+      if (message?.error) {
         data += '(This is an error message)\n';
       }
-      if (messages.unfinished === true) {
+      if (message?.unfinished === true) {
         data += '(This is an unfinished message)\n';
       }
+      data += '\n\n';
     }
 
     exportFromJSON({
@@ -344,53 +306,67 @@ export default function useExportConversation({
     });
   };
 
-  const exportJSON = async () => {
+  const exportJSON = async (exportData: TExportConversationResponse) => {
+    const convo = exportData.conversation;
     const data = {
-      conversationId: conversation?.conversationId,
-      endpoint: conversation?.endpoint,
-      title: conversation?.title,
+      conversationId: convo.conversationId,
+      endpoint: convo.endpoint,
+      title: convo.title,
       exportAt: new Date().toTimeString(),
       branches: exportBranches,
       recursive: recursive,
-    };
+    } as Record<string, unknown>;
 
     if (includeOptions === true) {
       data['options'] = cleanupPreset({ preset: conversation as TPreset });
     }
 
-    const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
-      message: null,
-      messages: getMessageTree(),
-      branches: Boolean(exportBranches),
-      recursive: Boolean(recursive),
-    });
+    if (exportData.warnings && exportData.warnings.length > 0) {
+      data['warnings'] = exportData.warnings;
+    }
 
-    if (recursive === true && !Array.isArray(messages)) {
-      data['messagesTree'] = messages.children;
+    const messages = buildExportMessages(exportData);
+
+    if (Boolean(recursive) === true && !Array.isArray(messages) === false) {
+      const root = { ...messages[0] };
+      data['messagesTree'] = (root as { children?: PublicMessage[] }).children;
     } else {
       data['messages'] = messages;
     }
 
-    /** Use JSON.stringify without indentation to minimize file size for deeply nested recursive exports */
     const jsonString = JSON.stringify(data);
     const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
     download(blob, `${filename}.json`, 'application/json');
   };
 
-  const exportConversation = () => {
-    if (type === 'json') {
-      exportJSON();
-    } else if (type == 'text') {
-      exportText();
-    } else if (type == 'markdown') {
-      exportMarkdown();
-    } else if (type == 'csv') {
-      exportCSV();
-    } else if (type == 'screenshot') {
-      exportScreenshot();
+  const exportConversation = useCallback(async () => {
+    if (type === 'screenshot') {
+      return exportScreenshot();
     }
-  };
+
+    if (!effectiveConvoId || effectiveConvoId === 'new') {
+      console.error('Cannot export: no valid conversationId');
+      return;
+    }
+
+    const result = await fetchExportData();
+    if (!result.data) {
+      console.error('Failed to fetch export data from server');
+      return;
+    }
+
+    const exportData = result.data;
+
+    if (type === 'json') {
+      await exportJSON(exportData);
+    } else if (type === 'text') {
+      await exportText(exportData);
+    } else if (type === 'markdown') {
+      await exportMarkdown(exportData);
+    } else if (type === 'csv') {
+      await exportCSV(exportData);
+    }
+  }, [type, effectiveConvoId, fetchExportData]);
 
   return { exportConversation };
 }

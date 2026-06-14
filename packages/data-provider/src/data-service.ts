@@ -765,6 +765,12 @@ export function forkConversation(payload: t.TForkConvoRequest): Promise<t.TForkC
   return request.post(endpoints.forkConversation(), payload);
 }
 
+export function exportConversation(
+  conversationId: string,
+): Promise<s.TExportConversationResponse> {
+  return request.get(endpoints.exportConversation(conversationId));
+}
+
 export function deleteConversation(payload: t.TDeleteConversationRequest) {
   return request.deleteWithOptions(endpoints.deleteConversation(), { data: { arg: payload } });
 }

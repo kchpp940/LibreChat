@@ -198,17 +198,12 @@ router.get('/', async (req, res) => {
 
     if (conversationId && messageId) {
       const messages = await db.getMessages({ conversationId, messageId, user });
-      const serialized = messages?.length ? [publicMessageSerializer.forDisplay(messages[0])] : [];
-      response = { messages: serialized, nextCursor: null };
+      response = { messages: messages?.length ? [messages[0]] : [], nextCursor: null };
     } else if (conversationId) {
-      const cursorResponse = await db.getMessagesByCursor(
+      response = await db.getMessagesByCursor(
         { conversationId, user },
         { sortField, sortOrder, limit: pageSize, cursor },
       );
-      response = {
-        ...cursorResponse,
-        messages: cursorResponse.messages.map((m) => publicMessageSerializer.forDisplay(m)),
-      };
     } else if (search) {
       const searchResults = await db.searchMessages(search, { filter: `user = "${user}"` }, true);
 
@@ -465,8 +460,7 @@ router.get('/:conversationId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const messages = await db.getMessages({ conversationId, user: req.user.id }, '-_id -__v -user');
-    const serialized = messages.map((m) => publicMessageSerializer.forDisplay(m));
-    res.status(200).json(serialized);
+    res.status(200).json(messages);
   } catch (error) {
     logger.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -490,8 +484,7 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
       return res.status(400).json({ error: 'Message not saved' });
     }
     await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
-    const serialized = publicMessageSerializer.forDisplay(savedMessage);
-    res.status(201).json(serialized);
+    res.status(201).json(savedMessage);
   } catch (error) {
     logger.error('Error saving message:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -501,15 +494,14 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
 router.get('/:conversationId/:messageId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
-    const messages = await db.getMessages(
+    const message = await db.getMessages(
       { conversationId, messageId, user: req.user.id },
       '-_id -__v -user',
     );
-    if (!messages || messages.length === 0) {
+    if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
-    const serialized = publicMessageSerializer.forDisplay(messages[0]);
-    res.status(200).json(serialized);
+    res.status(200).json(message);
   } catch (error) {
     logger.error('Error fetching message:', error);
     res.status(500).json({ error: 'Internal server error' });
