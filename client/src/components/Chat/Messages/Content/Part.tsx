@@ -1,6 +1,8 @@
-import { memo } from 'react';
+import { memo, useMemo, ReactNode } from 'react';
 import type { TMessageContentParts, TAttachment } from 'librechat-data-provider';
-import { RenderContentPart } from './renderer/RendererAdapter';
+import { partToRenderable, type PartToRenderableContext } from './parser';
+import { RenderStandardItem } from './renderer/RenderStandard';
+import { mapAttachments } from '~/utils';
 
 type PartProps = {
   part?: TMessageContentParts;
@@ -11,6 +13,9 @@ type PartProps = {
   attachments?: TAttachment[];
   hideAttachments?: boolean;
   onToolExpand?: () => void;
+  messageId?: string;
+  partIndex?: number;
+  isLastPart?: boolean;
 };
 
 const Part = memo(function Part({
@@ -22,20 +27,40 @@ const Part = memo(function Part({
   isCreatedByUser,
   hideAttachments,
   onToolExpand,
-}: PartProps) {
+  messageId = 'part',
+  partIndex = 0,
+  isLastPart,
+}: PartProps): ReactNode {
   if (!part) {
     return null;
   }
 
+  const attachmentMap = useMemo(() => mapAttachments(attachments ?? []), [attachments]);
+
+  const renderable = useMemo(
+    () =>
+      partToRenderable(part, partIndex, {
+        messageId,
+        attachments,
+        attachmentMap,
+        isSubmitting,
+        isLast,
+        isLastPart: isLastPart ?? isLast,
+      }),
+    [part, partIndex, messageId, attachments, attachmentMap, isSubmitting, isLast, isLastPart],
+  );
+
+  if (!renderable) {
+    return null;
+  }
+
   return (
-    <RenderContentPart
-      part={part}
-      isLast={isLast}
+    <RenderStandardItem
+      item={renderable}
       isSubmitting={isSubmitting}
-      showCursor={showCursor}
       isCreatedByUser={isCreatedByUser}
-      attachments={attachments}
-      hideAttachments={hideAttachments}
+      isLast={isLast}
+      showCursor={showCursor}
       onToolExpand={onToolExpand}
     />
   );
