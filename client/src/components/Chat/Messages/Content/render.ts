@@ -50,7 +50,7 @@ export type {
 } from './parser/types';
 
 /* ── Rendering: RenderableItem → React component ── */
-export { RenderStandardItem, AttachmentGroup } from './renderer/RenderStandard';
+export { RenderStandardItem, AttachmentGroup, AttachmentGroupComponent } from './renderer';
 
 /* ── Registry: for extending with new content types ── */
 export { standardRendererRegistry, initializeStandardRenderers } from './renderer/v2';

@@ -11,12 +11,10 @@ import {
   attachmentToRenderable,
   type ParsedMessageContent,
   type ParseMessageContentOptions,
-} from '~/components/Chat/Messages/Content/parser';
-import type {
-  RenderableItem,
-  RenderableAttachment,
-  RenderableArtifact,
-} from '~/components/Chat/Messages/Content/parser/types';
+  type RenderableItem,
+  type RenderableAttachment,
+  type RenderableArtifact,
+} from '~/components/Chat/Messages/Content/render';
 
 export interface UseParsedMessageContentOptions
   extends Omit<ParseMessageContentOptions, 'messageId'> {

@@ -1,7 +1,7 @@
 import { memo, useMemo, ReactNode } from 'react';
 import type { TMessageContentParts, TAttachment } from 'librechat-data-provider';
 import { partToRenderable, type PartToRenderableContext } from './parser';
-import { RenderStandardItem } from './renderer/RenderStandard';
+import { RenderStandardItem } from './renderer';
 import { mapAttachments } from '~/utils';
 
 type PartProps = {

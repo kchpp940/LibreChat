@@ -1,7 +1,5 @@
 import type { TAttachment } from 'librechat-data-provider';
-import { attachmentToRenderable } from '../parser';
-import { RenderStandardItem } from '../renderer/RenderStandard';
-import { AttachmentGroupComponent } from '../renderer/attachmentRenderers';
+import { attachmentToRenderable, RenderStandardItem, AttachmentGroupComponent } from '../render';
 
 export default function Attachment({ attachment }: { attachment?: TAttachment }) {
   if (!attachment) return null;
