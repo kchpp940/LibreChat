@@ -425,9 +425,11 @@ export default function useChatFunctions({
       currentMsg.files = Array.from(files.values()).map((file) => ({
         file_id: file.file_id,
         filepath: file.filepath,
-        type: file.type ?? '', // Ensure type is not undefined
+        type: file.type ?? '',
         height: file.height,
         width: file.width,
+        embedded: file.embedded,
+        indexingStatus: file.indexingStatus,
       }));
       setFiles(new Map());
       setFilesToDelete({});

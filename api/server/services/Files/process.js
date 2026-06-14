@@ -961,6 +961,17 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     messageAttachment,
     tool_resource,
   });
+  let indexingStatus;
+  if (tool_resource === EToolResources.file_search) {
+    if (embedded === true) {
+      indexingStatus = 'indexed';
+    } else {
+      indexingStatus = 'failed';
+    }
+  } else if (messageAttachment) {
+    indexingStatus = 'skipped';
+  }
+
   const fileInfo = {
     ...removeNullishValues({
       user: req.user.id,
@@ -975,6 +986,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       metadata: fileInfoMetadata,
       type: file.mimetype,
       embedded,
+      indexingStatus,
       source,
       height,
       width,

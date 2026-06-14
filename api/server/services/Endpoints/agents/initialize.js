@@ -929,20 +929,48 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
           { fileCount, fileNames },
         );
 
-        const embeddedCount = requestFiles.filter((f) => f.embedded === true).length;
-        const nonEmbeddedCount = fileCount - embeddedCount;
+        const hasSearchFiles = requestFiles.some(
+          (f) => f.indexingStatus === 'indexed' || f.indexingStatus === 'failed' || f.indexingStatus === 'pending' || f.embedded === true,
+        );
 
-        if (embeddedCount > 0) {
-          await timelineManager.completePhase(
-            TimelinePhase.INDEXING,
-            embeddedCount === 1
-              ? `知识库索引完成: ${embeddedCount} 个文件已索引`
-              : `知识库索引完成: ${embeddedCount} 个文件已索引`,
-            { indexedCount: embeddedCount },
+        if (hasSearchFiles) {
+          const indexed = requestFiles.filter(
+            (f) => f.indexingStatus === 'indexed' || (f.indexingStatus == null && f.embedded === true),
           );
-        }
+          const failed = requestFiles.filter((f) => f.indexingStatus === 'failed');
+          const pending = requestFiles.filter((f) => f.indexingStatus === 'pending');
 
-        if (nonEmbeddedCount > 0 && embeddedCount === 0) {
+          if (indexed.length > 0) {
+            const indexedNames = indexed.map((f) => f.filename || f.file_id).filter(Boolean);
+            await timelineManager.completePhase(
+              TimelinePhase.INDEXING,
+              indexed.length === 1
+                ? `知识库索引完成: ${indexedNames[0]}`
+                : `知识库索引完成: ${indexed.length} 个文件已索引`,
+              { indexedCount: indexed.length, fileNames: indexedNames },
+            );
+          }
+
+          if (failed.length > 0) {
+            const failedNames = failed.map((f) => f.filename || f.file_id).filter(Boolean);
+            await timelineManager.failPhase(
+              TimelinePhase.INDEXING,
+              failed.length === 1
+                ? `索引失败: ${failedNames[0]}`
+                : `${failed.length} 个文件索引失败`,
+              'indexing_failed',
+              { failedCount: failed.length, fileNames: failedNames },
+            );
+          }
+
+          if (pending.length > 0) {
+            await timelineManager.startPhase(
+              TimelinePhase.INDEXING,
+              `${pending.length} 个文件正在索引中`,
+              { pendingCount: pending.length },
+            );
+          }
+        } else {
           await timelineManager.skipPhase(
             TimelinePhase.INDEXING,
             '无需知识库索引',

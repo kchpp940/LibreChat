@@ -137,12 +137,30 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
           })
           .catch((error) => {
             logger.error('Error encountered in `file_search` while querying file:', error);
-            return null;
+            return { __failed: true, filename: file.filename, error: error?.message ?? 'unknown' };
           }),
       );
 
       const results = await Promise.all(queryPromises);
-      const validResults = results.filter((result) => result !== null);
+      const failedQueries = results.filter((result) => result != null && result.__failed === true);
+      const validResults = results.filter((result) => result !== null && result.__failed !== true);
+
+      if (failedQueries.length > 0 && timelineManager) {
+        const failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
+        try {
+          await timelineManager.emitEvent(
+            TimelinePhase.RETRIEVAL,
+            TimelineStatus.FAILED,
+            failedFileNames.length === files.length
+              ? '检索全部失败'
+              : `${failedFileNames.length} 个文件检索失败`,
+            { failedCount: failedQueries.length, failedFileNames },
+            'retrieval_partial_failure',
+          );
+        } catch (err) {
+          logger.warn('[file_search] Failed to emit retrieval failure timeline event:', err?.message ?? err);
+        }
+      }
 
       if (validResults.length === 0) {
         if (timelineManager) {
