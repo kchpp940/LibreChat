@@ -23,6 +23,8 @@ const {
   AgentCapabilities,
   MAX_SUBAGENT_GRAPH_NODES,
   isEphemeralAgentId,
+  TimelinePhase,
+  TimelineStatus,
 } = require('librechat-data-provider');
 const {
   createToolEndCallback,
@@ -905,6 +907,51 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
 
   if (streamId) {
     GenerationJobManager.setCollectedUsage(streamId, collectedUsage);
+  }
+
+  if (streamId && requestFiles.length > 0) {
+    (async () => {
+      try {
+        const timelineManager = await GenerationJobManager.getTimelineManager(streamId);
+        if (!timelineManager) return;
+
+        const fileNames = requestFiles
+          .map((f) => f.filename || f.file_id)
+          .filter(Boolean);
+        const fileCount = requestFiles.length;
+
+        await timelineManager.emitEvent(
+          TimelinePhase.UPLOAD,
+          TimelineStatus.COMPLETED,
+          fileCount === 1
+            ? `文件已上传: ${fileNames[0]}`
+            : `${fileCount} 个文件已上传`,
+          { fileCount, fileNames },
+        );
+
+        const embeddedCount = requestFiles.filter((f) => f.embedded === true).length;
+        const nonEmbeddedCount = fileCount - embeddedCount;
+
+        if (embeddedCount > 0) {
+          await timelineManager.completePhase(
+            TimelinePhase.INDEXING,
+            embeddedCount === 1
+              ? `知识库索引完成: ${embeddedCount} 个文件已索引`
+              : `知识库索引完成: ${embeddedCount} 个文件已索引`,
+            { indexedCount: embeddedCount },
+          );
+        }
+
+        if (nonEmbeddedCount > 0 && embeddedCount === 0) {
+          await timelineManager.skipPhase(
+            TimelinePhase.INDEXING,
+            '无需知识库索引',
+          );
+        }
+      } catch (err) {
+        logger.warn('[initializeClient] Failed to emit file timeline events:', err?.message ?? err);
+      }
+    })();
   }
 
   return { client, userMCPAuthMap };

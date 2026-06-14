@@ -1,8 +1,8 @@
 const axios = require('axios');
 const { logger } = require('@librechat/data-schemas');
 const { tool } = require('@librechat/agents/langchain/tools');
-const { generateShortLivedToken } = require('@librechat/api');
-const { Tools, EToolResources } = require('librechat-data-provider');
+const { generateShortLivedToken, GenerationJobManager } = require('@librechat/api');
+const { Tools, EToolResources, TimelinePhase, TimelineStatus } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { getFiles } = require('~/models');
 
@@ -83,9 +83,10 @@ const primeFiles = async (options) => {
  * @param {Array<{ file_id: string; filename: string }>} options.files
  * @param {string} [options.entity_id]
  * @param {boolean} [options.fileCitations=false] - Whether to include citation instructions
+ * @param {string} [options.streamId=null] - Stream ID for timeline events
  * @returns
  */
-const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = false }) => {
+const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = false, streamId = null }) => {
   return tool(
     async ({ query }) => {
       if (files.length === 0) {
@@ -94,6 +95,18 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
       const jwtToken = generateShortLivedToken(userId);
       if (!jwtToken) {
         return ['There was an error authenticating the file search request.', undefined];
+      }
+
+      let timelineManager = null;
+      if (streamId) {
+        try {
+          timelineManager = await GenerationJobManager.getTimelineManager(streamId);
+          if (timelineManager) {
+            await timelineManager.startPhase(TimelinePhase.RETRIEVAL, '正在检索知识库', { query });
+          }
+        } catch (err) {
+          logger.warn('[file_search] Failed to start retrieval timeline event:', err?.message ?? err);
+        }
       }
 
       /**
@@ -132,6 +145,13 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
       const validResults = results.filter((result) => result !== null);
 
       if (validResults.length === 0) {
+        if (timelineManager) {
+          try {
+            await timelineManager.completePhase(TimelinePhase.RETRIEVAL, '检索完成，未命中', { count: 0 });
+          } catch (err) {
+            logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
+          }
+        }
         return ['No results found or errors occurred while searching the files.', undefined];
       }
 
@@ -149,10 +169,33 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
         .slice(0, 10);
 
       if (formattedResults.length === 0) {
+        if (timelineManager) {
+          try {
+            await timelineManager.completePhase(TimelinePhase.RETRIEVAL, '检索完成，未命中', { count: 0 });
+          } catch (err) {
+            logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
+          }
+        }
         return [
           'No content found in the files. The files may not have been processed correctly or you may need to refine your query.',
           undefined,
         ];
+      }
+
+      if (timelineManager) {
+        try {
+          const hitCount = formattedResults.length;
+          const fileNames = [...new Set(formattedResults.map((r) => r.filename))];
+          await timelineManager.completePhase(
+            TimelinePhase.RETRIEVAL,
+            hitCount === 1
+              ? `检索命中 1 条相关内容`
+              : `检索命中 ${hitCount} 条相关内容`,
+            { count: hitCount, fileNames },
+          );
+        } catch (err) {
+          logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
+        }
       }
 
       const formattedString = formattedResults
