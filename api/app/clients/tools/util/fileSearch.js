@@ -144,32 +144,49 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
       const results = await Promise.all(queryPromises);
       const failedQueries = results.filter((result) => result != null && result.__failed === true);
       const validResults = results.filter((result) => result !== null && result.__failed !== true);
+      const allFailed = failedQueries.length > 0 && validResults.length === 0;
+      const partiallyFailed = failedQueries.length > 0 && validResults.length > 0;
 
-      if (failedQueries.length > 0 && timelineManager) {
+      if (allFailed && timelineManager) {
+        const failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
+        const errorMessages = [...new Set(failedQueries.map((q) => q.error).filter(Boolean))];
+        try {
+          await timelineManager.failPhase(
+            TimelinePhase.RETRIEVAL,
+            failedFileNames.length === 1
+              ? `检索失败: ${failedFileNames[0]}`
+              : `${failedFileNames.length} 个文件全部检索失败`,
+            'retrieval_failed',
+            {
+              failedCount: failedQueries.length,
+              failedFileNames,
+              errorMessages: errorMessages.length > 0 ? errorMessages : ['unknown error'],
+            },
+          );
+        } catch (err) {
+          logger.warn('[file_search] Failed to emit retrieval failure timeline event:', err?.message ?? err);
+        }
+      } else if (partiallyFailed && timelineManager) {
         const failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
         try {
           await timelineManager.emitEvent(
             TimelinePhase.RETRIEVAL,
             TimelineStatus.FAILED,
-            failedFileNames.length === files.length
-              ? '检索全部失败'
-              : `${failedFileNames.length} 个文件检索失败`,
-            { failedCount: failedQueries.length, failedFileNames },
+            `${failedFileNames.length} 个文件检索失败`,
+            {
+              failedCount: failedQueries.length,
+              failedFileNames,
+              totalFiles: files.length,
+              succeededFiles: validResults.length,
+            },
             'retrieval_partial_failure',
           );
         } catch (err) {
-          logger.warn('[file_search] Failed to emit retrieval failure timeline event:', err?.message ?? err);
+          logger.warn('[file_search] Failed to emit partial retrieval failure timeline event:', err?.message ?? err);
         }
       }
 
       if (validResults.length === 0) {
-        if (timelineManager) {
-          try {
-            await timelineManager.completePhase(TimelinePhase.RETRIEVAL, '检索完成，未命中', { count: 0 });
-          } catch (err) {
-            logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
-          }
-        }
         return ['No results found or errors occurred while searching the files.', undefined];
       }
 
@@ -187,7 +204,7 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
         .slice(0, 10);
 
       if (formattedResults.length === 0) {
-        if (timelineManager) {
+        if (timelineManager && !allFailed) {
           try {
             await timelineManager.completePhase(TimelinePhase.RETRIEVAL, '检索完成，未命中', { count: 0 });
           } catch (err) {
@@ -204,12 +221,19 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
         try {
           const hitCount = formattedResults.length;
           const fileNames = [...new Set(formattedResults.map((r) => r.filename))];
+          const details = { count: hitCount, fileNames };
+          if (partiallyFailed && failedQueries.length > 0) {
+            details.failedCount = failedQueries.length;
+            details.failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
+            details.succeededFiles = validResults.length;
+            details.totalFiles = files.length;
+          }
           await timelineManager.completePhase(
             TimelinePhase.RETRIEVAL,
             hitCount === 1
               ? `检索命中 1 条相关内容`
               : `检索命中 ${hitCount} 条相关内容`,
-            { count: hitCount, fileNames },
+            details,
           );
         } catch (err) {
           logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);

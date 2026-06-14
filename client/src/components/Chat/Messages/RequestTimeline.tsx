@@ -3,6 +3,7 @@ import { useRecoilValue } from 'recoil';
 import {
   TimelinePhase,
   TimelineStatus,
+  mapTimelineError,
 } from 'librechat-data-provider';
 import type { TimelineEvent } from 'librechat-data-provider';
 import store from '~/store';
@@ -84,7 +85,55 @@ function aggregateTimelineEvents(events: TimelineEvent[]): TimelinePhaseSummary[
 
   for (const event of events) {
     const existing = phaseMap.get(event.phase);
-    if (!existing || event.status === TimelineStatus.COMPLETED || event.status === TimelineStatus.FAILED) {
+
+    if (event.phase === TimelinePhase.RETRIEVAL) {
+      if (!existing) {
+        phaseMap.set(event.phase, {
+          phase: event.phase,
+          status: event.status,
+          message: event.message,
+          durationMs: event.durationMs,
+          errorMessage: event.status === TimelineStatus.FAILED && event.details?.failedCount == null
+            ? event.errorMessage
+            : undefined,
+          details: event.details,
+        });
+      } else {
+        const mergedDetails = { ...existing.details, ...event.details };
+
+        if (event.status === TimelineStatus.COMPLETED) {
+          const hasPartialFailure = typeof mergedDetails.failedCount === 'number' && mergedDetails.failedCount > 0;
+          phaseMap.set(event.phase, {
+            phase: event.phase,
+            status: TimelineStatus.COMPLETED,
+            message: event.message,
+            durationMs: event.durationMs ?? existing.durationMs,
+            errorMessage: hasPartialFailure ? undefined : existing.errorMessage,
+            details: hasPartialFailure
+              ? { ...mergedDetails, partialFailure: true }
+              : mergedDetails,
+          });
+        } else if (event.status === TimelineStatus.FAILED && existing.status !== TimelineStatus.COMPLETED) {
+          phaseMap.set(event.phase, {
+            phase: event.phase,
+            status: TimelineStatus.FAILED,
+            message: event.message,
+            durationMs: event.durationMs ?? existing.durationMs,
+            errorMessage: event.errorMessage ?? existing.errorMessage,
+            details: mergedDetails,
+          });
+        } else if (event.status === TimelineStatus.FAILED && existing.status === TimelineStatus.COMPLETED) {
+          const hasPartialFailure = typeof mergedDetails.failedCount === 'number' && mergedDetails.failedCount > 0;
+          phaseMap.set(event.phase, {
+            ...existing,
+            details: hasPartialFailure
+              ? { ...mergedDetails, partialFailure: true }
+              : mergedDetails,
+            errorMessage: hasPartialFailure ? undefined : (event.errorMessage ?? existing.errorMessage),
+          });
+        }
+      }
+    } else if (!existing || event.status === TimelineStatus.COMPLETED || event.status === TimelineStatus.FAILED) {
       phaseMap.set(event.phase, {
         phase: event.phase,
         status: event.status,
@@ -207,13 +256,52 @@ export default function RequestTimeline({ runIndex = 0, className }: RequestTime
                 )}
               </div>
               <p className="text-xs text-text-secondary">{phase.message}</p>
-              {phase.errorMessage && (
+              {phase.errorMessage && phase.phase !== TimelinePhase.RETRIEVAL && (
                 <p className="mt-1 text-xs text-red-500 dark:text-red-400">{phase.errorMessage}</p>
               )}
-              {phase.phase === TimelinePhase.RETRIEVAL && phase.details && 'count' in phase.details && (
-                <p className="mt-1 text-xs text-text-secondary">
-                  命中 {String(phase.details.count)} 条相关内容
-                </p>
+              {phase.phase === TimelinePhase.RETRIEVAL && phase.details && (
+                <>
+                  {phase.status === TimelineStatus.COMPLETED && phase.details.count === 0 && !phase.details.partialFailure && (
+                    <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                      无命中：知识库中未找到相关内容
+                    </p>
+                  )}
+                  {phase.status === TimelineStatus.COMPLETED && typeof phase.details.count === 'number' && phase.details.count > 0 && (
+                    <>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        命中 {String(phase.details.count)} 条相关内容
+                      </p>
+                      {phase.details.partialFailure && typeof phase.details.failedCount === 'number' && phase.details.failedCount > 0 && (
+                        <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                          部分失败：{String(phase.details.failedCount)} 个文件检索失败
+                          {Array.isArray(phase.details.failedFileNames) && phase.details.failedFileNames.length > 0 && (
+                            <>（{phase.details.failedFileNames.slice(0, 3).join(', ')}
+                              {phase.details.failedFileNames.length > 3 && ` 等${phase.details.failedFileNames.length}个`}）
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {phase.status === TimelineStatus.FAILED && (
+                    <>
+                      <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                        {phase.errorMessage || mapTimelineError('retrieval_failed')}
+                      </p>
+                      {Array.isArray(phase.details.errorMessages) && phase.details.errorMessages.length > 0 && (
+                        <p className="mt-1 text-xs text-text-secondary">
+                          错误原因：{phase.details.errorMessages.slice(0, 2).join('；')}
+                        </p>
+                      )}
+                      {Array.isArray(phase.details.failedFileNames) && phase.details.failedFileNames.length > 0 && (
+                        <p className="mt-1 text-xs text-text-secondary">
+                          失败文件：{phase.details.failedFileNames.slice(0, 3).join(', ')}
+                          {phase.details.failedFileNames.length > 3 && ` 等${phase.details.failedFileNames.length}个`}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </>
               )}
               {phase.phase === TimelinePhase.TOOL_CALL && phase.details && 'toolName' in phase.details && (
                 <p className="mt-1 text-xs text-text-secondary">
