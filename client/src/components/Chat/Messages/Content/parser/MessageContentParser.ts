@@ -495,3 +495,20 @@ export function renderableKindOf(item: RenderableItem): RenderableKind {
 export function renderableSourceOf(item: RenderableItem): RenderableSource {
   return item.source;
 }
+
+export function isEditablePart(part: TMessageContentParts): boolean {
+  if (!part) return false;
+  const isTextPart =
+    part.type === ContentTypes.TEXT ||
+    typeof (part as AnyRecord).text === 'string';
+  const isThinkPart =
+    part.type === ContentTypes.THINK ||
+    typeof (part as AnyRecord).think === 'string';
+  if (!isTextPart && !isThinkPart) return false;
+  const isToolCall = part.type === ContentTypes.TOOL_CALL || (part as AnyRecord).tool_call_ids != null;
+  return !isToolCall;
+}
+
+export function getToolCallId(part: TMessageContentParts): string {
+  return (part?.[ContentTypes.TOOL_CALL] as Agents.ToolCall | undefined)?.id ?? '';
+}
