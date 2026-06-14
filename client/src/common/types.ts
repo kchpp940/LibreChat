@@ -578,7 +578,6 @@ export interface ExtendedFile {
   source?: FileSources;
   attached?: boolean;
   embedded?: boolean;
-  indexingStatus?: t.FileIndexingStatus;
   tool_resource?: string;
   metadata?: t.TFile['metadata'];
 }

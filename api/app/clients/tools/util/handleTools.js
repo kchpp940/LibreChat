@@ -335,7 +335,6 @@ const loadTools = async ({
           files,
           entity_id: agent?.id,
           fileCitations,
-          streamId: options.req?._resumableStreamId || null,
         });
       };
       continue;

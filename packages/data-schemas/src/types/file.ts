@@ -55,7 +55,6 @@ export interface IMongoFile extends Omit<Document, 'model'> {
   storageRegion?: string;
   object: 'file';
   embedded?: boolean;
-  indexingStatus?: 'pending' | 'indexed' | 'failed' | 'skipped';
   type: string;
   context?: string;
   usage: number;

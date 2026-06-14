@@ -9,16 +9,13 @@ import { MessagesViewProvider } from '~/Providers';
 import { fontSizeAtom } from '~/store/fontSize';
 import MultiMessage from './MultiMessage';
 import MessageNav from './MessageNav';
-import RequestTimeline from './RequestTimeline';
 import { cn } from '~/utils';
 import store from '~/store';
 
 function MessagesViewContent({
   messagesTree: _messagesTree,
-  runIndex = 0,
 }: {
   messagesTree?: TMessage[] | null;
-  runIndex?: number;
 }) {
   const localize = useLocalize();
   const fontSize = useAtomValue(fontSizeAtom);
@@ -73,9 +70,6 @@ function MessagesViewContent({
                       currentEditId={currentEditId ?? null}
                     />
                   </div>
-                  <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:max-w-[47rem] md:px-5 lg:px-1 xl:max-w-[55rem] xl:px-5">
-                    <RequestTimeline runIndex={runIndex} />
-                  </div>
                 </>
               )}
               <div
@@ -107,10 +101,10 @@ function MessagesViewContent({
   );
 }
 
-export default function MessagesView({ messagesTree, runIndex }: { messagesTree?: TMessage[] | null; runIndex?: number }) {
+export default function MessagesView({ messagesTree }: { messagesTree?: TMessage[] | null }) {
   return (
     <MessagesViewProvider>
-      <MessagesViewContent messagesTree={messagesTree} runIndex={runIndex} />
+      <MessagesViewContent messagesTree={messagesTree} />
     </MessagesViewProvider>
   );
 }

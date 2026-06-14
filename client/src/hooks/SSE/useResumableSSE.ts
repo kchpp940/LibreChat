@@ -21,7 +21,6 @@ import type {
   TSubmission,
   TConversation,
   EventSubmission,
-  TimelineEvent,
 } from 'librechat-data-provider';
 import type { EventHandlerParams } from './useEventHandlers';
 import type { ActiveJobsResponse } from '~/data-provider';
@@ -372,7 +371,6 @@ export default function useResumableSSE(
 ) {
   const queryClient = useQueryClient();
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
-  const setTimelineEvents = useSetRecoilState(store.timelineEventsFamily(runIndex));
 
   const { token, isAuthenticated } = useAuthContext();
   const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation } =
@@ -591,17 +589,6 @@ export default function useResumableSSE(
             return;
           }
 
-          if (data.event === StepEvents.ON_TIMELINE_EVENT && data.data) {
-            setTimelineEvents((prev) => {
-              const newEvent = data.data as TimelineEvent;
-              if (prev.some((e) => e.id === newEvent.id)) {
-                return prev;
-              }
-              return [...prev, newEvent];
-            });
-            return;
-          }
-
           if (data.event != null) {
             if (!isResume && !createdStreamIdsRef.current.has(currentStreamId)) {
               if (isOAuthStepEvent(data)) {
@@ -713,22 +700,10 @@ export default function useResumableSSE(
                 `[ResumableSSE] Replaying ${data.resumeState.replayEvents.length} resume events`,
               );
               for (const replayEvent of data.resumeState.replayEvents) {
-                if (replayEvent.event === StepEvents.ON_TIMELINE_EVENT) {
-                  setTimelineEvents((prev) => {
-                    const newEvent = (replayEvent as Record<string, unknown>).data as TimelineEvent;
-                    if (prev.some((e) => e.id === newEvent.id)) {
-                      return prev;
-                    }
-                    return [...prev, newEvent];
-                  });
-                } else if (replayEvent.event != null) {
+                if (replayEvent.event != null) {
                   stepHandler(replayEvent, resumeSubmission);
                 }
               }
-            }
-
-            if (data.resumeState?.timelineEvents?.length > 0) {
-              setTimelineEvents(data.resumeState.timelineEvents as TimelineEvent[]);
             }
 
             if (data.pendingEvents?.length > 0) {
@@ -736,14 +711,6 @@ export default function useResumableSSE(
               for (const pendingEvent of data.pendingEvents) {
                 if (pendingEvent.event === 'title') {
                   titleHandler(pendingEvent);
-                } else if (pendingEvent.event === StepEvents.ON_TIMELINE_EVENT) {
-                  setTimelineEvents((prev) => {
-                    const newEvent = (pendingEvent as Record<string, unknown>).data as TimelineEvent;
-                    if (prev.some((e) => e.id === newEvent.id)) {
-                      return prev;
-                    }
-                    return [...prev, newEvent];
-                  });
                 } else if (pendingEvent.event != null) {
                   stepHandler(pendingEvent, resumeSubmission);
                 } else if (pendingEvent.type != null) {

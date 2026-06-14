@@ -424,7 +424,6 @@ const processFileURL = async ({
         source: fileStrategy,
         type,
         context,
-        indexingStatus: 'skipped',
         ...(await getRetentionExpiry(req)),
         tenantId,
         width: dimensions.width,
@@ -476,7 +475,6 @@ const processImageFile = async ({ req, res, metadata, returnFile = false }) => {
       context: FileContext.message_attachment,
       source,
       type: `image/${appConfig.imageOutputType}`,
-      indexingStatus: 'skipped',
       ...(await getRetentionExpiry(req)),
       width,
       height,
@@ -541,7 +539,6 @@ const uploadImageBuffer = async ({ req, context, metadata = {}, resize = true })
       ...(await getRetentionExpiry(req)),
       height,
       tenantId: req.user.tenantId,
-      indexingStatus: 'skipped',
     },
     true,
   );
@@ -644,7 +641,6 @@ const processFileUpload = async ({ req, res, metadata }) => {
       type: file.mimetype,
       ...(await getRetentionExpiry(req)),
       embedded,
-      indexingStatus: embedded === true ? 'indexed' : 'skipped',
       source,
       height,
       width,
@@ -777,7 +773,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
           model: messageAttachment ? undefined : req.body.model,
           context: messageAttachment ? FileContext.message_attachment : FileContext.agents,
           tenantId: req.user.tenantId,
-          indexingStatus: 'skipped',
         }),
         ...retentionExpiry,
       };
@@ -966,19 +961,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     messageAttachment,
     tool_resource,
   });
-  let indexingStatus;
-  if (tool_resource === EToolResources.file_search) {
-    if (embedded === true) {
-      indexingStatus = 'indexed';
-    } else {
-      indexingStatus = 'failed';
-    }
-  } else if (messageAttachment) {
-    indexingStatus = 'skipped';
-  } else {
-    indexingStatus = 'skipped';
-  }
-
   const fileInfo = {
     ...removeNullishValues({
       user: req.user.id,
@@ -993,7 +975,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       metadata: fileInfoMetadata,
       type: file.mimetype,
       embedded,
-      indexingStatus,
       source,
       height,
       width,
@@ -1045,7 +1026,6 @@ const processOpenAIFile = async ({
     source,
     model: openai.req.body.model,
     filename: originalName ?? file_id,
-    indexingStatus: 'skipped',
     ...(await getRetentionExpiry(openai.req)),
     tenantId: openai.req?.user?.tenantId,
   };
@@ -1091,7 +1071,6 @@ const processOpenAIImageOutput = async ({ req, buffer, file_id, filename, fileEx
     context: FileContext.assistants_output,
     file_id,
     filename,
-    indexingStatus: 'skipped',
     ...(await getRetentionExpiry(req)),
     tenantId: req.user.tenantId,
   };
@@ -1260,7 +1239,6 @@ async function saveBase64Image(
       ...(await getRetentionExpiry(req)),
       height: image.height,
       tenantId: req.user.tenantId,
-      indexingStatus: 'skipped',
     },
     true,
   );

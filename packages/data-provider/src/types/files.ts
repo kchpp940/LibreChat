@@ -102,13 +102,6 @@ export type FileConfigInput = {
   checkType?: (fileType: string, supportedTypes: RegExp[]) => boolean;
 };
 
-export enum FileIndexingStatus {
-  PENDING = 'pending',
-  INDEXED = 'indexed',
-  FAILED = 'failed',
-  SKIPPED = 'skipped',
-}
-
 export type TFile = {
   _id?: string;
   __v?: number;
@@ -122,7 +115,6 @@ export type TFile = {
   temp_file_id?: string;
   bytes: number;
   embedded: boolean;
-  indexingStatus?: FileIndexingStatus;
   filename: string;
   filepath: string;
   object: 'file';

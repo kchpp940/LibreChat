@@ -1,8 +1,8 @@
 const axios = require('axios');
 const { logger } = require('@librechat/data-schemas');
 const { tool } = require('@librechat/agents/langchain/tools');
-const { generateShortLivedToken, GenerationJobManager } = require('@librechat/api');
-const { Tools, EToolResources, TimelinePhase, TimelineStatus } = require('librechat-data-provider');
+const { generateShortLivedToken } = require('@librechat/api');
+const { Tools, EToolResources } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { getFiles } = require('~/models');
 
@@ -83,10 +83,9 @@ const primeFiles = async (options) => {
  * @param {Array<{ file_id: string; filename: string }>} options.files
  * @param {string} [options.entity_id]
  * @param {boolean} [options.fileCitations=false] - Whether to include citation instructions
- * @param {string} [options.streamId=null] - Stream ID for timeline events
  * @returns
  */
-const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = false, streamId = null }) => {
+const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = false }) => {
   return tool(
     async ({ query }) => {
       if (files.length === 0) {
@@ -95,18 +94,6 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
       const jwtToken = generateShortLivedToken(userId);
       if (!jwtToken) {
         return ['There was an error authenticating the file search request.', undefined];
-      }
-
-      let timelineManager = null;
-      if (streamId) {
-        try {
-          timelineManager = await GenerationJobManager.getTimelineManager(streamId);
-          if (timelineManager) {
-            await timelineManager.startPhase(TimelinePhase.RETRIEVAL, '正在检索知识库', { query });
-          }
-        } catch (err) {
-          logger.warn('[file_search] Failed to start retrieval timeline event:', err?.message ?? err);
-        }
       }
 
       /**
@@ -137,54 +124,12 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
           })
           .catch((error) => {
             logger.error('Error encountered in `file_search` while querying file:', error);
-            return { __failed: true, filename: file.filename, error: error?.message ?? 'unknown' };
+            return null;
           }),
       );
 
       const results = await Promise.all(queryPromises);
-      const failedQueries = results.filter((result) => result != null && result.__failed === true);
-      const validResults = results.filter((result) => result !== null && result.__failed !== true);
-      const allFailed = failedQueries.length > 0 && validResults.length === 0;
-      const partiallyFailed = failedQueries.length > 0 && validResults.length > 0;
-
-      if (allFailed && timelineManager) {
-        const failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
-        const errorMessages = [...new Set(failedQueries.map((q) => q.error).filter(Boolean))];
-        try {
-          await timelineManager.failPhase(
-            TimelinePhase.RETRIEVAL,
-            failedFileNames.length === 1
-              ? `检索失败: ${failedFileNames[0]}`
-              : `${failedFileNames.length} 个文件全部检索失败`,
-            'retrieval_failed',
-            {
-              failedCount: failedQueries.length,
-              failedFileNames,
-              errorMessages: errorMessages.length > 0 ? errorMessages : ['unknown error'],
-            },
-          );
-        } catch (err) {
-          logger.warn('[file_search] Failed to emit retrieval failure timeline event:', err?.message ?? err);
-        }
-      } else if (partiallyFailed && timelineManager) {
-        const failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
-        try {
-          await timelineManager.emitEvent(
-            TimelinePhase.RETRIEVAL,
-            TimelineStatus.FAILED,
-            `${failedFileNames.length} 个文件检索失败`,
-            {
-              failedCount: failedQueries.length,
-              failedFileNames,
-              totalFiles: files.length,
-              succeededFiles: validResults.length,
-            },
-            'retrieval_partial_failure',
-          );
-        } catch (err) {
-          logger.warn('[file_search] Failed to emit partial retrieval failure timeline event:', err?.message ?? err);
-        }
-      }
+      const validResults = results.filter((result) => result !== null);
 
       if (validResults.length === 0) {
         return ['No results found or errors occurred while searching the files.', undefined];
@@ -204,40 +149,10 @@ const createFileSearchTool = async ({ userId, files, entity_id, fileCitations = 
         .slice(0, 10);
 
       if (formattedResults.length === 0) {
-        if (timelineManager && !allFailed) {
-          try {
-            await timelineManager.completePhase(TimelinePhase.RETRIEVAL, '检索完成，未命中', { count: 0 });
-          } catch (err) {
-            logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
-          }
-        }
         return [
           'No content found in the files. The files may not have been processed correctly or you may need to refine your query.',
           undefined,
         ];
-      }
-
-      if (timelineManager) {
-        try {
-          const hitCount = formattedResults.length;
-          const fileNames = [...new Set(formattedResults.map((r) => r.filename))];
-          const details = { count: hitCount, fileNames };
-          if (partiallyFailed && failedQueries.length > 0) {
-            details.failedCount = failedQueries.length;
-            details.failedFileNames = failedQueries.map((q) => q.filename).filter(Boolean);
-            details.succeededFiles = validResults.length;
-            details.totalFiles = files.length;
-          }
-          await timelineManager.completePhase(
-            TimelinePhase.RETRIEVAL,
-            hitCount === 1
-              ? `检索命中 1 条相关内容`
-              : `检索命中 ${hitCount} 条相关内容`,
-            details,
-          );
-        } catch (err) {
-          logger.warn('[file_search] Failed to complete retrieval timeline event:', err?.message ?? err);
-        }
       }
 
       const formattedString = formattedResults

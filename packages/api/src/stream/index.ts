@@ -4,8 +4,6 @@ export {
   type GenerationJobManagerOptions,
 } from './GenerationJobManager';
 
-export { TimelineManager } from './TimelineManager';
-
 export type {
   SerializableJobData,
   IEventTransport,

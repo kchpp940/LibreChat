@@ -11,7 +11,7 @@ import {
   useRecoilCallback,
 } from 'recoil';
 import { LocalStorageKeys, isEphemeralAgentId, Constants } from 'librechat-data-provider';
-import type { EModelEndpoint, TConversation, TSubmission, TPreset, TimelineEvent } from 'librechat-data-provider';
+import type { EModelEndpoint, TConversation, TSubmission, TPreset } from 'librechat-data-provider';
 import type { TOptionSettings, ExtendedFile } from '~/common';
 import {
   clearModelForNonEphemeralAgent,
@@ -306,11 +306,6 @@ const activeRunFamily = atomFamily<string | null, string | number | null>({
   default: null,
 });
 
-const timelineEventsFamily = atomFamily<TimelineEvent[], string | number | null>({
-  key: 'timelineEventsByIndex',
-  default: [],
-});
-
 const audioRunFamily = atomFamily<string | null, string | number | null>({
   key: 'audioRunByIndex',
   default: null,
@@ -447,7 +442,6 @@ export default {
   showMentionPopoverFamily,
   globalAudioURLFamily,
   activeRunFamily,
-  timelineEventsFamily,
   audioRunFamily,
   globalAudioPlayingFamily,
   globalAudioFetchingFamily,

@@ -23,8 +23,6 @@ const {
   AgentCapabilities,
   MAX_SUBAGENT_GRAPH_NODES,
   isEphemeralAgentId,
-  TimelinePhase,
-  TimelineStatus,
 } = require('librechat-data-provider');
 const {
   createToolEndCallback,
@@ -46,7 +44,6 @@ const AgentClient = require('~/server/controllers/agents/client');
 const { processAddedConvo } = require('./addedConvo');
 const { logViolation } = require('~/cache');
 const db = require('~/models');
-const { getFiles } = require('~/models');
 
 /**
  * Creates a tool loader function for the agent.
@@ -908,122 +905,6 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
 
   if (streamId) {
     GenerationJobManager.setCollectedUsage(streamId, collectedUsage);
-  }
-
-  if (streamId && requestFiles.length > 0) {
-    (async () => {
-      try {
-        const timelineManager = await GenerationJobManager.getTimelineManager(streamId);
-        if (!timelineManager) return;
-
-        const fileIds = requestFiles.map((f) => f.file_id).filter(Boolean);
-        /** @type {Array<import('@librechat/data-schemas').IMongoFile>} */
-        let authoritativeFiles = [];
-        if (fileIds.length > 0) {
-          try {
-            authoritativeFiles = await getFiles({
-              user: req.user.id,
-              file_id: { $in: fileIds },
-            });
-          } catch (err) {
-            logger.warn('[initializeClient] Failed to query authoritative file status:', err?.message ?? err);
-          }
-        }
-
-        const authoritativeFileMap = new Map(
-          authoritativeFiles.map((f) => [f.file_id, f]),
-        );
-
-        const fileNames = requestFiles
-          .map((f) => {
-            const authFile = authoritativeFileMap.get(f.file_id);
-            return authFile?.filename || f.filename || f.file_id;
-          })
-          .filter(Boolean);
-        const fileCount = requestFiles.length;
-
-        await timelineManager.emitEvent(
-          TimelinePhase.UPLOAD,
-          TimelineStatus.COMPLETED,
-          fileCount === 1
-            ? `文件已上传: ${fileNames[0]}`
-            : `${fileCount} 个文件已上传`,
-          { fileCount, fileNames },
-        );
-
-        const hasSearchFiles = requestFiles.some((f) => {
-          const authFile = authoritativeFileMap.get(f.file_id);
-          const idxStatus = authFile?.indexingStatus;
-          const embedded = authFile?.embedded ?? f.embedded;
-          return idxStatus === 'indexed' || idxStatus === 'failed' || idxStatus === 'pending' || embedded === true;
-        });
-
-        if (hasSearchFiles) {
-          const indexed = requestFiles.filter((f) => {
-            const authFile = authoritativeFileMap.get(f.file_id);
-            const idxStatus = authFile?.indexingStatus;
-            const embedded = authFile?.embedded ?? f.embedded;
-            return idxStatus === 'indexed' || (idxStatus == null && embedded === true);
-          });
-          const failed = requestFiles.filter((f) => {
-            const authFile = authoritativeFileMap.get(f.file_id);
-            return authFile?.indexingStatus === 'failed';
-          });
-          const pending = requestFiles.filter((f) => {
-            const authFile = authoritativeFileMap.get(f.file_id);
-            return authFile?.indexingStatus === 'pending';
-          });
-
-          if (indexed.length > 0) {
-            const indexedNames = indexed
-              .map((f) => {
-                const authFile = authoritativeFileMap.get(f.file_id);
-                return authFile?.filename || f.filename || f.file_id;
-              })
-              .filter(Boolean);
-            await timelineManager.completePhase(
-              TimelinePhase.INDEXING,
-              indexed.length === 1
-                ? `知识库索引完成: ${indexedNames[0]}`
-                : `知识库索引完成: ${indexed.length} 个文件已索引`,
-              { indexedCount: indexed.length, fileNames: indexedNames },
-            );
-          }
-
-          if (failed.length > 0) {
-            const failedNames = failed
-              .map((f) => {
-                const authFile = authoritativeFileMap.get(f.file_id);
-                return authFile?.filename || f.filename || f.file_id;
-              })
-              .filter(Boolean);
-            await timelineManager.failPhase(
-              TimelinePhase.INDEXING,
-              failed.length === 1
-                ? `索引失败: ${failedNames[0]}`
-                : `${failed.length} 个文件索引失败`,
-              'indexing_failed',
-              { failedCount: failed.length, fileNames: failedNames },
-            );
-          }
-
-          if (pending.length > 0) {
-            await timelineManager.startPhase(
-              TimelinePhase.INDEXING,
-              `${pending.length} 个文件正在索引中`,
-              { pendingCount: pending.length },
-            );
-          }
-        } else {
-          await timelineManager.skipPhase(
-            TimelinePhase.INDEXING,
-            '无需知识库索引',
-          );
-        }
-      } catch (err) {
-        logger.warn('[initializeClient] Failed to emit file timeline events:', err?.message ?? err);
-      }
-    })();
   }
 
   return { client, userMCPAuthMap };
