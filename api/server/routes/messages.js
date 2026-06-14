@@ -1,6 +1,9 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { logger, publicMessageSerializer } = require('@librechat/data-schemas');
+const {
+  logger,
+  serializeSearchResults,
+} = require('@librechat/data-schemas');
 const { ContentTypes, isAssistantsEndpoint, SearchHitType } = require('librechat-data-provider');
 const {
   unescapeLaTeX,
@@ -231,19 +234,21 @@ router.get('/', async (req, res) => {
         dbMessageMap[dbMessage.messageId] = dbMessage;
       }
 
-      const activeMessages = [];
+      const activeMessagesInput = [];
       for (const message of cleanedMessages) {
         const convo = result.convoMap[message.conversationId];
         const dbMessage = dbMessageMap[message.messageId];
-        const serialized = dbMessage ? publicMessageSerializer.forSearch(dbMessage) : null;
-
-        activeMessages.push({
-          ...(serialized || message),
-          title: convo.title,
-          conversationId: message.conversationId,
-          model: convo.model,
-        });
+        if (dbMessage) {
+          activeMessagesInput.push({
+            message: dbMessage,
+            title: convo.title,
+            model: convo.model,
+            endpoint: convo.endpoint,
+          });
+        }
       }
+
+      const { messages: activeMessages } = serializeSearchResults(activeMessagesInput);
 
       let finalMessages = activeMessages;
       let searchHits = {};

@@ -101,7 +101,7 @@ function memoizedAnonymizeId(prefix: string) {
 
 const anonymizeConvoId = memoizedAnonymizeId('convo');
 const anonymizeAssistantId = memoizedAnonymizeId('a');
-const anonymizeMessageId = (id: string) =>
+const anonymizeMessageId = (id: string): string =>
   id === Constants.NO_PARENT ? id : memoizedAnonymizeId('msg')(id);
 
 function truncateText(text: string, maxLength: number): { text: string; truncated: boolean } {
@@ -247,9 +247,10 @@ function sanitizeContentPart(
       };
     } else if (toolType === ToolCallTypes.CODE_INTERPRETER && toolCall.code_interpreter) {
       const codeInt = toolCall.code_interpreter as Record<string, unknown>;
-      sanitizedToolCall.code_interpreter = {
+      const sanitizedCodeInt: Record<string, unknown> = {
         input: codeInt.input,
       };
+      sanitizedToolCall.code_interpreter = sanitizedCodeInt;
 
       if (codeInt.outputs && Array.isArray(codeInt.outputs)) {
         const maxLen = options.maxToolOutputLength ?? DEFAULT_MAX_TOOL_OUTPUT_LENGTH;
@@ -266,7 +267,7 @@ function sanitizeContentPart(
           }
           return output;
         });
-        sanitizedToolCall.code_interpreter.outputs = outputs;
+        sanitizedCodeInt.outputs = outputs;
       }
     } else if (toolType === ToolCallTypes.FILE_SEARCH || toolType === ToolCallTypes.RETRIEVAL) {
       if (toolCall[toolType]) {
@@ -354,7 +355,7 @@ function extractToolCallSummaries(
   const summaries: ToolCallSummary[] = [];
   for (const part of content) {
     if (part.type === ContentTypes.TOOL_CALL && part.tool_call) {
-      const tc = part.tool_call;
+      const tc = part.tool_call as Record<string, unknown>;
       const summary: ToolCallSummary = {
         id: tc.id as string,
         name: '',
@@ -362,14 +363,16 @@ function extractToolCallSummaries(
       };
 
       if (tc.type === ToolCallTypes.FUNCTION && tc.function) {
-        summary.name = tc.function.name;
-        const args = tc.function.arguments as string;
+        const func = tc.function as Record<string, unknown>;
+        summary.name = func.name as string;
+        const args = func.arguments as string;
         if (args && args.length > 500) {
           summary.argumentsTruncated = true;
         }
       } else if (tc.type === ToolCallTypes.CODE_INTERPRETER) {
         summary.name = 'code_interpreter';
-        const outputs = tc.code_interpreter?.outputs;
+        const codeInt = tc.code_interpreter as Record<string, unknown> | undefined;
+        const outputs = codeInt?.outputs;
         if (outputs && Array.isArray(outputs)) {
           summary.outputLength = JSON.stringify(outputs).length;
           summary.outputTruncated = summary.outputLength > DEFAULT_MAX_TOOL_OUTPUT_LENGTH;
@@ -472,7 +475,7 @@ function serializeMessage(
 
   let text = message.text;
   if (!text && content && options.context !== SerializerContext.DISPLAY) {
-    text = parseTextParts(content);
+    text = parseTextParts(content as unknown as Parameters<typeof parseTextParts>[0]);
   }
 
   if (options.truncateContent && text && options.context !== SerializerContext.DISPLAY) {
@@ -535,8 +538,8 @@ function serializeMessages(
       ...options,
       idMapping,
     });
-    allWarnings.push(...result.warnings.map((w) => `[${msg.messageId}] ${w}`));
-    result.strippedFields.forEach((f) => allStrippedFields.add(f));
+    allWarnings.push(...result.warnings.map((w: string) => `[${msg.messageId}] ${w}`));
+    result.strippedFields.forEach((f: string) => allStrippedFields.add(f));
     return result.message;
   });
 
@@ -621,28 +624,52 @@ function forDisplay(message: IMessage): {
   };
 }
 
-export const publicMessageSerializer = {
-  serializeMessage,
-  serializeMessages,
-  forShare,
-  forSearch,
-  forExport,
-  forDisplay,
-  SENSITIVE_MESSAGE_FIELDS,
-  SENSITIVE_FILE_FIELDS,
-  PUBLIC_MESSAGE_FIELDS,
-  ALLOWED_CONTENT_TYPES,
-  sanitizeFile,
-  sanitizeFiles,
-  sanitizeAttachment,
-  sanitizeAttachments,
-  sanitizeContent,
-  sanitizeContentPart,
-  truncateText,
-  anonymizeMessageId,
-  anonymizeConvoId,
-  anonymizeAssistantId,
-  anonymizeModel,
+interface PublicMessageSerializerAPI {
+  serializeMessage: typeof serializeMessage;
+  serializeMessages: typeof serializeMessages;
+  forShare: typeof forShare;
+  forSearch: typeof forSearch;
+  forExport: typeof forExport;
+  forDisplay: typeof forDisplay;
+  SENSITIVE_MESSAGE_FIELDS: Set<string>;
+  SENSITIVE_FILE_FIELDS: Set<string>;
+  PUBLIC_MESSAGE_FIELDS: MessageFieldWhitelist;
+  ALLOWED_CONTENT_TYPES: Set<string>;
+  sanitizeFile: typeof sanitizeFile;
+  sanitizeFiles: typeof sanitizeFiles;
+  sanitizeAttachment: typeof sanitizeAttachment;
+  sanitizeAttachments: typeof sanitizeAttachments;
+  sanitizeContent: typeof sanitizeContent;
+  sanitizeContentPart: typeof sanitizeContentPart;
+  truncateText: typeof truncateText;
+  anonymizeMessageId: (id: string) => string;
+  anonymizeConvoId: (id: string) => string;
+  anonymizeAssistantId: (id: string) => string;
+  anonymizeModel: (model?: string) => string | undefined;
+}
+
+export const publicMessageSerializer: PublicMessageSerializerAPI = {
+  serializeMessage: serializeMessage,
+  serializeMessages: serializeMessages,
+  forShare: forShare,
+  forSearch: forSearch,
+  forExport: forExport,
+  forDisplay: forDisplay,
+  SENSITIVE_MESSAGE_FIELDS: SENSITIVE_MESSAGE_FIELDS,
+  SENSITIVE_FILE_FIELDS: SENSITIVE_FILE_FIELDS,
+  PUBLIC_MESSAGE_FIELDS: PUBLIC_MESSAGE_FIELDS,
+  ALLOWED_CONTENT_TYPES: ALLOWED_CONTENT_TYPES,
+  sanitizeFile: sanitizeFile,
+  sanitizeFiles: sanitizeFiles,
+  sanitizeAttachment: sanitizeAttachment,
+  sanitizeAttachments: sanitizeAttachments,
+  sanitizeContent: sanitizeContent,
+  sanitizeContentPart: sanitizeContentPart,
+  truncateText: truncateText,
+  anonymizeMessageId: anonymizeMessageId,
+  anonymizeConvoId: anonymizeConvoId,
+  anonymizeAssistantId: anonymizeAssistantId,
+  anonymizeModel: anonymizeModel,
 };
 
 export default publicMessageSerializer;

@@ -457,7 +457,7 @@ const createMeiliMongooseModel = ({
       }
 
       if (primaryKey === 'messageId' && object.messageId) {
-        const searchData = publicMessageSerializer.forSearch(rawObject as IMessage);
+        const searchData = publicMessageSerializer.forSearch(rawObject as unknown as IMessage);
         object.text = searchData.text;
         if (searchData.toolCalls) {
           object.toolCalls = searchData.toolCalls;

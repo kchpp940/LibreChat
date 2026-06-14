@@ -5,7 +5,12 @@ import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
 import type * as t from '~/types';
 import { activeExpirationFilter } from '~/utils/retention';
 import logger from '~/config/winston';
-import { publicMessageSerializer } from '~/serializers';
+import {
+  serializeSharedMessages,
+  anonymizeConvoId,
+  anonymizeAssistantId,
+  anonymizeMessageId,
+} from '~/serializers';
 
 class ShareServiceError extends Error {
   code: string;
@@ -15,8 +20,6 @@ class ShareServiceError extends Error {
     this.code = code;
   }
 }
-
-const { anonymizeConvoId, anonymizeAssistantId, anonymizeMessageId } = publicMessageSerializer;
 
 function anonymizeConvo(conversation: Partial<t.IConversation> & Partial<t.ISharedLink>) {
   if (!conversation) {
@@ -168,7 +171,7 @@ export function createShareMethods(mongoose: typeof import('mongoose')): {
         messagesToShare = getMessagesUpToTarget(share.messages, share.targetMessageId);
       }
 
-      const serialized = publicMessageSerializer.forShare(messagesToShare, share.conversationId);
+      const serialized = serializeSharedMessages(messagesToShare, share.conversationId);
       if (serialized.warnings.length > 0) {
         logger.debug('[getSharedMessages] Serialization warnings:', {
           shareId,

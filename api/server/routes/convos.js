@@ -8,7 +8,10 @@ const {
   deleteAllSharedLinksWithCleanup,
   deleteConvoSharedLinksWithCleanup,
 } = require('@librechat/api');
-const { logger, publicMessageSerializer } = require('@librechat/data-schemas');
+const {
+  logger,
+  serializeExportMessages,
+} = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
 const {
   createImportLimiters,
@@ -362,15 +365,7 @@ router.get('/:conversationId/export', async (req, res) => {
       '-_id -__v -user'
     );
 
-    const exportedMessages = [];
-    const allWarnings = [];
-    for (const message of messages) {
-      const result = publicMessageSerializer.forExport(message);
-      exportedMessages.push(result.message);
-      if (result.warnings && result.warnings.length > 0) {
-        allWarnings.push({ messageId: message.messageId, warnings: result.warnings });
-      }
-    }
+    const serialized = serializeExportMessages(messages);
 
     res.status(200).json({
       conversation: {
@@ -380,8 +375,8 @@ router.get('/:conversationId/export', async (req, res) => {
         createdAt: convo.createdAt,
         updatedAt: convo.updatedAt,
       },
-      messages: exportedMessages,
-      warnings: allWarnings.length > 0 ? allWarnings : undefined,
+      messages: serialized.messages,
+      warnings: serialized.warnings.length > 0 ? serialized.warnings : undefined,
     });
   } catch (error) {
     logger.error('Error exporting conversation:', error);
