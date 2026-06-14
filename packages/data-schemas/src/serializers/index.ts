@@ -7,6 +7,7 @@ export {
   serializeSharedMessages,
   serializeExportMessages,
   serializeSearchResults,
+  serializeSearchIndexMessage,
   anonymizeConvoId,
   anonymizeAssistantId,
   anonymizeMessageId,
@@ -17,4 +18,5 @@ export type {
   SerializedSharedMessages,
   SerializedExportMessages,
   SerializedSearchMessage,
+  SerializedSearchIndexMessage,
 } from './factories';

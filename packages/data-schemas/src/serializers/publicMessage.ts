@@ -648,6 +648,22 @@ interface PublicMessageSerializerAPI {
   anonymizeModel: (model?: string) => string | undefined;
 }
 
+/**
+ * @internal
+ * 【禁止在公开场景模块直接 import 使用】
+ *
+ * 此对象为内部实现细节，所有 share / search / export / index 公开场景
+ * 必须通过 `serializers/factories.ts` 暴露的 serializeXxx 工厂函数消费。
+ *
+ * 直接调用 publicMessageSerializer.forXxx() 会绕过：
+ *   1) assertDeepNoSensitiveFields 二次敏感字段泄漏校验
+ *   2) 场景专用输出结构（如 warnings 聚合、title/model 附加）
+ *   3) 边界扫描脚本的 lint 检查
+ *
+ * 仅允许以下文件直接使用：
+ *   - src/serializers/factories.ts（包装层内部）
+ *   - **.test.ts（单元测试内部）
+ */
 export const publicMessageSerializer: PublicMessageSerializerAPI = {
   serializeMessage: serializeMessage,
   serializeMessages: serializeMessages,

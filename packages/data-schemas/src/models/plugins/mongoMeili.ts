@@ -14,7 +14,7 @@ import type {
 import type { IConversation, IMessage } from '~/types';
 import logger from '~/config/meiliLogger';
 import { buildRetentionVisibilityFilter, legacyPermanentExpirationFilter } from '~/utils/retention';
-import { publicMessageSerializer } from '~/serializers';
+import { serializeSearchIndexMessage } from '~/serializers';
 
 interface MongoMeiliOptions {
   host: string;
@@ -457,21 +457,14 @@ const createMeiliMongooseModel = ({
       }
 
       if (primaryKey === 'messageId' && object.messageId) {
-        const searchData = publicMessageSerializer.forSearch(rawObject as unknown as IMessage);
-        object.text = searchData.text;
-        if (searchData.toolCalls) {
-          object.toolCalls = searchData.toolCalls;
+        const indexData = serializeSearchIndexMessage(rawObject as unknown as IMessage);
+        object.text = indexData.text;
+        if (indexData.toolCalls) {
+          object.toolCalls = indexData.toolCalls;
         }
-        delete object.content;
-        delete object.metadata;
-        delete object.plugin;
-        delete object.plugins;
-        delete object.endpoint;
-        delete object.clientId;
-        delete object.conversationSignature;
-        delete object.invocationId;
-        delete object.thread_id;
-        delete object.contextMeta;
+        for (const field of indexData.strippedFields) {
+          delete object[field];
+        }
       } else if (object.content && Array.isArray(object.content)) {
         object.text = parseTextParts(object.content);
         delete object.content;

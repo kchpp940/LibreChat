@@ -178,6 +178,42 @@ export function serializeSearchResults(
   return { messages };
 }
 
+// ---------------------------------------------------------------------------
+// SCENE 4 — SEARCH INDEXING (MeiliSearch 索引预处理)
+// ---------------------------------------------------------------------------
+
+export interface SerializedSearchIndexMessage {
+  text: string;
+  toolCalls?: ToolCallSummary[];
+  strippedFields: string[];
+}
+
+export function serializeSearchIndexMessage(rawMessage: IMessage): SerializedSearchIndexMessage {
+  const searchResult = forSearch(rawMessage);
+
+  const strippedFields: string[] = [];
+  for (const field of [
+    'content',
+    'metadata',
+    'plugin',
+    'plugins',
+    'endpoint',
+    'clientId',
+    'conversationSignature',
+    'invocationId',
+    'thread_id',
+    'contextMeta',
+  ]) {
+    strippedFields.push(field);
+  }
+
+  return {
+    text: searchResult.text,
+    toolCalls: searchResult.toolCalls,
+    strippedFields,
+  };
+}
+
 export function anonymizeConvoId(id: string): string {
   return _anonymizeConvoId(id);
 }
