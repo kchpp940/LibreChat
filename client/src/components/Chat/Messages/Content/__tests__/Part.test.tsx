@@ -150,79 +150,55 @@ jest.mock('../parser/MessageContentParser', () => {
 
 jest.mock('../renderer/RenderStandard', () => {
   const React = jest.requireActual('react');
-  const { ContentTypes } = jest.requireActual('librechat-data-provider');
 
-  const ToolCallRendererComponent = ({ item, onToolExpand }: { item: Record<string, unknown>; onToolExpand?: () => void }) => {
-    const toolKind = item.toolKind as string;
-    const toolCall = item.toolCall as Record<string, unknown>;
-    const args = item.args;
+  const RenderStandardItem = ({
+    item,
+    ..._rest
+  }: {
+    item: Record<string, unknown>;
+    [key: string]: unknown;
+  }) => {
+    const kind = item.kind as string;
+    const toolKind = (item.toolKind as string) ?? '';
 
-    if (toolKind === 'bash_programmatic') {
-      return <div data-testid="bash-call" data-command-field="code" />;
-    }
-    if (toolKind === 'execute_code') {
-      if (typeof args === 'string') {
-        try {
-          const parsed = JSON.parse(args);
-          if (!parsed.lang || parsed.lang === 'bash') {
-            return <div data-testid="bash-call" data-command-field="code" />;
-          }
-        } catch {}
+    if (kind === 'text') return <div data-testid="text">{item.text as string}</div>;
+    if (kind === 'error') return <div data-testid="error-message" />;
+    if (kind === 'think') return <div data-testid="reasoning" />;
+    if (kind === 'image') return <div data-testid="image" />;
+    if (kind === 'empty_cursor') return <div data-testid="empty-text" />;
+    if (kind === 'agent_update') return <div data-testid="agent-update" />;
+    if (kind === 'summary') return <div data-testid="summary" />;
+    if (kind === 'pending_skill') return <div data-testid="pending-skill" />;
+
+    if (kind === 'tool_call') {
+      if (toolKind === 'bash_programmatic') return <div data-testid="bash-call" data-command-field="code" />;
+      if (toolKind === 'execute_code') {
+        const args = item.args;
+        let isBashFallthrough = false;
+        if (typeof args === 'string') {
+          try {
+            const parsed = JSON.parse(args);
+            if (!parsed.lang || parsed.lang === 'bash') isBashFallthrough = true;
+          } catch {}
+        }
+        if (isBashFallthrough) return <div data-testid="bash-call" data-command-field="code" />;
+        return <div data-testid="execute-code" />;
       }
-      return <div data-testid="execute-code" />;
+      if (toolKind === 'file_authoring') return <div data-testid="file-authoring-call" data-tool-name={item.toolName as string} />;
+      if (toolKind === 'web_search') return <div data-testid="web-search" />;
+      if (toolKind === 'retrieval') return <div data-testid="retrieval-call" />;
+      if (toolKind === 'agent_handoff') return <div data-testid="agent-handoff" />;
+      if (toolKind === 'code_interpreter') return <div data-testid="code-analyze" />;
+      if (toolKind === 'image_gen') return <div data-testid="image-gen" />;
+      if (toolKind === 'skill') return <div data-testid="skill-call" />;
+      if (toolKind === 'subagent') return <div data-testid="subagent-call" />;
+      if (toolKind === 'read_file') return <div data-testid="read-file-call" />;
+      return <div data-testid="tool-call" />;
     }
-    if (toolKind === 'file_authoring') {
-      return <div data-testid="file-authoring-call" data-tool-name={item.toolName as string} />;
-    }
-    if (toolKind === 'web_search') {
-      return <div data-testid="web-search" />;
-    }
-    if (toolKind === 'retrieval') {
-      return <div data-testid="retrieval-call" />;
-    }
-    if (toolKind === 'agent_handoff') {
-      return <div data-testid="agent-handoff" />;
-    }
-    if (toolKind === 'code_interpreter') {
-      return <div data-testid="code-analyze" />;
-    }
-    if (toolKind === 'image_gen') {
-      return <div data-testid="image-gen" />;
-    }
-    if (toolKind === 'skill') {
-      return <div data-testid="skill-call" />;
-    }
-    if (toolKind === 'subagent') {
-      return <div data-testid="subagent-call" />;
-    }
-    if (toolKind === 'read_file') {
-      return <div data-testid="read-file-call" />;
-    }
-    return <div data-testid="tool-call" />;
-  };
 
-  const RenderStandardItem = ({ item, ...props }: { item: Record<string, unknown>; [key: string]: unknown }) => {
-    if (item.kind === 'tool_call') {
-      return <ToolCallRendererComponent item={item} onToolExpand={props.onToolExpand as (() => void) | undefined} />;
-    }
-    if (item.kind === 'text') {
-      return <div data-testid="text">{item.text as string}</div>;
-    }
-    if (item.kind === 'error') {
-      return <div data-testid="error-message" />;
-    }
-    if (item.kind === 'think') {
-      return <div data-testid="reasoning" />;
-    }
-    if (item.kind === 'image') {
-      return <div data-testid="image" />;
-    }
-    if (item.kind === 'empty_cursor') {
-      return <div data-testid="empty-text" />;
-    }
-    if (item.kind === 'agent_update') {
-      return <div data-testid="agent-update" />;
-    }
+    if (kind === 'attachment') return <div data-testid="attachment" />;
+    if (kind === 'artifact') return <div data-testid="artifact" />;
+
     return null;
   };
 
