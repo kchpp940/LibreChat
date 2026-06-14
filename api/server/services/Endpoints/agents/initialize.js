@@ -46,6 +46,7 @@ const AgentClient = require('~/server/controllers/agents/client');
 const { processAddedConvo } = require('./addedConvo');
 const { logViolation } = require('~/cache');
 const db = require('~/models');
+const { getFiles } = require('~/models');
 
 /**
  * Creates a tool loader function for the agent.
@@ -915,8 +916,29 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
         const timelineManager = await GenerationJobManager.getTimelineManager(streamId);
         if (!timelineManager) return;
 
+        const fileIds = requestFiles.map((f) => f.file_id).filter(Boolean);
+        /** @type {Array<import('@librechat/data-schemas').IMongoFile>} */
+        let authoritativeFiles = [];
+        if (fileIds.length > 0) {
+          try {
+            authoritativeFiles = await getFiles({
+              user: req.user.id,
+              file_id: { $in: fileIds },
+            });
+          } catch (err) {
+            logger.warn('[initializeClient] Failed to query authoritative file status:', err?.message ?? err);
+          }
+        }
+
+        const authoritativeFileMap = new Map(
+          authoritativeFiles.map((f) => [f.file_id, f]),
+        );
+
         const fileNames = requestFiles
-          .map((f) => f.filename || f.file_id)
+          .map((f) => {
+            const authFile = authoritativeFileMap.get(f.file_id);
+            return authFile?.filename || f.filename || f.file_id;
+          })
           .filter(Boolean);
         const fileCount = requestFiles.length;
 
@@ -929,19 +951,36 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
           { fileCount, fileNames },
         );
 
-        const hasSearchFiles = requestFiles.some(
-          (f) => f.indexingStatus === 'indexed' || f.indexingStatus === 'failed' || f.indexingStatus === 'pending' || f.embedded === true,
-        );
+        const hasSearchFiles = requestFiles.some((f) => {
+          const authFile = authoritativeFileMap.get(f.file_id);
+          const idxStatus = authFile?.indexingStatus;
+          const embedded = authFile?.embedded ?? f.embedded;
+          return idxStatus === 'indexed' || idxStatus === 'failed' || idxStatus === 'pending' || embedded === true;
+        });
 
         if (hasSearchFiles) {
-          const indexed = requestFiles.filter(
-            (f) => f.indexingStatus === 'indexed' || (f.indexingStatus == null && f.embedded === true),
-          );
-          const failed = requestFiles.filter((f) => f.indexingStatus === 'failed');
-          const pending = requestFiles.filter((f) => f.indexingStatus === 'pending');
+          const indexed = requestFiles.filter((f) => {
+            const authFile = authoritativeFileMap.get(f.file_id);
+            const idxStatus = authFile?.indexingStatus;
+            const embedded = authFile?.embedded ?? f.embedded;
+            return idxStatus === 'indexed' || (idxStatus == null && embedded === true);
+          });
+          const failed = requestFiles.filter((f) => {
+            const authFile = authoritativeFileMap.get(f.file_id);
+            return authFile?.indexingStatus === 'failed';
+          });
+          const pending = requestFiles.filter((f) => {
+            const authFile = authoritativeFileMap.get(f.file_id);
+            return authFile?.indexingStatus === 'pending';
+          });
 
           if (indexed.length > 0) {
-            const indexedNames = indexed.map((f) => f.filename || f.file_id).filter(Boolean);
+            const indexedNames = indexed
+              .map((f) => {
+                const authFile = authoritativeFileMap.get(f.file_id);
+                return authFile?.filename || f.filename || f.file_id;
+              })
+              .filter(Boolean);
             await timelineManager.completePhase(
               TimelinePhase.INDEXING,
               indexed.length === 1
@@ -952,7 +991,12 @@ const initializeClient = async ({ req, res, signal, endpointOption }) => {
           }
 
           if (failed.length > 0) {
-            const failedNames = failed.map((f) => f.filename || f.file_id).filter(Boolean);
+            const failedNames = failed
+              .map((f) => {
+                const authFile = authoritativeFileMap.get(f.file_id);
+                return authFile?.filename || f.filename || f.file_id;
+              })
+              .filter(Boolean);
             await timelineManager.failPhase(
               TimelinePhase.INDEXING,
               failed.length === 1
