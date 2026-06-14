@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { logger } = require('@librechat/data-schemas');
+const { logger, publicMessageSerializer } = require('@librechat/data-schemas');
 const { ContentTypes, isAssistantsEndpoint, SearchHitType } = require('librechat-data-provider');
 const {
   unescapeLaTeX,
@@ -198,12 +198,17 @@ router.get('/', async (req, res) => {
 
     if (conversationId && messageId) {
       const messages = await db.getMessages({ conversationId, messageId, user });
-      response = { messages: messages?.length ? [messages[0]] : [], nextCursor: null };
+      const serialized = messages?.length ? [publicMessageSerializer.forDisplay(messages[0])] : [];
+      response = { messages: serialized, nextCursor: null };
     } else if (conversationId) {
-      response = await db.getMessagesByCursor(
+      const cursorResponse = await db.getMessagesByCursor(
         { conversationId, user },
         { sortField, sortOrder, limit: pageSize, cursor },
       );
+      response = {
+        ...cursorResponse,
+        messages: cursorResponse.messages.map((m) => publicMessageSerializer.forDisplay(m)),
+      };
     } else if (search) {
       const searchResults = await db.searchMessages(search, { filter: `user = "${user}"` }, true);
 
@@ -235,19 +240,13 @@ router.get('/', async (req, res) => {
       for (const message of cleanedMessages) {
         const convo = result.convoMap[message.conversationId];
         const dbMessage = dbMessageMap[message.messageId];
+        const serialized = dbMessage ? publicMessageSerializer.forSearch(dbMessage) : null;
 
         activeMessages.push({
-          ...message,
+          ...(serialized || message),
           title: convo.title,
           conversationId: message.conversationId,
           model: convo.model,
-          isCreatedByUser: dbMessage?.isCreatedByUser,
-          endpoint: dbMessage?.endpoint,
-          iconURL: dbMessage?.iconURL,
-          content: dbMessage?.content,
-          files: dbMessage?.files,
-          attachments: dbMessage?.attachments,
-          error: dbMessage?.error,
         });
       }
 
@@ -466,7 +465,8 @@ router.get('/:conversationId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const messages = await db.getMessages({ conversationId, user: req.user.id }, '-_id -__v -user');
-    res.status(200).json(messages);
+    const serialized = messages.map((m) => publicMessageSerializer.forDisplay(m));
+    res.status(200).json(serialized);
   } catch (error) {
     logger.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -490,7 +490,8 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
       return res.status(400).json({ error: 'Message not saved' });
     }
     await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
-    res.status(201).json(savedMessage);
+    const serialized = publicMessageSerializer.forDisplay(savedMessage);
+    res.status(201).json(serialized);
   } catch (error) {
     logger.error('Error saving message:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -500,14 +501,15 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
 router.get('/:conversationId/:messageId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
-    const message = await db.getMessages(
+    const messages = await db.getMessages(
       { conversationId, messageId, user: req.user.id },
       '-_id -__v -user',
     );
-    if (!message) {
+    if (!messages || messages.length === 0) {
       return res.status(404).json({ error: 'Message not found' });
     }
-    res.status(200).json(message);
+    const serialized = publicMessageSerializer.forDisplay(messages[0]);
+    res.status(200).json(serialized);
   } catch (error) {
     logger.error('Error fetching message:', error);
     res.status(500).json({ error: 'Internal server error' });

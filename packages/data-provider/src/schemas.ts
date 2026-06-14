@@ -938,6 +938,35 @@ export interface PublicMessage {
   artifacts?: ArtifactSummary[];
 }
 
+export interface SerializerOptions {
+  context?: SerializerContext;
+  anonymizeIds?: boolean;
+  idMapping?: Map<string, string>;
+  maxToolOutputLength?: number;
+  includeSensitiveModel?: boolean;
+  truncateContent?: boolean;
+  maxContentLength?: number;
+}
+
+export type MessageFieldWhitelist = Array<keyof PublicMessage | (string & {})>;
+
+export interface ISerializationResult {
+  message: PublicMessage;
+  warnings: string[];
+  strippedFields: string[];
+}
+
+export interface TExportConversationResponse {
+  conversation: {
+    conversationId: string;
+    title?: string | null;
+    endpoint?: string | null;
+    createdAt?: string | Date;
+    updatedAt?: string | Date;
+  };
+  messages: PublicMessage[];
+}
+
 export const coerceNumber = z.union([z.number(), z.string()]).transform((val) => {
   if (typeof val === 'string') {
     return val.trim() === '' ? undefined : parseFloat(val);
