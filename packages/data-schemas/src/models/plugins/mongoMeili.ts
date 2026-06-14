@@ -14,6 +14,7 @@ import type {
 import type { IConversation, IMessage } from '~/types';
 import logger from '~/config/meiliLogger';
 import { buildRetentionVisibilityFilter, legacyPermanentExpirationFilter } from '~/utils/retention';
+import { publicMessageSerializer } from '~/serializers';
 
 interface MongoMeiliOptions {
   host: string;
@@ -436,10 +437,14 @@ const createMeiliMongooseModel = ({
     }
 
     /**
-     * Preprocesses the current document for indexing
+     * Preprocesses the current document for indexing.
+     * For message documents, uses the unified publicMessageSerializer.forSearch
+     * to ensure consistent content sanitization across all public-facing APIs.
+     * For conversation documents, applies standard field filtering.
      */
     preprocessObjectForIndex(this: DocumentWithMeiliIndex): Record<string, unknown> {
-      const object = _.omitBy(_.pick(this.toJSON(), attributesToIndex), (v, k) =>
+      const rawObject = this.toJSON();
+      const object = _.omitBy(_.pick(rawObject, attributesToIndex), (v, k) =>
         k.startsWith('$'),
       );
 
@@ -451,7 +456,23 @@ const createMeiliMongooseModel = ({
         object.conversationId = object.conversationId.replace(/\|/g, '--');
       }
 
-      if (object.content && Array.isArray(object.content)) {
+      if (primaryKey === 'messageId' && object.messageId) {
+        const searchData = publicMessageSerializer.forSearch(rawObject as IMessage);
+        object.text = searchData.text;
+        if (searchData.toolCalls) {
+          object.toolCalls = searchData.toolCalls;
+        }
+        delete object.content;
+        delete object.metadata;
+        delete object.plugin;
+        delete object.plugins;
+        delete object.endpoint;
+        delete object.clientId;
+        delete object.conversationSignature;
+        delete object.invocationId;
+        delete object.thread_id;
+        delete object.contextMeta;
+      } else if (object.content && Array.isArray(object.content)) {
         object.text = parseTextParts(object.content);
         delete object.content;
       }

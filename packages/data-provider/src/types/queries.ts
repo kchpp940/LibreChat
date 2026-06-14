@@ -93,7 +93,7 @@ export type MessagesListResponse = {
 
 /* Shared Links */
 export type SharedMessagesResponse = Omit<s.TSharedLink, 'messages'> & {
-  messages: s.TMessage[];
+  messages: s.PublicMessage[];
 };
 
 export interface SharedLinksListParams {

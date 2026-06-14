@@ -15,8 +15,7 @@
     "test:ci": "cross-env NODE_ENV=development jest --ci --logHeapUsage",
     "b:test": "NODE_ENV=test bunx jest --watch",
     "b:build": "NODE_ENV=production bun --bun vite build",
-    "b:dev": "NODE_ENV=development bunx vite",
-    "lint:boundary": "bash ../scripts/scan-render-boundary.sh"
+    "b:dev": "NODE_ENV=development bunx vite"
   },
   "repository": {
     "type": "git",

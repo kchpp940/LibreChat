@@ -40,15 +40,10 @@ export interface ToolCallRendererProps {
   auth?: boolean;
 }
 
-export interface ToolCallMatchInput {
-  toolName: string;
-  toolCall: Record<string, unknown>;
-}
-
 export interface ToolCallRenderer {
   id: string;
   name: string;
-  match: (input: ToolCallMatchInput) => RendererMatchResult;
+  match: (toolName: string, toolCall: Record<string, unknown>) => RendererMatchResult;
   render: ComponentType<ToolCallRendererProps>;
   priority?: number;
 }

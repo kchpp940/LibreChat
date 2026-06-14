@@ -9,6 +9,7 @@ import type {
   TBanner,
   ReasoningResponseKey,
   ReasoningParameterFormat,
+  PublicMessage,
 } from './schemas';
 import type { RefillIntervalUnit } from './balance';
 import type { SettingDefinition } from './generate';
@@ -351,7 +352,7 @@ export type TArchiveConversationRequest = {
 export type TArchiveConversationResponse = TConversation;
 
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
-  messages: TMessage[];
+  messages: PublicMessage[];
 };
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;

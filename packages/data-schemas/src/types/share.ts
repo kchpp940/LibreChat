@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import type { IMessage } from './message';
+import type { PublicMessage, PublicContentPart, PublicAttachmentSummary, ToolCallSummary, ArtifactSummary } from '../serializers';
 
 export interface ISharedLink {
   _id?: Types.ObjectId;
@@ -31,29 +32,14 @@ export type SharedFile = Record<string, unknown>;
  * Public, anonymized projection of a message returned by a shared link. Only
  * render-relevant fields are surfaced; internal fields (user, endpoint,
  * conversationSignature, clientId, plugin(s), metadata, etc.) are omitted.
+ * Unified with PublicMessage serializer to ensure consistent filtering across
+ * all public-facing APIs (share, search, export, display).
  */
-export type SharedMessage = Pick<
-  IMessage,
-  | 'messageId'
-  | 'parentMessageId'
-  | 'conversationId'
-  | 'sender'
-  | 'text'
-  | 'content'
-  | 'iconURL'
-  | 'isCreatedByUser'
-  | 'createdAt'
-  | 'updatedAt'
-  | 'tokenCount'
-  | 'unfinished'
-  | 'error'
-  | 'finish_reason'
-  | 'manualSkills'
-  | 'alwaysAppliedSkills'
-> & {
-  model?: string;
-  files?: SharedFile[];
-  attachments?: SharedFile[];
+export type SharedMessage = PublicMessage & {
+  content?: PublicContentPart[];
+  attachments?: PublicAttachmentSummary[];
+  toolCalls?: ToolCallSummary[];
+  artifacts?: ArtifactSummary[];
 };
 
 export interface SharedLinksResult {

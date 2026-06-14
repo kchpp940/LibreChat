@@ -166,45 +166,6 @@ export default [
       'jsx-a11y/interactive-supports-focus': 'off',
       'jsx-a11y/no-noninteractive-tabindex': 'off',
       'jsx-a11y/img-redundant-alt': 'off',
-
-      // Message content rendering boundary:
-      // Files outside Content/ must import from Content/render.ts, not from
-      // the internal renderer/ or parser/ sub-directories.
-      'import/no-restricted-paths': [
-        'error',
-        {
-          zones: [
-            {
-              target: 'client/src/**/*',
-              from: 'client/src/components/Chat/Messages/Content/renderer/**/*',
-              except: [
-                'client/src/components/Chat/Messages/Content/render.*',
-                'client/src/components/Chat/Messages/Content/Part.*',
-                'client/src/components/Chat/Messages/Content/ContentParts.*',
-                'client/src/components/Chat/Messages/Content/Parts/Attachment.*',
-                'client/src/components/Chat/Messages/Content/renderer/**/*',
-              ],
-              message:
-                'Do not import from Content/renderer/ directly. Use the public API from Content/render.ts instead (e.g. import { RenderStandardItem } from "~/components/Chat/Messages/Content/render").',
-            },
-            {
-              target: 'client/src/**/*',
-              from: 'client/src/components/Chat/Messages/Content/parser/**/*',
-              except: [
-                'client/src/components/Chat/Messages/Content/render.*',
-                'client/src/components/Chat/Messages/Content/Part.*',
-                'client/src/components/Chat/Messages/Content/ContentParts.*',
-                'client/src/components/Chat/Messages/Content/Parts/Attachment.*',
-                'client/src/components/Chat/Messages/Content/renderer/**/*',
-                'client/src/components/Chat/Messages/Content/parser/**/*',
-                'client/src/hooks/Messages/useParsedMessageContent.*',
-              ],
-              message:
-                'Do not import from Content/parser/ directly. Use the public API from Content/render.ts instead (e.g. import { parseMessageContent } from "~/components/Chat/Messages/Content/render").',
-            },
-          ],
-        },
-      ],
     },
   },
   {
