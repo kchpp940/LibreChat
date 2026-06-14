@@ -1,5 +1,5 @@
 import type { StandardGraph } from '@librechat/agents';
-import type { Agents } from 'librechat-data-provider';
+import type { Agents, TimelineEvent } from 'librechat-data-provider';
 
 /**
  * Job status enum
@@ -53,6 +53,9 @@ export interface SerializableJobData {
   iconURL?: string;
   model?: string;
   promptTokens?: number;
+
+  /** Serialized timeline events for request execution visibility */
+  timelineEvents?: string;
 }
 
 /**
@@ -162,6 +165,8 @@ export interface ResumeState {
     data?: unknown;
     [key: string]: unknown;
   }>;
+  /** Timeline events for request execution visibility - restored on reconnect */
+  timelineEvents?: TimelineEvent[];
 }
 
 /**

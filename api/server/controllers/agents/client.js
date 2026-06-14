@@ -40,6 +40,7 @@ const {
   buildAgentScopedContext,
   buildSkillPrimeContentParts,
   buildInitialToolSessions,
+  createTimelineHandlers,
 } = require('@librechat/api');
 const {
   Callback,
@@ -61,6 +62,8 @@ const {
   isEphemeralAgentId,
   removeNullishValues,
   DEFAULT_MEMORY_MAX_INPUT_TOKENS,
+  TimelinePhase,
+  TimelineStatus,
 } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
@@ -895,6 +898,8 @@ class AgentClient extends BaseClient {
     let run;
     /** @type {Promise<(TAttachment | null)[] | undefined>} */
     let memoryPromise;
+    /** @type {import('@librechat/api').TimelineManager | null} */
+    let timelineManager = null;
     const appConfig = this.options.req.config;
     const balanceConfig = getBalanceConfig(appConfig);
     const transactionsConfig = getTransactionsConfig(appConfig);
@@ -1105,6 +1110,14 @@ class AgentClient extends BaseClient {
         //   messages = addCacheControl(messages);
         // }
 
+        const streamId = this.options.req?._resumableStreamId;
+        if (streamId && !timelineManager) {
+          timelineManager = await GenerationJobManager.getTimelineManager(streamId);
+          if (timelineManager) {
+            await timelineManager.startPhase(TimelinePhase.GENERATION, '开始生成回复');
+          }
+        }
+
         if (this.processMemory) {
           memoryPromise = this.runMemory(memoryMessages);
         }
@@ -1122,6 +1135,23 @@ class AgentClient extends BaseClient {
           );
         }
 
+        let mergedHandlers = this.options.eventHandlers ?? {};
+        if (timelineManager) {
+          const timelineHandlers = createTimelineHandlers({ timelineManager });
+          mergedHandlers = { ...mergedHandlers };
+          for (const [event, handler] of Object.entries(timelineHandlers)) {
+            const existingHandler = mergedHandlers[event];
+            if (existingHandler) {
+              mergedHandlers[event] = async (...args) => {
+                await existingHandler(...args);
+                await handler(...args);
+              };
+            } else {
+              mergedHandlers[event] = handler;
+            }
+          }
+        }
+
         run = await createRun({
           agents,
           messages,
@@ -1131,7 +1161,7 @@ class AgentClient extends BaseClient {
           calibrationRatio,
           runId: this.responseMessageId,
           signal: abortController.signal,
-          customHandlers: this.options.eventHandlers,
+          customHandlers: mergedHandlers,
           requestBody: config.configurable.requestBody,
           user: createSafeUser(this.options.req?.user),
           summarizationConfig: appConfig?.summarization,
@@ -1149,7 +1179,6 @@ class AgentClient extends BaseClient {
           this._resolveRun = null;
         }
 
-        const streamId = this.options.req?._resumableStreamId;
         if (streamId && run.Graph) {
           GenerationJobManager.setGraph(streamId, run.Graph);
         }
@@ -1237,6 +1266,14 @@ class AgentClient extends BaseClient {
           type: ContentTypes.ERROR,
           [ContentTypes.ERROR]: `An error occurred while processing the request${err?.message ? `: ${err.message}` : ''}`,
         });
+
+        if (timelineManager) {
+          try {
+            await timelineManager.markFailed(err?.message ?? 'unknown_error', '生成失败');
+          } catch (timelineError) {
+            logger.error('[AgentClient] Failed to emit timeline failed event:', timelineError);
+          }
+        }
       }
     } finally {
       /** Capture calibration state from the run for persistence on the response message.
@@ -1268,6 +1305,14 @@ class AgentClient extends BaseClient {
             balance: balanceConfig,
             transactions: transactionsConfig,
           });
+
+          if (timelineManager) {
+            try {
+              await timelineManager.markComplete('生成完成');
+            } catch (timelineError) {
+              logger.error('[AgentClient] Failed to emit timeline complete event:', timelineError);
+            }
+          }
         } else {
           logger.debug(
             '[api/server/controllers/agents/client.js #chatCompletion] Skipping token spending - handled by abort middleware',

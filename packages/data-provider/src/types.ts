@@ -350,39 +350,8 @@ export type TArchiveConversationRequest = {
 
 export type TArchiveConversationResponse = TConversation;
 
-export type TTourItemCategory = 'assistant' | 'tool_call' | 'artifact' | 'file' | 'error';
-
-export type TTourToolCall = {
-  toolName: string;
-  toolCallId?: string;
-  outputPreview?: string;
-};
-
-export type TTourFileRef = {
-  filename?: string;
-  filetype?: string;
-};
-
-export type TTourItem = {
-  messageId: string;
-  anchorId: string;
-  category: TTourItemCategory;
-  label: string;
-  toolCalls?: TTourToolCall[];
-  files?: TTourFileRef[];
-};
-
-export type TTourData = {
-  items: TTourItem[];
-  totalMessages: number;
-  assistantCount: number;
-  toolCallCount: number;
-  fileCount: number;
-};
-
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
   messages: TMessage[];
-  tour?: TTourData;
 };
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;

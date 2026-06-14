@@ -1,6 +1,6 @@
 import { Constants, parseTextParts } from 'librechat-data-provider';
 import { logger, getTenantId, SYSTEM_TENANT_ID } from '@librechat/data-schemas';
-import type { Agents, TMessageContentParts } from 'librechat-data-provider';
+import type { Agents, TMessageContentParts, TimelineEvent } from 'librechat-data-provider';
 import type { StandardGraph } from '@librechat/agents';
 import type {
   SerializableJobData,
@@ -9,6 +9,7 @@ import type {
   AbortResult,
   IJobStore,
 } from './interfaces/IJobStore';
+import { TimelineManager } from './TimelineManager';
 import type { GenerationJobStore } from '~/app/metrics';
 import type * as t from '~/types';
 import {
@@ -171,6 +172,9 @@ class GenerationJobManagerClass {
   /** Runtime state - always in-memory, not serializable */
   private runtimeState = new Map<string, RuntimeJobState>();
 
+  /** Timeline managers for tracking request execution phases */
+  private timelineManagers = new Map<string, TimelineManager>();
+
   /** Jobs actively generating in this process. */
   private runningJobs = new Set<string>();
 
@@ -279,6 +283,27 @@ class GenerationJobManagerClass {
   }
 
   /**
+   * Get the timeline manager for a stream.
+   * Creates one lazily if it doesn't exist (for cross-replica scenarios).
+   */
+  async getTimelineManager(streamId: string): Promise<TimelineManager | null> {
+    const existing = this.timelineManagers.get(streamId);
+    if (existing) {
+      return existing;
+    }
+
+    const jobData = await this.jobStore.getJob(streamId);
+    if (!jobData) {
+      return null;
+    }
+
+    const timelineManager = new TimelineManager(streamId, this.jobStore, this.eventTransport);
+    await timelineManager.loadEvents();
+    this.timelineManagers.set(streamId, timelineManager);
+    return timelineManager;
+  }
+
+  /**
    * Create a new generation job.
    *
    * This sets up:
@@ -303,6 +328,9 @@ class GenerationJobManagerClass {
     const tenantId = getTenantId();
     const safeTenantId = tenantId && tenantId !== SYSTEM_TENANT_ID ? tenantId : undefined;
     const jobData = await this.jobStore.createJob(streamId, userId, conversationId, safeTenantId);
+
+    const timelineManager = new TimelineManager(streamId, this.jobStore, this.eventTransport);
+    this.timelineManagers.set(streamId, timelineManager);
 
     /**
      * Create runtime state with readyPromise.
@@ -453,6 +481,7 @@ class GenerationJobManagerClass {
       },
     };
 
+    const timelineManager = this.timelineManagers.get(streamId)!;
     return {
       streamId,
       emitter: emitterProxy as unknown as t.GenerationJob['emitter'],
@@ -477,6 +506,7 @@ class GenerationJobManagerClass {
       resolveReady: runtime.resolveReady,
       finalEvent: runtime.finalEvent,
       syncSent: runtime.syncSent,
+      timelineManager,
     };
   }
 
@@ -645,6 +675,15 @@ class GenerationJobManagerClass {
       runtime.abortController.abort();
     }
 
+    const timelineManager = this.timelineManagers.get(streamId);
+    if (timelineManager) {
+      if (error) {
+        await timelineManager.markFailed(error);
+      } else {
+        await timelineManager.markComplete();
+      }
+    }
+
     // Clear content state and run step buffer (Redis only)
     this.jobStore.clearContentState(streamId);
     this.runStepBuffers?.delete(streamId);
@@ -678,6 +717,8 @@ class GenerationJobManagerClass {
     // Immediate cleanup if configured (default: true) - only for successful completions
     if (this._cleanupOnComplete) {
       this.runtimeState.delete(streamId);
+      timelineManager?.dispose();
+      this.timelineManagers.delete(streamId);
       // Don't cleanup eventTransport here - let the done event fully transmit first.
       // EventTransport will be cleaned up when subscribers disconnect or by periodic cleanup.
       await this.jobStore.deleteJob(streamId);
@@ -795,9 +836,16 @@ class GenerationJobManagerClass {
     this.runStepBuffers?.delete(streamId);
     this.replayEventWriteQueues.delete(streamId);
 
+    const timelineManager = this.timelineManagers.get(streamId);
+    if (timelineManager) {
+      await timelineManager.markFailed('aborted', '请求已取消');
+    }
+
     // Immediate cleanup if configured (default: true)
     if (this._cleanupOnComplete) {
       this.runtimeState.delete(streamId);
+      timelineManager?.dispose();
+      this.timelineManagers.delete(streamId);
       // Don't cleanup eventTransport here - let the abort event fully transmit first.
       await this.jobStore.deleteJob(streamId);
     } else {
@@ -1341,6 +1389,14 @@ class GenerationJobManagerClass {
         // Ignore malformed persisted replay events.
       }
     }
+    let timelineEvents: TimelineEvent[] | undefined;
+    if (jobData.timelineEvents) {
+      try {
+        timelineEvents = JSON.parse(jobData.timelineEvents) as TimelineEvent[];
+      } catch {
+        // Ignore malformed persisted timeline events.
+      }
+    }
 
     logger.debug(`[GenerationJobManager] getResumeState:`, {
       streamId,
@@ -1359,6 +1415,7 @@ class GenerationJobManagerClass {
       model: jobData.model,
       titleEvent,
       replayEvents,
+      timelineEvents,
     };
   }
 

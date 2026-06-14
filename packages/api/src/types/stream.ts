@@ -1,6 +1,7 @@
 import type { EventEmitter } from 'events';
 import type { Agents } from 'librechat-data-provider';
 import type { ServerSentEvent } from '~/types';
+import type { TimelineManager } from '~/stream/TimelineManager';
 
 export interface GenerationJobMetadata {
   userId: string;
@@ -39,6 +40,8 @@ export interface GenerationJob {
   finalEvent?: ServerSentEvent;
   /** Flag to indicate if a sync event was already sent (prevent duplicate replays) */
   syncSent?: boolean;
+  /** Timeline manager for tracking request execution phases */
+  timelineManager: TimelineManager;
 }
 
 export type ContentPart = Agents.ContentPart;
