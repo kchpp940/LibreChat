@@ -169,6 +169,11 @@ export interface ErrorState {
   retryAction?: () => void;
 }
 
+export type ToolCallGroupExpansionState = {
+  isExpanded: boolean;
+  userOverride: boolean;
+};
+
 export type CopyFn = (setIsCopied: React.Dispatch<React.SetStateAction<boolean>>) => void;
 
 export interface MessageActions {

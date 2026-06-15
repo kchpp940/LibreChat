@@ -373,4 +373,5 @@ const Part = memo(function Part({
 });
 Part.displayName = 'Part';
 
+/** @deprecated Use BlockRenderer from ~/components/Chat/Messages/ui/BlockRenderer instead. This component directly consumes raw TMessageContentParts, bypassing the message render state adapter. */
 export default Part;

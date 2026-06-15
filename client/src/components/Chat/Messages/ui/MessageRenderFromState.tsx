@@ -9,6 +9,7 @@ import {
   type MessageRenderState,
   type TextBlock,
   type ToolCallGroupSummary,
+  type ToolCallGroupExpansionState,
 } from '~/common';
 import { EmptyText, EditTextPart, PendingSkillCall } from '~/components/Chat/Messages/Content/Parts';
 import Container from '~/components/Chat/Messages/Content/Container';
@@ -28,7 +29,7 @@ import SubRow from '~/components/Chat/Messages/SubRow';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import MultiMessage from '~/components/Chat/Messages/MultiMessage';
 import { BlockRenderer } from './BlockRenderer';
-import { ToolCallGroupRenderer, type ToolCallGroupExpansionState } from './ToolCallGroupRenderer';
+import { ToolCallGroupRenderer } from './ToolCallGroupRenderer';
 import { ParallelRenderer } from './ParallelRenderer';
 
 const UNFINISHED_DELAY = 250;

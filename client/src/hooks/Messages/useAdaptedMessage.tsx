@@ -9,9 +9,7 @@ import {
   useMemoizedChatContext,
   useMessageProcess,
 } from '~/hooks/Messages';
-import type { TMessageProps } from '~/common';
-import type { ToolCallGroupExpansionState } from '~/components/Chat/Messages/Content/ToolCallGroup';
-import type { TMessageIcon, TMessageChatContext } from '~/common';
+import type { TMessageProps, TMessageIcon, TMessageChatContext, ToolCallGroupExpansionState } from '~/common';
 import { useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
 import store from '~/store';
 import { useLocalize } from '~/hooks';
