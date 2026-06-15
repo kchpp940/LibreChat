@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { v4 } from 'uuid';
+import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -22,7 +23,6 @@ import type { InfiniteData } from '@tanstack/react-query';
 import type { SetterOrUpdater } from 'recoil';
 import type { TResData, TFinalResData, ConvoGenerator } from '~/common';
 import type { ConversationCursorData } from '~/utils';
-import type { ChatStreamAction } from '~/store/chatStream';
 import {
   logger,
   setDraft,
@@ -46,7 +46,7 @@ import { useApplyAgentTemplate } from '~/hooks/Agents';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';
 import { useLiveAnnouncer } from '~/Providers';
-import { useChatStreamDispatch } from '~/store';
+import store from '~/store';
 
 type TSyncData = {
   sync: boolean;
@@ -148,10 +148,10 @@ export type EventHandlerParams = {
   setCompleted: React.Dispatch<React.SetStateAction<Set<unknown>>>;
   setMessages: (messages: TMessage[]) => void;
   getMessages: () => TMessage[] | undefined;
+  setIsSubmitting: SetterOrUpdater<boolean>;
   setConversation?: SetterOrUpdater<TConversation | null>;
   newConversation?: ConvoGenerator;
-  /** Run index for multi-conversation support */
-  runIndex?: string | number;
+  setShowStopButton: SetterOrUpdater<boolean>;
 };
 
 const createErrorMessage = ({
@@ -261,15 +261,16 @@ export default function useEventHandlers({
   setCompleted,
   isAddedRequest = false,
   setConversation,
+  setIsSubmitting,
   newConversation,
-  runIndex = 0,
+  setShowStopButton,
 }: EventHandlerParams) {
   const queryClient = useQueryClient();
   const { announcePolite } = useLiveAnnouncer();
   const applyAgentTemplate = useApplyAgentTemplate();
+  const setAbortScroll = useSetRecoilState(store.abortScroll);
   const navigate = useNavigate();
   const location = useLocation();
-  const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const lastAnnouncementTimeRef = useRef(Date.now());
   const { conversationId: paramId } = useParams();
@@ -280,6 +281,7 @@ export default function useEventHandlers({
     setMessages,
     getMessages,
     announcePolite,
+    setIsSubmitting,
     lastAnnouncementTimeRef,
   });
   const attachmentHandler = useAttachmentHandler(queryClient);
@@ -336,6 +338,7 @@ export default function useEventHandlers({
     (data: string | undefined, submission: EventSubmission) => {
       const { messages, userMessage, initialResponse, isRegenerate = false } = submission;
       const text = data ?? '';
+      setIsSubmitting(true);
 
       const currentTime = Date.now();
       if (currentTime - lastAnnouncementTimeRef.current > MESSAGE_UPDATE_INTERVAL) {
@@ -362,7 +365,7 @@ export default function useEventHandlers({
         ]);
       }
     },
-    [setMessages, announcePolite],
+    [setMessages, announcePolite, setIsSubmitting],
   );
 
   const cancelHandler = useCallback(
@@ -396,8 +399,10 @@ export default function useEventHandlers({
           return update;
         });
       }
+
+      setIsSubmitting(false);
     },
-    [setMessages, setConversation, isAddedRequest, queryClient],
+    [setMessages, setConversation, isAddedRequest, queryClient, setIsSubmitting],
   );
 
   const syncHandler = useCallback(
@@ -410,15 +415,6 @@ export default function useEventHandlers({
         ...initialResponse,
         ...responseMessage,
       };
-
-      chatStreamDispatch({
-        type: 'STREAM_RESUMED',
-        payload: { streamId: conversationId },
-      });
-      chatStreamDispatch({
-        type: 'MESSAGE_UPDATE',
-        payload: { responseMessage: nextResponseMessage as TMessage },
-      });
 
       setMessages([...messages, requestMessage, nextResponseMessage]);
 
@@ -467,8 +463,10 @@ export default function useEventHandlers({
           return update;
         });
       }
+
+      setShowStopButton(true);
     },
-    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, chatStreamDispatch],
+    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, setShowStopButton],
   );
 
   const createdHandler = useCallback(
@@ -491,16 +489,6 @@ export default function useEventHandlers({
         userMessage,
         isRegenerate,
       });
-
-      chatStreamDispatch({
-        type: 'STREAM_CREATED',
-        payload: {
-          runId: (data as { runId?: string }).runId ?? v4(),
-          userMessage: userMessage as TMessage,
-          responseMessage: initialResponse,
-        },
-      });
-
       if (isRegenerate) {
         setMessages([...messages, initialResponse]);
       } else {
@@ -563,16 +551,16 @@ export default function useEventHandlers({
         });
       }
 
-      scrollToEnd(() => chatStreamDispatch({ type: 'SET_ABORT_SCROLL', payload: false }));
+      scrollToEnd(() => setAbortScroll(false));
     },
     [
       setMessages,
       queryClient,
+      setAbortScroll,
       isAddedRequest,
       announcePolite,
       setConversation,
       applyAgentTemplate,
-      chatStreamDispatch,
     ],
   );
 
@@ -627,7 +615,8 @@ export default function useEventHandlers({
         // Handle early abort - aborted before any response message was saved.
         if ((data as Record<string, unknown>).earlyAbort) {
           console.log('[finalHandler] Early abort detected - no response message saved');
-          chatStreamDispatch({ type: 'STREAM_ABORTED' });
+          setShowStopButton(false);
+          setIsSubmitting(false);
 
           const currentConvoId = submissionConvo.conversationId;
           const isInitialNewConvo = isInitialNewConversationSubmission(submission);
@@ -679,8 +668,6 @@ export default function useEventHandlers({
         }
 
         setCompleted((prev) => new Set(prev.add(submission.initialResponse.messageId)));
-        chatStreamDispatch({ type: 'ADD_COMPLETED_ID', payload: submission.initialResponse.messageId });
-        chatStreamDispatch({ type: 'STREAM_COMPLETED', payload: data });
 
         const currentMessages = getMessages();
         /* Early return if messages are empty; i.e., the user navigated away */
@@ -835,6 +822,8 @@ export default function useEventHandlers({
           }
         }
       } finally {
+        setShowStopButton(false);
+        setIsSubmitting(false);
       }
     },
     [
@@ -846,10 +835,11 @@ export default function useEventHandlers({
       isAddedRequest,
       announcePolite,
       setConversation,
+      setIsSubmitting,
+      setShowStopButton,
       location.pathname,
       applyAgentTemplate,
       attachmentHandler,
-      chatStreamDispatch,
     ],
   );
 
@@ -857,18 +847,6 @@ export default function useEventHandlers({
     ({ data, submission }: { data?: TResData; submission: EventSubmission }) => {
       const { messages, userMessage, initialResponse } = submission;
       setCompleted((prev) => new Set(prev.add(initialResponse.messageId)));
-      chatStreamDispatch({ type: 'ADD_COMPLETED_ID', payload: initialResponse.messageId });
-      chatStreamDispatch({
-        type: 'STREAM_ERROR',
-        payload: {
-          error: {
-            message:
-              (data as { text?: string } | undefined)?.text ??
-              'Error connecting to server, try refreshing the page.',
-            data,
-          },
-        },
-      });
 
       const conversationId =
         userMessage.conversationId ?? submission.conversation?.conversationId ?? '';
@@ -914,6 +892,7 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
+        setIsSubmitting(false);
         return;
       }
 
@@ -928,10 +907,12 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
+        setIsSubmitting(false);
         return;
       } else if (!receivedConvoId) {
         const errorResponse = parseErrorResponse(data);
         setErrorMessages(conversationId, errorResponse);
+        setIsSubmitting(false);
         return;
       }
 
@@ -949,6 +930,7 @@ export default function useEventHandlers({
         });
       }
 
+      setIsSubmitting(false);
       return;
     },
     [
@@ -956,9 +938,9 @@ export default function useEventHandlers({
       setMessages,
       paramId,
       newConversation,
+      setIsSubmitting,
       getMessages,
       queryClient,
-      chatStreamDispatch,
     ],
   );
 
@@ -1002,6 +984,8 @@ export default function useEventHandlers({
           );
         } catch (error) {
           console.error('Error in finalHandler during abort:', error);
+          setShowStopButton(false);
+          setIsSubmitting(false);
         }
         return;
       } else if (!isAssistantsEndpoint(endpoint)) {
@@ -1013,6 +997,7 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
+        setIsSubmitting(false);
         return;
       }
 
@@ -1034,6 +1019,7 @@ export default function useEventHandlers({
         if (contentType != null && contentType.includes('application/json')) {
           const data = await response.json();
           if (response.status === 404) {
+            setIsSubmitting(false);
             return;
           }
           if (data.final === true) {
@@ -1042,6 +1028,7 @@ export default function useEventHandlers({
             cancelHandler(data, submission);
           }
         } else if (response.status === 204 || response.status === 200) {
+          setIsSubmitting(false);
         } else {
           throw new Error(
             'Unexpected response from server; Status: ' +
@@ -1063,6 +1050,7 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
+        setIsSubmitting(false);
       }
     },
     [
@@ -1072,6 +1060,8 @@ export default function useEventHandlers({
       finalHandler,
       cancelHandler,
       newConversation,
+      setIsSubmitting,
+      setShowStopButton,
     ],
   );
 

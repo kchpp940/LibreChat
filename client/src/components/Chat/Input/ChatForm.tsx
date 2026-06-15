@@ -38,7 +38,7 @@ import SendButton from './SendButton';
 import EditBadges from './EditBadges';
 import BadgeRow from './BadgeRow';
 import Mention from './Mention';
-import store, { useChatStream } from '~/store';
+import store from '~/store';
 
 interface ChatFormProps {
   index: number;
@@ -87,7 +87,7 @@ const ChatForm = memo(function ChatForm({
 
   const [badges, setBadges] = useRecoilState(store.chatBadges);
   const [isEditingBadges, setIsEditingBadges] = useRecoilState(store.isEditingBadges);
-  const chatStream = useChatStream(index);
+  const [showStopButton, setShowStopButton] = useRecoilState(store.showStopButtonByIndex(index));
   const plusPopoverAtom = useMemo(() => store.showPlusPopoverFamily(index), [index]);
   const mentionPopoverAtom = useMemo(() => store.showMentionPopoverFamily(index), [index]);
 
@@ -389,8 +389,8 @@ const ChatForm = memo(function ChatForm({
                 />
               )}
               <div className={`${isRTL ? 'ml-2' : 'mr-2'}`}>
-                {isSubmitting && chatStream.selectors.shouldShowStop ? (
-                  <StopButton index={index} stop={handleStopGenerating} />
+                {isSubmitting && showStopButton ? (
+                  <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
                 ) : (
                   endpoint && (
                     <SendButton

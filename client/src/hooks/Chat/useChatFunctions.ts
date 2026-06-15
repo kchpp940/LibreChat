@@ -2,7 +2,7 @@ import { v4 } from 'uuid';
 import { cloneDeep } from 'lodash';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRecoilValue, useRecoilCallback } from 'recoil';
+import { useSetRecoilState, useRecoilValue, useRecoilCallback } from 'recoil';
 import {
   Constants,
   QueryKeys,
@@ -34,7 +34,7 @@ import {
 } from '~/utils';
 import useSetFilesToDelete from '~/hooks/Files/useSetFilesToDelete';
 import useGetSender from '~/hooks/Conversations/useGetSender';
-import store, { useGetEphemeralAgent, useChatStreamDispatch } from '~/store';
+import store, { useGetEphemeralAgent } from '~/store';
 import { startupConfigKey } from '~/data-provider';
 import useUserKey from '~/hooks/Input/useUserKey';
 import { useAuthContext } from '~/hooks';
@@ -190,7 +190,8 @@ export default function useChatFunctions({
   const getEphemeralAgent = useGetEphemeralAgent();
   const isTemporary = useRecoilValue(store.isTemporary);
   const { getExpiry } = useUserKey(immutableConversation?.endpoint ?? '');
-  const chatStreamDispatch = useChatStreamDispatch(index);
+  const setIsSubmitting = useSetRecoilState(store.isSubmittingFamily(index));
+  const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
 
   /**
    * Atomically read + reset the per-conversation queue of manually-invoked
@@ -238,7 +239,7 @@ export default function useChatFunctions({
       addedConvo,
     } = {},
   ) => {
-    chatStreamDispatch({ type: 'STREAM_ABORTED' });
+    setShowStopButton(false);
 
     text = text.trim();
     if (!!isSubmitting || text === '') {
@@ -508,13 +509,8 @@ export default function useChatFunctions({
       } else {
         initialResponse.content = [];
       }
-      chatStreamDispatch({
-        type: 'SUBMIT_START',
-        payload: {
-          submission: null,
-          conversation,
-        },
-      });
+      setIsSubmitting(true);
+      setShowStopButton(true);
     }
 
     if (isContinued) {

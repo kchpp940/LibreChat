@@ -5,7 +5,7 @@ const MessagesViewContext = createContext(undefined);
 export { MessagesViewContext };
 export function MessagesViewProvider({ children }) {
     const chatContext = useChatContext();
-    const { ask, index, regenerate, isSubmitting, conversation, latestMessageId, latestMessageDepth, handleContinue, abortScroll, getMessages, setMessages, } = chatContext;
+    const { ask, index, regenerate, isSubmitting, conversation, latestMessageId, latestMessageDepth, setAbortScroll, handleContinue, abortScroll, getMessages, setMessages, } = chatContext;
     /** Memoize conversation-related values */
     const conversationValues = useMemo(() => ({
         conversation,
@@ -15,7 +15,8 @@ export function MessagesViewProvider({ children }) {
     const submissionStates = useMemo(() => ({
         abortScroll,
         isSubmitting,
-    }), [isSubmitting, abortScroll]);
+        setAbortScroll,
+    }), [isSubmitting, abortScroll, setAbortScroll]);
     /** Memoize message operations (these are typically stable references) */
     const messageOperations = useMemo(() => ({
         ask,
@@ -53,8 +54,8 @@ export function useMessagesConversation() {
 }
 /** Hook for components that only need submission states */
 export function useMessagesSubmission() {
-    const { isSubmitting, abortScroll } = useMessagesViewContext();
-    return useMemo(() => ({ isSubmitting, abortScroll }), [isSubmitting, abortScroll]);
+    const { isSubmitting, abortScroll, setAbortScroll } = useMessagesViewContext();
+    return useMemo(() => ({ isSubmitting, abortScroll, setAbortScroll }), [isSubmitting, abortScroll, setAbortScroll]);
 }
 /** Hook for components that only need message operations */
 export function useMessagesOperations() {

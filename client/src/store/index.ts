@@ -12,12 +12,10 @@ import lang from './language';
 import settings from './settings';
 import misc from './misc';
 import isTemporary from './temporary';
-import * as chatStream from './chatStream';
 export * from './agents';
 export * from './mcp';
 export * from './favorites';
 export * from './subagents';
-export * from './chatStream';
 
 export default {
   ...artifacts,
@@ -34,5 +32,4 @@ export default {
   ...settings,
   ...misc,
   ...isTemporary,
-  ...chatStream,
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { logger } = require('@librechat/data-schemas');
+const { logger, serializeForSearch, serializeForDisplay } = require('@librechat/data-schemas');
 const { ContentTypes, isAssistantsEndpoint, SearchHitType } = require('librechat-data-provider');
 const {
   unescapeLaTeX,
@@ -251,7 +251,8 @@ router.get('/', async (req, res) => {
         });
       }
 
-      let finalMessages = activeMessages;
+      const serialized = serializeForSearch(activeMessages);
+      let finalMessages = serialized.messages;
       let searchHits = {};
 
       const parsedSearchTypes = Array.isArray(searchTypes)
@@ -262,14 +263,14 @@ router.get('/', async (req, res) => {
 
       if (parsedSearchTypes.length > 0) {
         const { filteredMessages, searchHitsMap } = filterMessagesByType(
-          activeMessages,
+          finalMessages,
           parsedSearchTypes,
           search,
         );
         finalMessages = filteredMessages;
         searchHits = searchHitsMap;
       } else {
-        for (const message of activeMessages) {
+        for (const message of finalMessages) {
           const hits = buildSearchHits(message, search);
           if (hits.length > 0) {
             searchHits[message.messageId] = hits;
@@ -466,7 +467,8 @@ router.get('/:conversationId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const messages = await db.getMessages({ conversationId, user: req.user.id }, '-_id -__v -user');
-    res.status(200).json(messages);
+    const serialized = serializeForDisplay(messages);
+    res.status(200).json(serialized.messages);
   } catch (error) {
     logger.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -507,7 +509,8 @@ router.get('/:conversationId/:messageId', validateMessageReq, async (req, res) =
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
-    res.status(200).json(message);
+    const serialized = serializeForDisplay(Array.isArray(message) ? message : [message]);
+    res.status(200).json(serialized.messages);
   } catch (error) {
     logger.error('Error fetching message:', error);
     res.status(500).json({ error: 'Internal server error' });

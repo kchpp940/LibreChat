@@ -9,13 +9,11 @@ import { useAbortStreamMutation } from '~/data-provider';
 import useNewConvo from '~/hooks/useNewConvo';
 import { useLatestMessage, useLatestMessageId } from '~/hooks/Messages/useLatestMessage';
 import { getMessageCacheIds } from './cache';
-import store, { useChatStreamDispatch, useChatStream } from '~/store';
+import store from '~/store';
 
 // this to be set somewhere else
 export default function useChatHelpers(index = 0, paramId?: string) {
   const clearAllSubmissions = store.useClearSubmissionState();
-  const chatStream = useChatStream(index);
-  const chatStreamDispatch = useChatStreamDispatch(index);
   const [files, setFiles] = useRecoilState(store.filesByIndex(index));
   const [filesLoading, setFilesLoading] = useState(false);
 
@@ -31,7 +29,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   Falling back to conversationId (Recoil) only if paramId is not available */
   const queryParam = paramId === 'new' ? paramId : (paramId ?? conversationId ?? '');
 
-  const isSubmitting = chatStream.isRunning;
+  const [isSubmitting, setIsSubmitting] = useRecoilState(store.isSubmittingFamily(index));
   const latestMessage = useLatestMessage(index, queryParam);
 
   const latestMessageId = useLatestMessageId(index, queryParam) ?? undefined;
@@ -140,8 +138,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       isAssistants,
     });
 
-    chatStreamDispatch({ type: 'STREAM_ABORTED' });
-
     // For non-assistants endpoints (using resumable streams), call abort endpoint first
     if (conversationId && !isAssistants) {
       queryClient.setQueryData<ActiveJobsResponse>([QueryKeys.activeJobs], (old) => ({
@@ -165,7 +161,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       console.log('[useChatHelpers] Assistants endpoint, just clearing submissions');
       clearAllSubmissions();
     }
-  }, [conversationId, endpoint, endpointType, abortMutation, clearAllSubmissions, queryClient, chatStreamDispatch]);
+  }, [conversationId, endpoint, endpointType, abortMutation, clearAllSubmissions, queryClient]);
 
   const handleStopGenerating = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -199,7 +195,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
 
   const [preset, setPreset] = useRecoilState(store.presetByIndex(index));
   const [showPopover, setShowPopover] = useRecoilState(store.showPopoverFamily(index));
-  const abortScroll = chatStream.abortScroll;
+  const [abortScroll, setAbortScroll] = useRecoilState(store.abortScrollFamily(index));
   const [optionSettings, setOptionSettings] = useRecoilState(store.optionSettingsFamily(index));
 
   return useMemo(
@@ -208,6 +204,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       conversation,
       setConversation,
       isSubmitting,
+      setIsSubmitting,
       getMessages,
       setMessages,
       setSiblingIdx,
@@ -223,6 +220,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       showPopover,
       setShowPopover,
       abortScroll,
+      setAbortScroll,
       preset,
       setPreset,
       optionSettings,
@@ -231,14 +229,13 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
-      chatStream,
-      chatStreamActions: chatStream.actions,
     }),
     [
       newConversation,
       conversation,
       setConversation,
       isSubmitting,
+      setIsSubmitting,
       getMessages,
       setMessages,
       setSiblingIdx,
@@ -254,6 +251,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       showPopover,
       setShowPopover,
       abortScroll,
+      setAbortScroll,
       preset,
       setPreset,
       optionSettings,
@@ -262,8 +260,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
-      chatStream,
-      chatStream.actions,
     ],
   );
 }

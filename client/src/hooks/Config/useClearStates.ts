@@ -22,7 +22,9 @@ export default function useClearStates() {
           reset(store.filesByIndex(key));
           reset(store.presetByIndex(key));
           reset(store.textByIndex(key));
-          reset(store.chatStreamFamily(key));
+          reset(store.showStopButtonByIndex(key));
+          reset(store.abortScrollFamily(key));
+          reset(store.isSubmittingFamily(key));
           reset(store.optionSettingsFamily(key));
           reset(store.showPopoverFamily(key));
           reset(store.showMentionPopoverFamily(key));
@@ -34,6 +36,7 @@ export default function useClearStates() {
           reset(store.globalAudioURLFamily(key));
           reset(store.globalAudioFetchingFamily(key));
           reset(store.globalAudioPlayingFamily(key));
+          reset(store.activeRunFamily(key));
           reset(store.audioRunFamily(key));
           reset(store.messagesSiblingIdxFamily(key.toString()));
         }

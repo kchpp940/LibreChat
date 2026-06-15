@@ -20,7 +20,6 @@ import {
   logger,
 } from '~/utils';
 import { useSetConvoContext } from '~/Providers/SetConvoContext';
-import { chatStreamFamily } from './chatStream/atoms';
 
 const submissionKeysAtom = atom<(string | number)[]>({
   key: 'submissionKeys',
@@ -193,84 +192,41 @@ const textByIndex = atomFamily<string, string | number>({
   default: '',
 });
 
-/** @deprecated Use `useChatStream(index).selectors.shouldShowStop` instead */
-const showStopButtonByIndex = selectorFamily<boolean, string | number>({
+const showStopButtonByIndex = atomFamily<boolean, string | number>({
   key: 'showStopButtonByIndex',
-  get:
-    (index: string | number) =>
-    ({ get }) =>
-      get(chatStreamFamily(index)).showStopButton,
-  set:
-    (index: string | number) =>
-    ({ set, reset }, newValue) => {
-      if (newValue instanceof DefaultValue) {
-        reset(chatStreamFamily(index));
-        return;
-      }
-      set(chatStreamFamily(index), (prev) => ({
-        ...prev,
-        showStopButton: newValue,
-        updatedAt: Date.now(),
-      }));
-    },
+  default: false,
 });
 
-/** @deprecated Use `useChatStream(index).abortScroll` instead */
-const abortScrollFamily = selectorFamily<boolean, string | number>({
+const abortScrollFamily = atomFamily<boolean, string | number>({
   key: 'abortScrollByIndex',
-  get:
-    (index: string | number) =>
-    ({ get }) =>
-      get(chatStreamFamily(index)).abortScroll,
-  set:
-    (index: string | number) =>
-    ({ set, reset }, newValue) => {
-      if (newValue instanceof DefaultValue) {
-        reset(chatStreamFamily(index));
-        return;
-      }
-      set(chatStreamFamily(index), (prev) => ({
-        ...prev,
-        abortScroll: newValue,
-        updatedAt: Date.now(),
-      }));
-    },
-});
-
-/** @deprecated Use `useChatStream(index).isRunning` instead */
-const isSubmittingFamily = selectorFamily<boolean, string | number>({
-  key: 'isSubmittingByIndex',
-  get:
-    (index: string | number) =>
-    ({ get }) => {
-      const state = get(chatStreamFamily(index));
-      return state.status === 'submitting' ||
-        state.status === 'streaming' ||
-        state.status === 'reconnecting' ||
-        state.status === 'resumed';
-    },
-  set:
-    (index: string | number) =>
-    ({ set, reset }, newValue) => {
-      if (newValue instanceof DefaultValue) {
-        reset(chatStreamFamily(index));
-        return;
-      }
-      set(chatStreamFamily(index), (prev) => {
-        const isCurrentlyRunning =
-          prev.status === 'submitting' ||
-          prev.status === 'streaming' ||
-          prev.status === 'reconnecting' ||
-          prev.status === 'resumed';
-        if (newValue && !isCurrentlyRunning) {
-          return { ...prev, status: 'submitting' as const, showStopButton: true, updatedAt: Date.now() };
-        }
-        if (!newValue && isCurrentlyRunning) {
-          return { ...prev, status: 'idle' as const, showStopButton: false, updatedAt: Date.now() };
-        }
-        return prev;
+  default: false,
+  effects: [
+    ({ onSet, node }) => {
+      onSet(async (newValue) => {
+        const key = Number(node.key.split(Constants.COMMON_DIVIDER)[1]);
+        logger.log('message_scrolling', 'Recoil Effect: Setting abortScrollByIndex', {
+          key,
+          newValue,
+        });
       });
     },
+  ] as const,
+});
+
+const isSubmittingFamily = atomFamily({
+  key: 'isSubmittingByIndex',
+  default: false,
+  effects: [
+    ({ onSet, node }) => {
+      onSet(async (newValue) => {
+        const key = Number(node.key.split(Constants.COMMON_DIVIDER)[1]);
+        logger.log('message_stream', 'Recoil Effect: Setting isSubmittingByIndex', {
+          key,
+          newValue,
+        });
+      });
+    },
+  ],
 });
 
 const anySubmittingSelector = selector<boolean>({
@@ -345,29 +301,9 @@ const globalAudioPlayingFamily = atomFamily<boolean, string | number | null>({
   default: false,
 });
 
-/** @deprecated Use `useChatStream(index).activeRunId` instead */
-const activeRunFamily = selectorFamily<string | null, string | number | null>({
+const activeRunFamily = atomFamily<string | null, string | number | null>({
   key: 'activeRunByIndex',
-  get:
-    (index: string | number | null) =>
-    ({ get }) =>
-      index != null ? get(chatStreamFamily(index)).activeRunId : null,
-  set:
-    (index: string | number | null) =>
-    ({ set, reset }, newValue) => {
-      if (index == null) {
-        return;
-      }
-      if (newValue instanceof DefaultValue) {
-        reset(chatStreamFamily(index));
-        return;
-      }
-      set(chatStreamFamily(index), (prev) => ({
-        ...prev,
-        activeRunId: newValue,
-        updatedAt: Date.now(),
-      }));
-    },
+  default: null,
 });
 
 const audioRunFamily = atomFamily<string | null, string | number | null>({

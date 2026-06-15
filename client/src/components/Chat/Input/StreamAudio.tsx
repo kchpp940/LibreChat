@@ -9,7 +9,7 @@ import { useLatestMessage } from '~/hooks/Messages/useLatestMessage';
 import { getLatestText, logger } from '~/utils';
 import { useAuthContext } from '~/hooks';
 import { globalAudioId } from '~/common';
-import store, { useChatStream } from '~/store';
+import store from '~/store';
 
 function timeoutPromise(ms: number, message?: string) {
   return new Promise((_, reject) =>
@@ -27,8 +27,9 @@ export default function StreamAudio({ index = 0 }) {
   const playbackRate = useRecoilValue(store.playbackRate);
 
   const voice = useRecoilValue(store.voice);
-  const { activeRunId, isRunning: isSubmitting } = useChatStream(index);
+  const activeRunId = useRecoilValue(store.activeRunFamily(index));
   const automaticPlayback = useRecoilValue(store.automaticPlayback);
+  const isSubmitting = useRecoilValue(store.isSubmittingFamily(index));
   const latestMessage = useLatestMessage(index);
   const setIsPlaying = useSetRecoilState(store.globalAudioPlayingFamily(index));
   const [audioRunId, setAudioRunId] = useRecoilState(store.audioRunFamily(index));
