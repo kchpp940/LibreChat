@@ -7,6 +7,9 @@ import {
   MutationKeys,
   defaultOrderQuery,
   isAssistantsEndpoint,
+  isForbiddenError,
+  getLocalizedErrorMessage,
+  normalizeError,
 } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
@@ -154,16 +157,14 @@ export const useDeleteFilesMutation = (
     mutationFn: (body: t.DeleteFilesBody) => dataService.deleteFiles(body),
     ...options,
     onError: (error, vars, context) => {
-      if (error && typeof error === 'object' && 'response' in error) {
-        const errorWithResponse = error as { response?: { status?: number } };
-        if (errorWithResponse.response?.status === 403) {
-          showToast({
-            message: localize('com_ui_delete_not_allowed'),
-            status: 'error',
-          });
-        }
+      const appError = normalizeError(error);
+      if (isForbiddenError(appError)) {
+        showToast({
+          message: getLocalizedErrorMessage(appError, localize as (key: string, options?: Record<string, unknown>) => string),
+          status: 'error',
+        });
       }
-      onError?.(error, vars, context);
+      onError?.(appError, vars, context);
     },
     onSuccess: (data, vars, context) => {
       queryClient.setQueryData<t.TFile[] | undefined>([QueryKeys.files], (cachefiles) => {

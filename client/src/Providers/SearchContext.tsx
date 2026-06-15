@@ -1,9 +1,9 @@
 import { createContext, useContext } from 'react';
 import type { SearchResultData } from 'librechat-data-provider';
 
-export type SearchContextValue = {
+type SearchContext = {
   searchResults?: { [key: string]: SearchResultData };
 };
 
-export const SearchContext = createContext<SearchContextValue>({} as SearchContextValue);
+export const SearchContext = createContext<SearchContext>({} as SearchContext);
 export const useSearchContext = () => useContext(SearchContext);

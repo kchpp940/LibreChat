@@ -1,21 +1,43 @@
-import axios from 'axios';
+import {
+  normalizeError,
+  isNotFoundError as _isNotFoundError,
+  getErrorStatus,
+  isAppError,
+  isForbiddenError,
+  isUnauthorizedError,
+  isNetworkError,
+  isRateLimitError,
+  isValidationError,
+  isServerError,
+  isFileError,
+  isRetryableError,
+  isAbortedError,
+  getErrorMessage,
+  getValidationIssues,
+  getRateLimitInfo,
+  getLocalizedErrorMessage,
+} from 'librechat-data-provider';
+import type { AppError, ErrorCode, ErrorCategory } from 'librechat-data-provider';
 
-/**
- * Returns the HTTP response status code from an error, regardless of the
- * HTTP client used.  Handles Axios errors first, then falls back to checking
- * for a plain `status` property so callers never need to import axios.
- */
-export const getResponseStatus = (error: unknown): number | undefined => {
-  if (axios.isAxiosError(error)) {
-    return error.response?.status;
-  }
-  if (error != null && typeof error === 'object' && 'status' in error) {
-    const { status } = error as { status: unknown };
-    if (typeof status === 'number') {
-      return status;
-    }
-  }
-  return undefined;
+export {
+  normalizeError,
+  isAppError,
+  isForbiddenError,
+  isUnauthorizedError,
+  isNetworkError,
+  isRateLimitError,
+  isValidationError,
+  isServerError,
+  isFileError,
+  isRetryableError,
+  isAbortedError,
+  getErrorMessage,
+  getValidationIssues,
+  getRateLimitInfo,
+  getLocalizedErrorMessage,
 };
+export type { AppError, ErrorCode, ErrorCategory };
 
-export const isNotFoundError = (error: unknown): boolean => getResponseStatus(error) === 404;
+export const getResponseStatus = getErrorStatus;
+
+export const isNotFoundError = _isNotFoundError;

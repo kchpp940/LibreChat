@@ -8,7 +8,6 @@ import SiblingHeader from './SiblingHeader';
 import Container from './Container';
 import { cn } from '~/utils';
 
-/** @deprecated PartWithIndex type is only used by legacy rendering paths. New code should use ContentBlock[] from ~/common/messageRenderTypes. */
 export type PartWithIndex = { part: TMessageContentParts; idx: number };
 
 export type ParallelColumn = {
@@ -147,7 +146,6 @@ type ParallelColumnsProps = {
 /**
  * Renders parallel content columns for a single groupId.
  */
-/** @deprecated Use ParallelRenderer from ~/components/Chat/Messages/ui/ParallelRenderer instead. This component consumes raw TMessageContentParts via renderPart callback, bypassing the message render state adapter. */
 export const ParallelColumns = memo(function ParallelColumns({
   columns,
   groupId,
@@ -206,7 +204,6 @@ type ParallelContentRendererProps = {
  * Renders content with parallel sections (columns) and sequential parts.
  * Handles the layout of before/parallel/after content sections.
  */
-/** @deprecated Use ParallelRenderer from ~/components/Chat/Messages/ui/ParallelRenderer instead. This component consumes raw TMessageContentParts via renderPart callback, bypassing the message render state adapter. */
 export const ParallelContentRenderer = memo(function ParallelContentRenderer({
   content,
   messageId,

@@ -9,7 +9,6 @@ import type {
   FunctionToolCall,
 } from 'librechat-data-provider';
 import type { PartWithIndex } from './ParallelContent';
-import type { ToolCallGroupExpansionState } from '~/common';
 import { useLocalize, useExpandCollapse, scheduleMessageContentLayoutReconcile } from '~/hooks';
 import { cn, getToolDisplayLabel } from '~/utils';
 import { StackedToolIcons } from './ToolOutput';
@@ -88,9 +87,11 @@ interface ToolCallGroupProps {
   onExpansionChange?: (state: ToolCallGroupExpansionState) => void;
 }
 
-export type { ToolCallGroupExpansionState } from '~/common';
+export type ToolCallGroupExpansionState = {
+  isExpanded: boolean;
+  userOverride: boolean;
+};
 
-/** @deprecated Use ToolCallGroupRenderer from ~/components/Chat/Messages/ui/ToolCallGroupRenderer instead. This component consumes raw TMessageContentParts via renderPart callback, bypassing the message render state adapter. */
 export default function ToolCallGroup({
   parts,
   isSubmitting,

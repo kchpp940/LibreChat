@@ -419,5 +419,4 @@ const ContentParts = memo(function ContentParts({
   );
 });
 
-/** @deprecated Use MessageContentFromState from ~/components/Chat/Messages/ui/MessageRenderFromState instead. This component is the legacy rendering entry point that directly consumes raw TMessageContentParts. */
 export default ContentParts;

@@ -19,5 +19,3 @@ export { default as useMessageHelpers } from './useMessageHelpers';
 export { default as useCopyToClipboard } from './useCopyToClipboard';
 export { default as useContentMetadata } from './useContentMetadata';
 export { default as useMessageScrolling } from './useMessageScrolling';
-export { default as useMessageRenderState } from './useMessageRenderState';
-export { default as useAdaptedMessage } from './useAdaptedMessage';

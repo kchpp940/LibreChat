@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig, AxiosError } from 'axios';
 import type * as t from './types';
 import { setTokenHeader } from './headers-helpers';
 import * as endpoints from './api-endpoints';
+import { normalizeError } from './errors';
 
 async function _get<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
   const response = await axios.get(url, { ...options });
@@ -256,21 +257,25 @@ if (typeof window !== 'undefined') {
   axios.interceptors.response.use(
     (response) => response,
     async (error) => {
-      const originalRequest = error.config as RetryableAxiosRequestConfig | undefined;
-      if (!error.response) {
-        return Promise.reject(error);
+      const axiosError = error as AxiosError;
+      const originalRequest = axiosError.config as RetryableAxiosRequestConfig | undefined;
+      const method = originalRequest?.method?.toUpperCase();
+      const endpoint = originalRequest?.url;
+
+      if (!axiosError.response) {
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
       if (!originalRequest) {
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
 
       const isRefreshRequest = originalRequest.url?.includes('/api/auth/refresh') === true;
       if (isAuthRecoveryEndpoint(originalRequest.url) && !isRefreshRequest) {
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
 
       if (isRefreshRequest && getAuthRecoveryState().refreshPromise) {
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
 
       /** Skip refresh when the Authorization header has been cleared (e.g. during logout),
@@ -279,14 +284,14 @@ if (typeof window !== 'undefined') {
         !axios.defaults.headers.common['Authorization'] &&
         !window.location.pathname.startsWith('/share/')
       ) {
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
 
       if (isAuthRedirectInProgress()) {
-        return Promise.reject(error);
+        return Promise.reject(normalizeError(axiosError, { endpoint, method }));
       }
 
-      if (error.response.status === 401 && !originalRequest._retry) {
+      if (axiosError.response.status === 401 && !originalRequest._retry) {
         const hasActiveRecovery = getAuthRecoveryState().refreshPromise != null;
         if (!hasActiveRecovery) {
           console.warn('401 error, refreshing token');
@@ -305,13 +310,13 @@ if (typeof window !== 'undefined') {
           }
 
           redirectToLoginOnce();
-          return Promise.reject(error);
+          return Promise.reject(normalizeError(axiosError, { endpoint, method }));
         } catch (err) {
-          return Promise.reject(err);
+          return Promise.reject(normalizeError(err, { endpoint, method }));
         }
       }
 
-      return Promise.reject(error);
+      return Promise.reject(normalizeError(axiosError, { endpoint, method }));
     },
   );
 }
