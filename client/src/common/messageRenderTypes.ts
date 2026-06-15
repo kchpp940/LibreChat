@@ -184,10 +184,21 @@ export interface MessageActions {
 
 export interface ToolCallGroupSummary {
   groupId: string;
-  parts: Array<{ part: TMessageContentParts; idx: number }>;
+  toolBlocks: ToolCallBlock[];
   groupAttachments: TAttachment[];
   isSubmitting: boolean;
   isLast: boolean;
+}
+
+export interface ParallelColumnSummary {
+  agentId: string;
+  blocks: ContentBlock[];
+  isEmpty: boolean;
+}
+
+export interface ParallelSectionSummary {
+  groupId: number;
+  columns: ParallelColumnSummary[];
 }
 
 export interface MessageRenderState {
@@ -216,7 +227,7 @@ export interface MessageRenderState {
 
   readonly hasParallelContent: boolean;
   readonly chatWidthClass: string;
-  readonly parallelGroups?: string[];
+  readonly parallelSections: ParallelSectionSummary[];
 
   readonly toolCallGroups: ToolCallGroupSummary[];
   readonly showEmptyCursor: boolean;

@@ -31,6 +31,8 @@ import {
   type MessageRenderState,
   type AdaptMessageInput,
   type ToolCallGroupSummary,
+  type ParallelSectionSummary,
+  type ParallelColumnSummary,
 } from '~/common';
 import {
   artifactTypeForAttachment,
@@ -170,6 +172,132 @@ function getToolCallId(part: TMessageContentParts): string {
   return tc?.id ?? '';
 }
 
+function buildToolCallBlockFromPart(
+  part: TMessageContentParts,
+  idx: number,
+  isLastPart: boolean,
+  lastIdx: number,
+  nextType: string | undefined,
+  showCursor: boolean,
+  effectiveIsSubmitting: boolean,
+  attachmentsMap: Map<string, TAttachment[]>,
+  messageId: string,
+): ToolCallBlock | null {
+  const tcPart = part as unknown as Record<string, unknown>;
+  const toolCall = tcPart[ContentTypes.TOOL_CALL] as
+    | Record<string, unknown>
+    | undefined;
+  if (!toolCall) return null;
+
+  const toolCallId = (toolCall.id as string) ?? '';
+  const toolName = (toolCall.name as string) || '';
+  const rawOutput = (toolCall.output as string) ?? '';
+  const progress = (toolCall.progress as number) ?? 0.1;
+  const rawArgs = toolCall.args ?? '';
+  const hasOutput = Boolean(rawOutput && rawOutput.length > 0);
+
+  const partAttachments = toolCallId
+    ? attachmentsMap.get(toolCallId)
+    : undefined;
+
+  const persistedContent = (
+    toolCall as { subagent_content?: TMessageContentParts[] }
+  ).subagent_content;
+
+  const isToolCallShape =
+    'args' in toolCall &&
+    (!toolCall.type || (toolCall.type as string) === ToolCallTypes.TOOL_CALL);
+
+  const isProgrammaticBash =
+    isToolCallShape &&
+    isBashProgrammaticToolCall(
+      toolName,
+      typeof rawArgs === 'string' || (typeof rawArgs === 'object' && rawArgs !== null)
+        ? (rawArgs as string | Record<string, unknown>)
+        : undefined,
+    );
+
+  const isExecuteCode =
+    isToolCallShape &&
+    (toolName === Tools.execute_code ||
+      toolName === Constants.PROGRAMMATIC_TOOL_CALLING ||
+      toolName === Constants.BASH_PROGRAMMATIC_TOOL_CALLING);
+
+  const isImageGen =
+    isToolCallShape &&
+    (toolName === 'image_gen_oai' ||
+      toolName === 'image_edit_oai' ||
+      toolName === 'gemini_image_gen');
+
+  const isSkill = isToolCallShape && toolName === 'skill';
+  const isSubagent = isToolCallShape && toolName === Constants.SUBAGENT;
+  const isReadFile = isToolCallShape && toolName === 'read_file';
+  const isFileAuthoring =
+    isToolCallShape && (toolName === 'create_file' || toolName === 'edit_file');
+  const isBashTool = isToolCallShape && toolName === Tools.bash_tool;
+  const isWebSearch = isToolCallShape && toolName === Tools.web_search;
+  const isRetrieval =
+    isToolCallShape && (toolName === 'file_search' || toolName === 'retrieval');
+  const isAgentHandoff =
+    isToolCallShape && Boolean(typeof toolName?.startsWith?.(Constants.LC_TRANSFER_TO_));
+  const isCodeInterpreter = (toolCall.type as string) === ToolCallTypes.CODE_INTERPRETER;
+  const isRetrievalType =
+    (toolCall.type as string) === ToolCallTypes.RETRIEVAL ||
+    (toolCall.type as string) === ToolCallTypes.FILE_SEARCH;
+  const isFunctionType = (toolCall.type as string) === ToolCallTypes.FUNCTION;
+
+  let finalArgs: unknown = typeof rawArgs === 'string' ? rawArgs : rawArgs;
+  let finalOutput = rawOutput;
+
+  if (isCodeInterpreter) {
+    finalArgs = (toolCall[ToolCallTypes.CODE_INTERPRETER] as { input?: string })?.input ?? '';
+    finalOutput = JSON.stringify(
+      (toolCall[ToolCallTypes.CODE_INTERPRETER] as { outputs?: unknown[] })?.outputs ?? [],
+    );
+  } else if (isFunctionType && ToolCallTypes.FUNCTION in toolCall) {
+    const fn = toolCall as unknown as Record<string, unknown>;
+    const fnObj = fn[ToolCallTypes.FUNCTION] as { arguments?: string; output?: string };
+    finalArgs = fnObj.arguments ?? '';
+    finalOutput = fnObj.output ?? '';
+  }
+
+  return {
+    id: `tool-call-${messageId}-${idx}`,
+    type: 'tool_call',
+    status: effectiveIsSubmitting ? BlockStatus.LOADING : BlockStatus.COMPLETED,
+    isLast: isLastPart,
+    showCursor,
+    nextType,
+    partIndex: idx,
+    toolCallId,
+    toolName,
+    args: finalArgs,
+    output: finalOutput,
+    progress,
+    runStatus: effectiveIsSubmitting && !hasOutput ? ToolRunStatus.RUNNING : ToolRunStatus.COMPLETED,
+    auth: toolCall.auth,
+    attachments: partAttachments,
+    persistedContent,
+    isProgrammaticBash,
+    isBashTool,
+    isExecuteCode,
+    isImageGen,
+    isSkill,
+    isSubagent,
+    isReadFile,
+    isFileAuthoring,
+    isWebSearch,
+    isRetrieval,
+    isAgentHandoff,
+    isCodeInterpreter,
+    isGenericTool:
+      isToolCallShape &&
+      !isProgrammaticBash && !isExecuteCode && !isImageGen && !isSkill && !isSubagent &&
+      !isReadFile && !isFileAuthoring && !isBashTool && !isWebSearch && !isRetrieval &&
+      !isAgentHandoff && !isCodeInterpreter && !isRetrievalType && !isFunctionType,
+  } as ToolCallBlock;
+}
+
 function buildBlocks(
   message: TMessage,
   isSubmitting: boolean,
@@ -183,16 +311,13 @@ function buildBlocks(
     ? (content.filter(Boolean) as TMessageContentParts[])
     : [];
   const lastIdx = Math.max(0, safeContent.length - 1);
+  const messageId = message.messageId ?? '';
 
   const thinkingFromText = (() => {
-    if (safeContent.length > 0) {
-      return null;
-    }
+    if (safeContent.length > 0) return null;
     const text = typeof message.text === 'string' ? message.text : '';
     const match = text.match(/:::thinking([\s\S]*?):::/);
-    if (!match) {
-      return null;
-    }
+    if (!match) return null;
     const thinking = match[1].trim();
     const regular = text.replace(/:::thinking[\s\S]*?:::/, '').trim();
     return { thinking, regular };
@@ -200,7 +325,7 @@ function buildBlocks(
 
   if (thinkingFromText) {
     blocks.push({
-      id: `thinking-${message.messageId}-legacy`,
+      id: `thinking-${messageId}-legacy`,
       type: 'thinking',
       status: BlockStatus.COMPLETED,
       isLast: thinkingFromText.regular.length === 0 && safeContent.length === 0,
@@ -210,7 +335,7 @@ function buildBlocks(
     } as ThinkingBlock);
     if (thinkingFromText.regular.length > 0) {
       blocks.push({
-        id: `text-${message.messageId}-legacy`,
+        id: `text-${messageId}-legacy`,
         type: 'text',
         status: effectiveIsSubmitting ? BlockStatus.LOADING : BlockStatus.COMPLETED,
         isLast: true,
@@ -243,29 +368,17 @@ function buildBlocks(
       if (text.length > 0 && /^\s*$/.test(text)) {
         if (isLastPart && showCursor) {
           blocks.push({
-            id: `text-${message.messageId}-${idx}`,
-            type: 'text',
-            status: BlockStatus.LOADING,
-            isLast: isLastPart,
-            showCursor,
-            nextType,
-            partIndex: idx,
-            text: '',
+            id: `text-${messageId}-${idx}`, type: 'text', status: BlockStatus.LOADING,
+            isLast: isLastPart, showCursor, nextType, partIndex: idx, text: '',
           } as TextBlock);
           return;
         }
         if (!isLastPart) return;
       }
       blocks.push({
-        id: `text-${message.messageId}-${idx}`,
-        type: 'text',
+        id: `text-${messageId}-${idx}`, type: 'text',
         status: effectiveIsSubmitting && !text ? BlockStatus.LOADING : BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
-        text,
-        toolCallIds,
+        isLast: isLastPart, showCursor, nextType, partIndex: idx, text, toolCallIds,
       } as TextBlock);
     } else if (part.type === ContentTypes.THINK) {
       const thinkPart = part as unknown as Record<string, unknown>;
@@ -278,14 +391,8 @@ function buildBlocks(
             : '';
       if (typeof reasoning !== 'string') return;
       blocks.push({
-        id: `thinking-${message.messageId}-${idx}`,
-        type: 'thinking',
-        status: BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor: false,
-        nextType,
-        partIndex: idx,
-        reasoning,
+        id: `thinking-${messageId}-${idx}`, type: 'thinking', status: BlockStatus.COMPLETED,
+        isLast: isLastPart, showCursor: false, nextType, partIndex: idx, reasoning,
       } as ThinkingBlock);
     } else if (part.type === ContentTypes.ERROR) {
       const errPart = part as unknown as Record<string, unknown>;
@@ -297,42 +404,26 @@ function buildBlocks(
           ? textVal
           : typeof (textVal as { value?: string })?.value === 'string'
             ? (textVal as { value: string }).value
-            : '') ||
-        '';
+            : '') || '';
       blocks.push({
-        id: `error-${message.messageId}-${idx}`,
-        type: 'error',
-        status: BlockStatus.ERROR,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
+        id: `error-${messageId}-${idx}`, type: 'error', status: BlockStatus.ERROR,
+        isLast: isLastPart, showCursor, nextType, partIndex: idx,
         message: typeof errMsg === 'string' ? errMsg : String(errMsg),
-        errorType: ErrorType.MESSAGE,
-        retryable: true,
+        errorType: ErrorType.MESSAGE, retryable: true,
       } as ErrorBlock);
     } else if (part.type === ContentTypes.AGENT_UPDATE) {
       const update = part as unknown as Record<string, unknown>;
       blocks.push({
-        id: `agent-update-${message.messageId}-${idx}`,
-        type: 'agent_update',
-        status: BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
+        id: `agent-update-${messageId}-${idx}`, type: 'agent_update', status: BlockStatus.COMPLETED,
+        isLast: isLastPart, showCursor, nextType, partIndex: idx,
         agentId: (update[ContentTypes.AGENT_UPDATE] as { agentId?: string })?.agentId,
       } as AgentUpdateBlock);
     } else if (part.type === ContentTypes.SUMMARY) {
       const sumPart = part as unknown as Record<string, unknown>;
       blocks.push({
-        id: `summary-${message.messageId}-${idx}`,
-        type: 'summary',
+        id: `summary-${messageId}-${idx}`, type: 'summary',
         status: sumPart.summarizing ? BlockStatus.LOADING : BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
+        isLast: isLastPart, showCursor, nextType, partIndex: idx,
         content: sumPart.content as string | undefined,
         model: sumPart.model as string | undefined,
         provider: sumPart.provider as string | undefined,
@@ -343,184 +434,33 @@ function buildBlocks(
       const imgPart = part as unknown as Record<string, unknown>;
       const imgFile = imgPart[ContentTypes.IMAGE_FILE] as Record<string, unknown>;
       blocks.push({
-        id: `image-${message.messageId}-${idx}`,
-        type: 'image',
-        status: BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
+        id: `image-${messageId}-${idx}`, type: 'image', status: BlockStatus.COMPLETED,
+        isLast: isLastPart, showCursor, nextType, partIndex: idx,
         filepath: imgFile.filepath as string | undefined,
         fileId: imgFile.file_id as string | undefined,
         filename: imgFile.filename as string | undefined,
         width: imgFile.width as number | undefined,
         height: imgFile.height as number | undefined,
-        cachedPreview: typeof imgFile.file_id === 'string'
-          ? getCachedPreview(imgFile.file_id)
-          : undefined,
+        cachedPreview: typeof imgFile.file_id === 'string' ? getCachedPreview(imgFile.file_id) : undefined,
       } as ImageBlock);
     } else if (part.type === ContentTypes.TOOL_CALL) {
-      const tcPart = part as unknown as Record<string, unknown>;
-      const toolCall = tcPart[ContentTypes.TOOL_CALL] as
-        | Record<string, unknown>
-        | undefined;
-      if (!toolCall) return;
-
-      const toolCallId = (toolCall.id as string) ?? '';
-      const toolName = (toolCall.name as string) || '';
-      const rawOutput = (toolCall.output as string) ?? '';
-      const progress = (toolCall.progress as number) ?? 0.1;
-      const rawArgs = toolCall.args ?? '';
-      const hasOutput = Boolean(rawOutput && rawOutput.length > 0);
-      const runStatus: ToolRunStatus = effectiveIsSubmitting && !hasOutput
-        ? ToolRunStatus.RUNNING
-        : hasOutput
-          ? ToolRunStatus.COMPLETED
-          : ToolRunStatus.COMPLETED;
-
-      const partAttachments = toolCallId
-        ? attachmentsMap.get(toolCallId)
-        : undefined;
-
-      const persistedContent = (
-        toolCall as { subagent_content?: TMessageContentParts[] }
-      ).subagent_content;
-
-      const isToolCallShape =
-        'args' in toolCall &&
-        (!toolCall.type || (toolCall.type as string) === ToolCallTypes.TOOL_CALL);
-
-      const isProgrammaticBash =
-        isToolCallShape &&
-        isBashProgrammaticToolCall(
-          toolName,
-          typeof rawArgs === 'string' || typeof rawArgs === 'object' && rawArgs !== null
-            ? (rawArgs as string | Record<string, unknown>)
-            : undefined,
-        );
-
-      const isExecuteCode =
-        isToolCallShape &&
-        (toolName === Tools.execute_code ||
-          toolName === Constants.PROGRAMMATIC_TOOL_CALLING ||
-          toolName === Constants.BASH_PROGRAMMATIC_TOOL_CALLING);
-
-      const isImageGen =
-        isToolCallShape &&
-        (toolName === 'image_gen_oai' ||
-          toolName === 'image_edit_oai' ||
-          toolName === 'gemini_image_gen');
-
-      const isSkill = isToolCallShape && toolName === 'skill';
-
-      const isSubagent = isToolCallShape && toolName === Constants.SUBAGENT;
-
-      const isReadFile = isToolCallShape && toolName === 'read_file';
-
-      const isFileAuthoring =
-        isToolCallShape &&
-        (toolName === 'create_file' || toolName === 'edit_file');
-
-      const isBashTool = isToolCallShape && toolName === Tools.bash_tool;
-
-      const isWebSearch = isToolCallShape && toolName === Tools.web_search;
-
-      const isRetrieval =
-        isToolCallShape &&
-        (toolName === 'file_search' || toolName === 'retrieval');
-
-      const isAgentHandoff =
-        isToolCallShape &&
-        Boolean(typeof toolName?.startsWith?.(Constants.LC_TRANSFER_TO_));
-
-      const isCodeInterpreter =
-        (toolCall.type as string) === ToolCallTypes.CODE_INTERPRETER;
-
-      const isRetrievalType =
-        (toolCall.type as string) === ToolCallTypes.RETRIEVAL ||
-        (toolCall.type as string) === ToolCallTypes.FILE_SEARCH;
-
-      const isFunctionType = (toolCall.type as string) === ToolCallTypes.FUNCTION;
-
-      let finalArgs: unknown = typeof rawArgs === 'string' ? rawArgs : rawArgs;
-      let finalOutput = rawOutput;
-
-      if (isCodeInterpreter) {
-        finalArgs = (toolCall[ToolCallTypes.CODE_INTERPRETER] as { input?: string })?.input ?? '';
-        finalOutput = JSON.stringify(
-          (toolCall[ToolCallTypes.CODE_INTERPRETER] as { outputs?: unknown[] })?.outputs ?? [],
-        );
-      } else if (isFunctionType && ToolCallTypes.FUNCTION in toolCall) {
-        const fn = toolCall as unknown as Record<string, unknown>;
-        const fnObj = fn[ToolCallTypes.FUNCTION] as { arguments?: string; output?: string };
-        finalArgs = fnObj.arguments ?? '';
-        finalOutput = fnObj.output ?? '';
-      }
-
-      const isImageVision = isFunctionType && isImageVisionTool(part as any);
-
-      if (isImageVision && effectiveIsSubmitting && showCursor) {
+      const isFunctionType2 = (() => {
+        const tcPart2 = part as unknown as Record<string, unknown>;
+        const tc2 = tcPart2[ContentTypes.TOOL_CALL] as Record<string, unknown> | undefined;
+        return tc2 && (tc2.type as string) === ToolCallTypes.FUNCTION && isImageVisionTool(part as any);
+      })();
+      if (isFunctionType2 && effectiveIsSubmitting && showCursor) {
         blocks.push({
-          id: `text-${message.messageId}-${idx}`,
-          type: 'text',
-          status: BlockStatus.LOADING,
-          isLast: isLastPart,
-          showCursor,
-          nextType,
-          partIndex: idx,
-          text: '',
+          id: `text-${messageId}-${idx}`, type: 'text', status: BlockStatus.LOADING,
+          isLast: isLastPart, showCursor, nextType, partIndex: idx, text: '',
         } as TextBlock);
         return;
       }
-
-      blocks.push({
-        id: `tool-call-${message.messageId}-${idx}`,
-        type: 'tool_call',
-        status: effectiveIsSubmitting
-          ? BlockStatus.LOADING
-          : BlockStatus.COMPLETED,
-        isLast: isLastPart,
-        showCursor,
-        nextType,
-        partIndex: idx,
-        toolCallId,
-        toolName,
-        args: finalArgs,
-        output: finalOutput,
-        progress,
-        runStatus,
-        auth: toolCall.auth,
-        attachments: partAttachments,
-        persistedContent,
-        isProgrammaticBash,
-        isBashTool,
-        isExecuteCode,
-        isImageGen,
-        isSkill,
-        isSubagent,
-        isReadFile,
-        isFileAuthoring,
-        isWebSearch,
-        isRetrieval,
-        isAgentHandoff,
-        isCodeInterpreter,
-        isGenericTool:
-          isToolCallShape &&
-          !isProgrammaticBash &&
-          !isExecuteCode &&
-          !isImageGen &&
-          !isSkill &&
-          !isSubagent &&
-          !isReadFile &&
-          !isFileAuthoring &&
-          !isBashTool &&
-          !isWebSearch &&
-          !isRetrieval &&
-          !isAgentHandoff &&
-          !isCodeInterpreter &&
-          !isRetrievalType &&
-          !isFunctionType,
-      } as ToolCallBlock);
+      const toolBlock = buildToolCallBlockFromPart(
+        part, idx, isLastPart, lastIdx, nextType, showCursor,
+        effectiveIsSubmitting, attachmentsMap, messageId,
+      );
+      if (toolBlock) blocks.push(toolBlock);
     }
   });
 
@@ -554,6 +494,8 @@ function buildToolCallGroups(
   isLatestMessage: boolean,
   lastContentIdx: number,
   messageId: string,
+  allBlocks: ContentBlock[],
+  safeContent: TMessageContentParts[],
 ): ToolCallGroupSummary[] {
   const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
   const grouped = groupSequentialToolCalls(sequentialParts) as unknown as GroupedPart[];
@@ -566,6 +508,13 @@ function buildToolCallGroups(
     fallbackScopeRef.messageId = messageId;
   }
   fallbackScope = fallbackScopeRef.scope;
+
+  const blockByPartIndex = new Map<number, ToolCallBlock>();
+  for (const b of allBlocks) {
+    if (b.type === 'tool_call') {
+      blockByPartIndex.set(b.partIndex, b as ToolCallBlock);
+    }
+  }
 
   return grouped
     .filter((g): g is { type: 'tool-group'; parts: PartWithIndex[] } => g.type === 'tool-group')
@@ -582,14 +531,97 @@ function buildToolCallGroups(
         const id = getToolCallId(part);
         return id ? attachmentsMap.get(id) ?? [] : [];
       });
+      const toolBlocks = group.parts
+        .map(({ idx }) => blockByPartIndex.get(idx))
+        .filter((b): b is ToolCallBlock => b != null);
+
       return {
         groupId,
-        parts: group.parts,
+        toolBlocks,
         groupAttachments,
         isSubmitting: effectiveIsSubmitting,
         isLast: group.parts.some((p) => p.idx === lastContentIdx),
       } as ToolCallGroupSummary;
     });
+}
+
+function buildParallelSections(
+  safeContent: TMessageContentParts[],
+  allBlocks: ContentBlock[],
+  isSubmitting: boolean,
+): ParallelSectionSummary[] {
+  const groupMap = new Map<number, { agentId: string; partIndices: number[] }[]>();
+  const placeholderAgents = new Map<number, Set<string>>();
+
+  safeContent.forEach((part, idx) => {
+    if (!part) return;
+    const p = part as unknown as { groupId?: number; agentId?: string };
+    if (p.groupId == null) return;
+
+    if (!part.type && p.agentId) {
+      if (!placeholderAgents.has(p.groupId)) {
+        placeholderAgents.set(p.groupId, new Set());
+      }
+      placeholderAgents.get(p.groupId)!.add(p.agentId);
+      return;
+    }
+
+    if (!groupMap.has(p.groupId)) {
+      groupMap.set(p.groupId, []);
+    }
+    const columns = groupMap.get(p.groupId)!;
+    const agentId = p.agentId ?? 'unknown';
+    let col = columns.find((c) => c.agentId === agentId);
+    if (!col) {
+      col = { agentId, partIndices: [] };
+      columns.push(col);
+    }
+    col.partIndices.push(idx);
+  });
+
+  const allGroupIds = new Set([...groupMap.keys(), ...placeholderAgents.keys()]);
+  const sections: ParallelSectionSummary[] = [];
+
+  for (const groupId of allGroupIds) {
+    const columnsData = groupMap.get(groupId) ?? [];
+
+    const sortedColumns = [...columnsData].sort((a, b) => {
+      const aHasSuffix = a.agentId.includes('____');
+      const bHasSuffix = b.agentId.includes('____');
+      if (aHasSuffix && !bHasSuffix) return 1;
+      if (!aHasSuffix && bHasSuffix) return -1;
+      return 0;
+    });
+
+    const groupPlaceholders = placeholderAgents.get(groupId);
+    if (groupPlaceholders) {
+      for (const placeholderAgentId of groupPlaceholders) {
+        if (!sortedColumns.find((c) => c.agentId === placeholderAgentId)) {
+          sortedColumns.push({ agentId: placeholderAgentId, partIndices: [] });
+        }
+      }
+    }
+
+    const blockByPartIndex = new Map<number, ContentBlock>();
+    for (const b of allBlocks) {
+      blockByPartIndex.set(b.partIndex, b);
+    }
+
+    const columns: ParallelColumnSummary[] = sortedColumns.map((col) => {
+      const colBlocks = col.partIndices
+        .map((idx) => blockByPartIndex.get(idx))
+        .filter((b): b is ContentBlock => b != null);
+      return {
+        agentId: col.agentId,
+        blocks: colBlocks,
+        isEmpty: colBlocks.length === 0,
+      };
+    });
+
+    sections.push({ groupId, columns });
+  }
+
+  return sections;
 }
 
 function getChatWidthClass(
@@ -602,7 +634,7 @@ function getChatWidthClass(
   if (hasParallel) {
     return 'md:max-w-[58rem] xl:max-w-[70rem]';
   }
-  return 'md:max-w-[47rem] xl:max-w-[55rem';
+  return 'md:max-w-[47rem] xl:max-w-[55rem]';
 }
 
 export default function useMessageRenderState(
@@ -659,7 +691,7 @@ export default function useMessageRenderState(
     );
 
     const content = message.content;
-    const safeContent = Array.isArray(content)
+    const safeContent: TMessageContentParts[] = Array.isArray(content)
       ? (content.filter(Boolean) as TMessageContentParts[])
       : [];
     const sequentialParts: PartWithIndex[] = safeContent.map((part, idx) => ({
@@ -674,15 +706,12 @@ export default function useMessageRenderState(
         return p?.groupId != null;
       },
     );
-    const parallelGroups = hasParallelContent
-      ? Array.from(
-          new Set(
-            safeContent
-              .map((p) => (p as unknown as { groupId?: string }).groupId)
-              .filter((g): g is string => Boolean(g)),
-          ),
-        )
-      : undefined;
+
+    const parallelSections = buildParallelSections(
+      safeContent,
+      blocks,
+      isLatestMessage ? isSubmitting : false,
+    );
 
     const toolCallGroups = buildToolCallGroups(
       sequentialParts,
@@ -691,6 +720,8 @@ export default function useMessageRenderState(
       isLatestMessage,
       lastContentIdx,
       message.messageId ?? '',
+      blocks,
+      safeContent,
     );
 
     const pendingSkills =
@@ -743,7 +774,7 @@ export default function useMessageRenderState(
       hasPendingSkills,
       hasParallelContent,
       chatWidthClass: getChatWidthClass(maximizeChatSpace, hasParallelContent),
-      parallelGroups,
+      parallelSections,
       toolCallGroups,
       showEmptyCursor,
       showThinkingCursor,
