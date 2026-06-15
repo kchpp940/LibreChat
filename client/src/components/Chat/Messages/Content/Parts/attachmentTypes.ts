@@ -1,7 +1,33 @@
 import { imageExtRegex } from 'librechat-data-provider';
-import type { TAttachment, TAttachmentMetadata, TFile } from 'librechat-data-provider';
+import type {
+  TAttachment,
+  TAttachmentMetadata,
+  TFile,
+  FileDisplayMetadata,
+} from 'librechat-data-provider';
 import type { ToolArtifactType } from '~/utils/artifacts';
 import { detectArtifactTypeFromFile } from '~/utils/artifacts';
+
+function getDisplayMetadata(
+  attachment: TAttachment,
+): FileDisplayMetadata & { width?: number; height?: number; text?: string } {
+  const file = attachment as TFile & TAttachmentMetadata;
+  if (file.display) {
+    return {
+      width: file.display.width ?? file.width,
+      height: file.display.height ?? file.height,
+      text: file.display.text ?? file.text,
+      textFormat: file.display.textFormat,
+      pageCount: file.display.pageCount,
+      duration: file.display.duration,
+    };
+  }
+  return {
+    width: file.width,
+    height: file.height,
+    text: file.text,
+  };
+}
 
 /**
  * Empty-folder placeholders the bash executor drops in the stateless
@@ -149,7 +175,8 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
   if (!attachment.filename) {
     return false;
   }
-  const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
+  const { filepath = null } = attachment as TFile & TAttachmentMetadata;
+  const { width, height } = getDisplayMetadata(attachment);
   return (
     imageExtRegex.test(attachment.filename) && width != null && height != null && filepath != null
   );
@@ -161,7 +188,7 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
  * treated as "no inline text available" and fall through to the download UI.
  */
 export const isTextAttachment = (attachment: TAttachment): boolean => {
-  const { text } = attachment as TFile & TAttachmentMetadata;
+  const { text } = getDisplayMetadata(attachment);
   return typeof text === 'string' && text.length > 0;
 };
 

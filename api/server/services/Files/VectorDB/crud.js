@@ -2,8 +2,15 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const { logger } = require('@librechat/data-schemas');
-const { FileSources } = require('librechat-data-provider');
+const { FileSources, IndexingStatus } = require('librechat-data-provider');
 const { logAxiosError, generateShortLivedToken } = require('@librechat/api');
+
+function isIndexed(file) {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return file.embedded === true;
+}
 
 /**
  * Deletes a file from the vector database. This function takes a file object, constructs the full path, and
@@ -18,7 +25,7 @@ const { logAxiosError, generateShortLivedToken } = require('@librechat/api');
  *          file path is invalid or if there is an error in deletion.
  */
 const deleteVectors = async (req, file) => {
-  if (!file.embedded || !process.env.RAG_API_URL) {
+  if (!isIndexed(file) || !process.env.RAG_API_URL) {
     return;
   }
   try {
@@ -109,6 +116,7 @@ async function uploadVectors({ req, file, file_id, entity_id, storageMetadata })
       filename: file.originalname,
       filepath: FileSources.vectordb,
       embedded: Boolean(responseData.known_type),
+      indexingStatus: responseData.known_type ? IndexingStatus.completed : IndexingStatus.failed,
     };
   } catch (error) {
     logAxiosError({

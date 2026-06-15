@@ -37,6 +37,11 @@ export function sanitizeFileForTransmit<T extends Partial<TFile>>(
   for (const field of FILE_STRIP_FIELDS) {
     delete sanitized[field as keyof typeof sanitized];
   }
+  // Also strip large text from display metadata while preserving other display fields
+  if (sanitized.display && typeof sanitized.display === 'object') {
+    sanitized.display = { ...sanitized.display };
+    delete (sanitized.display as Record<string, unknown>).text;
+  }
   return sanitized;
 }
 

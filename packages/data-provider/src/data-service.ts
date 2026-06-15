@@ -5,7 +5,6 @@ import * as permissions from './accessPermissions';
 import * as endpoints from './api-endpoints';
 import * as mcp from './types/mcpServers';
 import * as a from './types/assistants';
-import * as ta from './types/toolAvailability';
 import * as m from './types/mutations';
 import * as ag from './types/agents';
 import * as q from './types/queries';
@@ -494,12 +493,6 @@ export const createAgent = ({ ...data }: a.AgentCreateParams): Promise<a.Agent> 
 
 export const precheckAgent = (data: a.AgentPrecheckParams): Promise<a.AgentPrecheckResult> => {
   return request.post(endpoints.agents({ path: 'precheck' }), data);
-};
-
-export const resolveToolAvailability = (
-  data: ta.ResolveToolAvailabilityParams,
-): Promise<ta.ToolAvailabilityResult> => {
-  return request.post(endpoints.agents({ path: 'toolAvailability' }), data);
 };
 
 export const getAgentById = ({ agent_id }: { agent_id: string }): Promise<a.Agent> => {

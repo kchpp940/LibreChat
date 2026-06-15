@@ -2,14 +2,12 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useSearchParams } from 'react-router-dom';
 import { QueryClient, useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, EModelEndpoint, PermissionBits, dataService } from 'librechat-data-provider';
+import { QueryKeys, EModelEndpoint, PermissionBits } from 'librechat-data-provider';
 import type {
   AgentListResponse,
   TEndpointsConfig,
   TStartupConfig,
   TPreset,
-  TPlugin,
-  ToolAvailability,
 } from 'librechat-data-provider';
 import {
   clearModelForNonEphemeralAgent,
@@ -20,11 +18,9 @@ import {
   getConvoSwitchLogic,
   logger,
 } from '~/utils';
-import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage, useLocalize } from '~/hooks';
+import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage } from '~/hooks';
 import { startupConfigKey, useGetAgentByIdQuery } from '~/data-provider';
 import { useChatContext, useChatFormContext } from '~/Providers';
-import { useToastContext } from '@librechat/client';
-import { NotificationSeverity } from '~/common';
 import store from '~/store';
 
 const PROJECT_ID_SEARCH_PARAM = 'projectId';
@@ -67,8 +63,6 @@ export default function useQueryParams({
 
   const methods = useChatFormContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const localize = useLocalize();
-  const { showToast } = useToastContext();
   const getDefaultConversation = useDefaultConvo();
   const modularChat = useRecoilValue(store.modularChat);
   const availableTools = useRecoilValue(store.availableTools);
@@ -95,41 +89,11 @@ export default function useQueryParams({
    * Ensures tools compatibility and preserves existing conversation when appropriate.
    */
   const newQueryConvo = useCallback(
-    async (_newPreset?: TPreset) => {
+    (_newPreset?: TPreset) => {
       if (!_newPreset) {
         return;
       }
-
-      let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
-      const presetTools = _newPreset.tools;
-      if (presetTools && presetTools.length > 0) {
-        const toolKeys = presetTools.map((tool: string | TPlugin) =>
-          typeof tool === 'string' ? tool : tool.pluginKey,
-        );
-        const model =
-          typeof _newPreset.model === 'string'
-            ? _newPreset.model
-            : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
-        try {
-          const result = await dataService.resolveToolAvailability({
-            tools: toolKeys,
-            endpoint: _newPreset.endpoint ?? undefined,
-            model,
-            provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
-            enabledCapabilities: undefined,
-          });
-          toolAvailabilityMap = result.tools;
-        } catch (e) {
-          logger.error('queryParams', 'Failed to resolve tool availability for query params preset', e);
-          toolAvailabilityMap = undefined;
-          showToast({
-            message: 'Tool availability check failed. Tools have been disabled for safety.',
-            severity: NotificationSeverity.ERROR,
-          });
-        }
-      }
-
-      let newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
+      let newPreset = removeUnavailableTools(_newPreset, availableTools);
       if (newPreset.spec != null && newPreset.spec !== '') {
         const startupConfig = queryClient.getQueryData<TStartupConfig>(startupConfigKey(true));
         const modelSpecs = startupConfig?.modelSpecs?.list ?? [];

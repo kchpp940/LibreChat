@@ -1,6 +1,5 @@
 import { RefObject } from 'react';
 import { FileSources, EModelEndpoint, isEphemeralAgentId } from 'librechat-data-provider';
-import type { ToolAvailability } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type * as InputNumberPrimitive from 'rc-input-number';
 import type { SetterOrUpdater, RecoilState } from 'recoil';
@@ -214,15 +213,6 @@ export interface MCPServerInfo {
   isConnected: boolean;
   consumeOnly?: boolean;
   metadata: t.TPlugin;
-  availability?: ToolAvailability;
-}
-
-export interface AgentFormContext {
-  model?: string | null;
-  provider?: string | null;
-  endpoint?: string;
-  enabledCapabilities?: string[];
-  selectedTools?: string[];
 }
 
 export type AgentPanelContextType = {
@@ -241,12 +231,10 @@ export type AgentPanelContextType = {
   startupConfig?: t.TStartupConfig | null;
   agentsConfig?: t.TAgentsEndpoint | null;
   endpointsConfig?: t.TEndpointsConfig | null;
+  /** Pre-computed MCP server information indexed by server key */
   mcpServersMap: Map<string, MCPServerInfo>;
   availableMCPServers: MCPServerDefinition[];
   availableMCPServersMap: t.MCPServersListResponse | undefined;
-  toolAvailabilityMap: Record<string, ToolAvailability>;
-  formContext: AgentFormContext;
-  updateFormContext: (ctx: Partial<AgentFormContext>) => void;
 };
 
 export type AgentModelPanelProps = {
@@ -589,9 +577,13 @@ export interface ExtendedFile {
   progress: number;
   source?: FileSources;
   attached?: boolean;
+  /** @deprecated Use `indexingStatus` instead. */
   embedded?: boolean;
+  indexingStatus?: t.IndexingStatus;
+  purpose?: t.FilePurpose;
   tool_resource?: string;
   metadata?: t.TFile['metadata'];
+  display?: t.FileDisplayMetadata;
 }
 
 export interface ModelItemProps {

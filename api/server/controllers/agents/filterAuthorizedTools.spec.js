@@ -21,12 +21,6 @@ jest.mock('~/config', () => ({
   getMCPServersRegistry: jest.fn(() => ({
     getAllServerConfigs: mockGetAllServerConfigs,
   })),
-  getMCPManager: jest.fn(() => ({
-    getUserConnections: jest.fn(() => new Map()),
-    appConnections: {
-      getLoaded: jest.fn(() => Promise.resolve(new Map())),
-    },
-  })),
 }));
 
 jest.mock('~/server/services/MCP', () => ({
@@ -128,9 +122,6 @@ describe('MCP Tool Authorization', () => {
       params: {},
       query: {},
       app: { locals: { fileStrategy: 'local' } },
-      config: {
-        endpoints: {},
-      },
     };
 
     mockRes = {

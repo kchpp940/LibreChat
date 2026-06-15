@@ -1,4 +1,4 @@
-import type { TPreset, TPlugin, ToolAvailability } from 'librechat-data-provider';
+import type { TPreset, TPlugin } from 'librechat-data-provider';
 import { EModelEndpoint } from 'librechat-data-provider';
 
 type TEndpoints = Array<string | EModelEndpoint>;
@@ -53,39 +53,32 @@ export const getPresetTitle = (preset: TPreset, mention?: boolean) => {
   return `${title}${modelInfo}${label ? ` (${label})` : ''}`.trim();
 };
 
+/** Remove unavailable tools from the preset */
 export const removeUnavailableTools = (
   preset: TPreset,
-  _availableTools: Record<string, TPlugin | undefined>,
-  toolAvailabilityMap?: Record<string, ToolAvailability>,
-): TPreset => {
+  availableTools: Record<string, TPlugin | undefined>,
+) => {
   const newPreset = { ...preset };
 
-  if (!newPreset.tools || newPreset.tools.length === 0) {
-    return newPreset;
+  if (newPreset.tools && newPreset.tools.length > 0) {
+    newPreset.tools = newPreset.tools
+      .filter((tool) => {
+        let pluginKey: string;
+        if (typeof tool === 'string') {
+          pluginKey = tool;
+        } else {
+          ({ pluginKey } = tool);
+        }
+
+        return !!availableTools[pluginKey];
+      })
+      .map((tool) => {
+        if (typeof tool === 'string') {
+          return tool;
+        }
+        return tool.pluginKey;
+      });
   }
-
-  if (!toolAvailabilityMap) {
-    newPreset.tools = [];
-    return newPreset;
-  }
-
-  newPreset.tools = newPreset.tools
-    .filter((tool) => {
-      let pluginKey: string;
-      if (typeof tool === 'string') {
-        pluginKey = tool;
-      } else {
-        ({ pluginKey } = tool);
-      }
-
-      return toolAvailabilityMap[pluginKey]?.isAvailable === true;
-    })
-    .map((tool) => {
-      if (typeof tool === 'string') {
-        return tool;
-      }
-      return tool.pluginKey;
-    });
 
   return newPreset;
 };

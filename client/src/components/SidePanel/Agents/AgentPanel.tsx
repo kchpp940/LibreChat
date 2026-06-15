@@ -226,7 +226,6 @@ export default function AgentPanel() {
     endpointsConfig,
     setCurrentAgentId,
     agent_id: current_agent_id,
-    updateFormContext,
   } = useAgentPanelContext();
 
   const { onSelect: onSelectAgent } = useSelectAgent();
@@ -265,36 +264,6 @@ export default function AgentPanel() {
   const [precheckItems, setPrecheckItems] = useState<PrecheckItem[]>([]);
   const [showPrecheckDialog, setShowPrecheckDialog] = useState(false);
   const [pendingSubmitData, setPendingSubmitData] = useState<AgentForm | null>(null);
-
-  const watchedModel = useWatch({ control, name: 'model' });
-  const watchedProvider = useWatch({ control, name: 'provider' });
-  const watchedTools = useWatch({ control, name: 'tools' });
-  const watchedFileSearch = useWatch({ control, name: 'file_search' });
-  const watchedExecuteCode = useWatch({ control, name: 'execute_code' });
-  const watchedWebSearch = useWatch({ control, name: 'web_search' });
-
-  useMemo(() => {
-    const provider = typeof watchedProvider === 'string'
-      ? watchedProvider
-      : (watchedProvider as StringOption | undefined)?.value ?? null;
-    const enabledCapabilities: string[] = [];
-    if (watchedFileSearch) {
-      enabledCapabilities.push('file_search');
-    }
-    if (watchedExecuteCode) {
-      enabledCapabilities.push('execute_code');
-    }
-    if (watchedWebSearch) {
-      enabledCapabilities.push('web_search');
-    }
-    updateFormContext({
-      model: watchedModel,
-      provider,
-      endpoint: EModelEndpoint.agents,
-      enabledCapabilities,
-      selectedTools: watchedTools,
-    });
-  }, [watchedModel, watchedProvider, watchedTools, watchedFileSearch, watchedExecuteCode, watchedWebSearch, updateFormContext]);
   const precheckMutation = usePrecheckAgentMutation();
   const uploadAvatarMutation = useUploadAgentAvatarMutation({
     onSuccess: (updatedAgent) => {

@@ -1,23 +1,15 @@
 import { useCallback, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useSearchParams } from 'react-router-dom';
-import {
-  EModelEndpoint,
-  isAgentsEndpoint,
-  isAssistantsEndpoint,
-  dataService,
-} from 'librechat-data-provider';
+import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
 import type {
   TPreset,
   TModelSpec,
   TConversation,
   TAssistantsMap,
   TEndpointsConfig,
-  TPlugin,
-  ToolAvailability,
 } from 'librechat-data-provider';
 import type { MentionOption, ConvoGenerator } from '~/common';
-import { NotificationSeverity } from '~/common';
 import {
   clearModelForNonEphemeralAgent,
   removeUnavailableTools,
@@ -25,8 +17,7 @@ import {
   getConvoSwitchLogic,
   logger,
 } from '~/utils';
-import { useDefaultConvo, useLocalize } from '~/hooks';
-import { useToastContext } from '@librechat/client';
+import { useDefaultConvo } from '~/hooks';
 import store from '~/store';
 
 export default function useSelectMention({
@@ -47,8 +38,6 @@ export default function useSelectMention({
   getConversation: () => TConversation | null;
 }) {
   const getDefaultConversation = useDefaultConvo();
-  const localize = useLocalize();
-  const { showToast } = useToastContext();
   const modularChat = useRecoilValue(store.modularChat);
   const availableTools = useRecoilValue(store.availableTools);
   const [searchParams] = useSearchParams();
@@ -246,43 +235,14 @@ export default function useSelectMention({
   );
 
   const onSelectPreset = useCallback(
-    async (_newPreset?: TPreset) => {
+    (_newPreset?: TPreset) => {
       if (!_newPreset) {
         return;
       }
 
       const conversation = getConversation();
 
-      let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
-      const presetTools = _newPreset.tools;
-      if (presetTools && presetTools.length > 0) {
-        const toolKeys = presetTools.map((tool: string | TPlugin) =>
-          typeof tool === 'string' ? tool : tool.pluginKey,
-        );
-        const model =
-          typeof _newPreset.model === 'string'
-            ? _newPreset.model
-            : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
-        try {
-          const result = await dataService.resolveToolAvailability({
-            tools: toolKeys,
-            endpoint: _newPreset.endpoint ?? undefined,
-            model,
-            provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
-            enabledCapabilities: undefined,
-          });
-          toolAvailabilityMap = result.tools;
-        } catch (e) {
-          logger.error('mention', 'Failed to resolve tool availability for mention preset', e);
-          toolAvailabilityMap = undefined;
-          showToast({
-            message: 'Tool availability check failed. Tools have been disabled for safety.',
-            severity: NotificationSeverity.ERROR,
-          });
-        }
-      }
-
-      const newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
+      const newPreset = removeUnavailableTools(_newPreset, availableTools);
       const newEndpoint = newPreset.endpoint ?? '';
 
       const {

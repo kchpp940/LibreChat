@@ -9,8 +9,16 @@ const {
   EModelEndpoint,
   mergeFileConfig,
   getEndpointFileConfig,
+  IndexingStatus,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
+
+function isIndexed(file) {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return !!file.embedded;
+}
 
 /**
  * Converts a readable stream to a base64 encoded string.
@@ -176,7 +184,8 @@ async function encodeAndFormat(req, files, params, mode) {
       file_id: file.file_id,
       filepath: file.filepath,
       filename: file.filename,
-      embedded: !!file.embedded,
+      embedded: isIndexed(file),
+      indexingStatus: file.indexingStatus ?? (isIndexed(file) ? IndexingStatus.completed : IndexingStatus.not_required),
       metadata: file.metadata,
     };
 

@@ -1,5 +1,11 @@
 import mongoose, { Schema } from 'mongoose';
-import { FileContext, FileSources } from 'librechat-data-provider';
+import {
+  FileContext,
+  FileSources,
+  FilePurpose,
+  IndexingStatus,
+  FileVisibility,
+} from 'librechat-data-provider';
 import type { IMongoFile } from '~/types';
 
 const file: Schema<IMongoFile> = new Schema(
@@ -117,6 +123,37 @@ const file: Schema<IMongoFile> = new Schema(
     },
     width: Number,
     height: Number,
+    purpose: {
+      type: String,
+      enum: Object.values(FilePurpose),
+      required: true,
+      default: FilePurpose.unknown,
+      index: true,
+    },
+    indexingStatus: {
+      type: String,
+      enum: Object.values(IndexingStatus),
+      required: true,
+      default: IndexingStatus.not_required,
+      index: true,
+    },
+    visibility: {
+      type: String,
+      enum: Object.values(FileVisibility),
+      required: true,
+      default: FileVisibility.private,
+    },
+    display: {
+      width: Number,
+      height: Number,
+      text: String,
+      textFormat: {
+        type: String,
+        enum: ['html', 'text'],
+      },
+      pageCount: Number,
+      duration: Number,
+    },
     metadata: {
       codeEnvRef: {
         type: new Schema(
@@ -134,6 +171,10 @@ const file: Schema<IMongoFile> = new Schema(
           { _id: false },
         ),
         default: undefined,
+      },
+      indexingError: {
+        type: String,
+        maxlength: 500,
       },
     },
     expiresAt: {

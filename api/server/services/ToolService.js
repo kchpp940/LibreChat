@@ -29,7 +29,6 @@ const {
   buildMCPAuthRunStepDeltaEvent,
   buildMCPAuthRunStepCompletedEvent,
   isFileAuthoringToolDefinition,
-  resolveToolAvailability,
 } = require('@librechat/api');
 const {
   Time,
@@ -51,7 +50,6 @@ const {
   actionDomainSeparator,
   defaultAgentCapabilities,
   validateAndParseOpenAPISpec,
-  supportsToolCalling,
 } = require('librechat-data-provider');
 const {
   createActionTool,
@@ -77,93 +75,10 @@ const { recordUsage } = require('~/server/services/Threads');
 const { loadTools } = require('~/app/clients/tools/util');
 const { redactMessage } = require('~/config/parsers');
 const { findPluginAuthsByKeys } = require('~/models');
-const { getFlowStateManager, getMCPServersRegistry, getMCPManager } = require('~/config');
+const { getFlowStateManager, getMCPServersRegistry } = require('~/config');
 const { getLogStores } = require('~/cache');
 
 const domainSeparatorRegex = new RegExp(actionDomainSeparator, 'g');
-
-function buildToolAvailabilityDeps(req) {
-  const mcpPermissionContext = createMCPPermissionContext(req);
-  return {
-    getCachedTools: () => getCachedTools().then((t) => t ?? {}),
-    isActionDomainAllowed: (domain, allowedDomains, allowedAddresses) =>
-      isActionDomainAllowed(domain, allowedDomains, allowedAddresses),
-    canUseMCPServers: (user) => mcpPermissionContext.canUseServers(user ?? req.user),
-    getAllMCPServerConfigs: async (userId, configServers, role) => {
-      const registry = getMCPServersRegistry();
-      if (role !== undefined) {
-        return (await registry.getAllServerConfigs(userId, configServers, role)) ?? {};
-      }
-      return (await registry.getAllServerConfigs(userId, configServers)) ?? {};
-    },
-    getMCPConnectionStatus: async (userId, serverNames) => {
-      const result = {};
-      try {
-        const mcpManager = getMCPManager(userId);
-        if (!mcpManager) {
-          return result;
-        }
-        let userConnections = new Map();
-        let appConnections = new Map();
-        try {
-          userConnections = mcpManager.getUserConnections?.(userId) || new Map();
-        } catch (e) {
-          // ignore
-        }
-        try {
-          appConnections = (await mcpManager.appConnections?.getLoaded?.()) || new Map();
-        } catch (e) {
-          // ignore
-        }
-        for (const serverName of serverNames) {
-          const userConn = userConnections.get?.(serverName);
-          const appConn = appConnections.get?.(serverName);
-          const conn = userConn || appConn;
-          if (conn) {
-            result[serverName] = {
-              connectionState: conn.connectionState || 'connected',
-            };
-          }
-        }
-      } catch (e) {
-        logger.warn('[buildToolAvailabilityDeps] Failed to get MCP connection status', e.message);
-      }
-      return result;
-    },
-    getMCPUserAuthMap: (params) =>
-      getUserMCPAuthMap({
-        ...params,
-        findPluginAuthsByKeys,
-      }),
-    getMissingMCPCustomUserVars: getMissingCustomUserVars,
-    appConfig: req.config,
-    endpointsConfig: req.config?.endpoints,
-    resolveConfigServers: () => resolveConfigServers(req),
-    isEphemeralAgentId,
-    defaultAgentCapabilities,
-    supportsToolCalling: (model, provider, endpoint) =>
-      supportsToolCalling(model, provider, endpoint),
-  };
-}
-
-async function filterToolsByAvailability(tools, req, agentId) {
-  if (!tools || tools.length === 0) {
-    return [];
-  }
-  const deps = buildToolAvailabilityDeps(req);
-  const result = await resolveToolAvailability(
-    {
-      tools,
-      userId: req.user.id,
-      userRole: req.user.role,
-      agentId,
-      checkMCPConnection: false,
-      checkMCPPermissions: true,
-    },
-    deps,
-  );
-  return result.availableToolKeys;
-}
 
 /**
  * Collapse every `actionDomainSeparator` sequence in the encoded-domain
@@ -637,14 +552,38 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   const enabledCapabilities = await resolveAgentCapabilities(req, appConfig, agent.id);
 
   const checkCapability = (capability) => enabledCapabilities.has(capability);
+  const areToolsEnabled = checkCapability(AgentCapabilities.tools);
   const actionsEnabled = checkCapability(AgentCapabilities.actions);
   const deferredToolsEnabled = checkCapability(AgentCapabilities.deferred_tools);
   const programmaticToolsEnabled = enabledCapabilities.has(AgentCapabilities.programmatic_tools);
   const codeExecutionEnabled =
     agent.tools?.includes(Tools.execute_code) === true &&
     enabledCapabilities.has(AgentCapabilities.execute_code);
+  const hasMCPTools = agent.tools?.some((tool) => tool?.includes(Constants.mcp_delimiter));
+  const mcpPermissionContext = createMCPPermissionContext(req);
+  const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
-  const filteredTools = await filterToolsByAvailability(agent.tools, req, agent.id);
+  const filteredTools = agent.tools?.filter((tool) => {
+    if (tool === Tools.file_search) {
+      return checkCapability(AgentCapabilities.file_search);
+    }
+    if (tool === Tools.execute_code) {
+      return checkCapability(AgentCapabilities.execute_code);
+    }
+    if (tool === Tools.web_search) {
+      return checkCapability(AgentCapabilities.web_search);
+    }
+    if (isActionTool(tool)) {
+      return actionsEnabled;
+    }
+    if (tool?.includes(Constants.mcp_delimiter)) {
+      return areToolsEnabled && canUseMCP;
+    }
+    if (!areToolsEnabled) {
+      return false;
+    }
+    return true;
+  });
 
   if (!filteredTools || filteredTools.length === 0) {
     return { toolDefinitions: [] };
@@ -1174,9 +1113,28 @@ async function loadAgentTools({
   };
   const areToolsEnabled = checkCapability(AgentCapabilities.tools);
   const actionsEnabled = checkCapability(AgentCapabilities.actions);
+  const hasMCPTools = agent.tools?.some((tool) => tool?.includes(Constants.mcp_delimiter));
+  const mcpPermissionContext = createMCPPermissionContext(req);
+  const canUseMCP = hasMCPTools ? await mcpPermissionContext.canUseServers(req.user) : true;
 
-  const _agentTools = await filterToolsByAvailability(agent.tools, req, agent.id);
-  const includesWebSearch = _agentTools.includes(Tools.web_search);
+  let includesWebSearch = false;
+  const _agentTools = agent.tools?.filter((tool) => {
+    if (tool === Tools.file_search) {
+      return checkCapability(AgentCapabilities.file_search);
+    } else if (tool === Tools.execute_code) {
+      return checkCapability(AgentCapabilities.execute_code);
+    } else if (tool === Tools.web_search) {
+      includesWebSearch = checkCapability(AgentCapabilities.web_search);
+      return includesWebSearch;
+    } else if (isActionTool(tool)) {
+      return actionsEnabled;
+    } else if (tool?.includes(Constants.mcp_delimiter)) {
+      return areToolsEnabled && canUseMCP;
+    } else if (!areToolsEnabled) {
+      return false;
+    }
+    return true;
+  });
 
   if (!_agentTools || _agentTools.length === 0) {
     return {};

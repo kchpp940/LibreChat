@@ -10,7 +10,6 @@ import type {
   TPluginAction,
   TPlugin,
   TError,
-  ToolPermissionStatus,
 } from 'librechat-data-provider';
 import type { AgentForm, ToolDialogProps } from '~/common';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
@@ -29,7 +28,7 @@ function ToolSelectDialog({
   const isAgentTools = isAgentsEndpoint(endpoint);
   const { getValues, setValue } = useFormContext<AgentForm>();
   // Only use regular tools, not MCP tools
-  const { regularTools, toolAvailabilityMap } = useAgentPanelContext();
+  const { regularTools } = useAgentPanelContext();
 
   const {
     maxPage,
@@ -103,13 +102,12 @@ function ToolSelectDialog({
 
   const onAddTool = (pluginKey: string) => {
     setShowPluginAuthForm(false);
+    // Find the tool in regularTools
     const availablePluginFromKey = regularTools?.find((p) => p.pluginKey === pluginKey);
     setSelectedPlugin(availablePluginFromKey);
 
-    const toolAvailability = toolAvailabilityMap[pluginKey];
-    const requiresAuth = toolAvailability?.permissionStatus === ('requires_auth' as ToolPermissionStatus);
-
-    if (requiresAuth) {
+    const { authConfig, authenticated = false } = availablePluginFromKey ?? {};
+    if (authConfig && authConfig.length > 0 && !authenticated) {
       setShowPluginAuthForm(true);
     } else {
       handleInstall({
@@ -234,7 +232,6 @@ function ToolSelectDialog({
                           metadata: tool,
                         }}
                         isInstalled={getValues('tools')?.includes(tool.pluginKey) || false}
-                        availability={toolAvailabilityMap[tool.pluginKey]}
                         onAddTool={() => onAddTool(tool.pluginKey)}
                         onRemoveTool={() => onRemoveTool(tool.pluginKey)}
                       />

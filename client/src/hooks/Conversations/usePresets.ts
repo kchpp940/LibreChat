@@ -1,18 +1,18 @@
 import filenamify from 'filenamify';
 import exportFromJSON from 'export-from-json';
 import { useToastContext } from '@librechat/client';
-import { QueryKeys, dataService } from 'librechat-data-provider';
+import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useSetRecoilState, useRecoilValue } from 'recoil';
 import { useCreatePresetMutation, useGetModelsQuery } from 'librechat-data-provider/react-query';
-import type { TPreset, TEndpointsConfig, TPlugin, ToolAvailability } from 'librechat-data-provider';
+import type { TPreset, TEndpointsConfig } from 'librechat-data-provider';
 import {
   useUpdatePresetMutation,
   useDeletePresetMutation,
   useGetPresetsQuery,
 } from '~/data-provider';
-import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic, logger } from '~/utils';
+import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic } from '~/utils';
 import useGetConversation from '~/hooks/Conversations/useGetConversation';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -162,43 +162,13 @@ export default function usePresets(index = 0) {
     importPreset(jsonPreset);
   };
 
-  const onSelectPreset = async (_newPreset: TPreset) => {
+  const onSelectPreset = (_newPreset: TPreset) => {
     if (!_newPreset) {
       return;
     }
 
     const conversation = getConversation();
-
-    let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
-    const presetTools = _newPreset.tools;
-    if (presetTools && presetTools.length > 0) {
-      const toolKeys = presetTools.map((tool: string | TPlugin) =>
-        typeof tool === 'string' ? tool : tool.pluginKey,
-      );
-      const model =
-        typeof _newPreset.model === 'string'
-          ? _newPreset.model
-          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
-      try {
-        const result = await dataService.resolveToolAvailability({
-          tools: toolKeys,
-          endpoint: _newPreset.endpoint ?? undefined,
-          model,
-          provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
-          enabledCapabilities: undefined,
-        });
-        toolAvailabilityMap = result.tools;
-      } catch (e) {
-        logger.error('presets', 'Failed to resolve tool availability for preset', e);
-        toolAvailabilityMap = undefined;
-        showToast({
-          message: 'Tool availability check failed. Tools have been disabled for safety.',
-          severity: NotificationSeverity.ERROR,
-        });
-      }
-    }
-
-    const newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
+    const newPreset = removeUnavailableTools(_newPreset, availableTools);
 
     const toastTitle = newPreset.title
       ? `"${newPreset.title}"`

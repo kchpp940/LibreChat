@@ -1,5 +1,5 @@
-import { XCircle, PlusCircleIcon, Wrench, AlertCircle } from 'lucide-react';
-import type { AgentToolType, ToolAvailability } from 'librechat-data-provider';
+import { XCircle, PlusCircleIcon, Wrench } from 'lucide-react';
+import type { AgentToolType } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 
 type MCPToolItemProps = {
@@ -9,7 +9,6 @@ type MCPToolItemProps = {
   isInstalled?: boolean;
   isConfiguring?: boolean;
   isInitializing?: boolean;
-  availability?: ToolAvailability;
 };
 
 function MCPToolItem({
@@ -19,7 +18,6 @@ function MCPToolItem({
   isInstalled = false,
   isConfiguring = false,
   isInitializing = false,
-  availability,
 }: MCPToolItemProps) {
   const localize = useLocalize();
   const handleClick = () => {
@@ -34,19 +32,8 @@ function MCPToolItem({
   const description = tool.metadata?.description || '';
   const icon = tool.metadata?.icon;
 
-  const isAvailable = availability ? availability.isAvailable : true;
-  const unavailabilityMessage = availability?.message;
-
+  // Determine button state and text
   const getButtonState = () => {
-    if (!isAvailable && !isInstalled) {
-      return {
-        text: localize('com_ui_unavailable'),
-        icon: <AlertCircle className="flex h-4 w-4 items-center stroke-2" aria-hidden="true" />,
-        className: 'btn btn-neutral border-token-border-light relative opacity-50 cursor-not-allowed',
-        disabled: true,
-      };
-    }
-
     if (isInstalled) {
       return {
         text: localize('com_nav_tool_remove'),
@@ -121,12 +108,6 @@ function MCPToolItem({
         </div>
       </div>
       <div className="line-clamp-3 h-[60px] text-sm text-text-secondary">{description}</div>
-      {!isAvailable && unavailabilityMessage && (
-        <div className="flex items-start gap-1 text-xs text-red-500 dark:text-red-400">
-          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-          <span>{unavailabilityMessage}</span>
-        </div>
-      )}
     </div>
   );
 }

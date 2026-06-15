@@ -39,6 +39,82 @@ export enum FileContext {
   bytes = 'bytes',
 }
 
+export enum FilePurpose {
+  message_attachment = 'message_attachment',
+  rag_knowledge = 'rag_knowledge',
+  agent_resource = 'agent_resource',
+  assistant_resource = 'assistant_resource',
+  code_execution_output = 'code_execution_output',
+  image_generation_result = 'image_generation_result',
+  tool_output = 'tool_output',
+  skill_file = 'skill_file',
+  avatar = 'avatar',
+  unknown = 'unknown',
+  vision = 'vision',
+  fine_tune = 'fine-tune',
+  fine_tune_results = 'fine-tune-results',
+  assistants = 'assistants',
+  assistants_output = 'assistants_output',
+}
+
+export enum IndexingStatus {
+  not_required = 'not_required',
+  pending = 'pending',
+  indexing = 'indexing',
+  completed = 'completed',
+  failed = 'failed',
+}
+
+export enum FileVisibility {
+  private = 'private',
+  conversation = 'conversation',
+  workspace = 'workspace',
+  public = 'public',
+}
+
+export type FileDisplayMetadata = {
+  width?: number;
+  height?: number;
+  text?: string;
+  textFormat?: 'html' | 'text' | null;
+  pageCount?: number;
+  duration?: number;
+};
+
+export const purposeFromContext = (context?: FileContext): FilePurpose => {
+  switch (context) {
+    case FileContext.message_attachment:
+      return FilePurpose.message_attachment;
+    case FileContext.agents:
+      return FilePurpose.agent_resource;
+    case FileContext.assistants:
+      return FilePurpose.assistant_resource;
+    case FileContext.assistants_output:
+      return FilePurpose.tool_output;
+    case FileContext.execute_code:
+      return FilePurpose.code_execution_output;
+    case FileContext.image_generation:
+      return FilePurpose.image_generation_result;
+    case FileContext.skill_file:
+      return FilePurpose.skill_file;
+    case FileContext.avatar:
+      return FilePurpose.avatar;
+    default:
+      return FilePurpose.unknown;
+  }
+};
+
+export const indexingStatusFromEmbedded = (embedded?: boolean): IndexingStatus => {
+  if (embedded === true) {
+    return IndexingStatus.completed;
+  }
+  return IndexingStatus.not_required;
+};
+
+export const embeddedFromIndexingStatus = (status?: IndexingStatus): boolean => {
+  return status === IndexingStatus.completed;
+};
+
 export type EndpointFileConfig = {
   disabled?: boolean;
   fileLimit?: number;
@@ -114,6 +190,7 @@ export type TFile = {
   file_id: string;
   temp_file_id?: string;
   bytes: number;
+  /** @deprecated Use `indexingStatus` instead. Maintained for backward compatibility. */
   embedded: boolean;
   filename: string;
   filepath: string;
@@ -123,10 +200,13 @@ export type TFile = {
   context?: FileContext;
   source?: FileSources;
   filterSource?: FileSources;
+  /** @deprecated Use `display.width` and `display.height` instead. */
   width?: number;
+  /** @deprecated Use `display.width` and `display.height` instead. */
   height?: number;
   expiresAt?: string | Date;
   preview?: string;
+  /** @deprecated Use `display.text` instead. */
   text?: string;
   /**
    * Format of the `text` field. `'html'` means the backend produced
@@ -135,6 +215,7 @@ export type TFile = {
    * `undefined` for legacy records) is plain text and MUST NOT be
    * injected as HTML — render through the markdown/escaping path.
    * See Codex P1 review on PR #12934.
+   * @deprecated Use `display.textFormat` instead.
    */
   textFormat?: 'html' | 'text' | null;
   /**
@@ -151,6 +232,14 @@ export type TFile = {
    * Suitable for tooltip text but not user-facing prose.
    */
   previewError?: string;
+  /** Unified file purpose - replaces inference from context/source/type fields. */
+  purpose?: FilePurpose;
+  /** RAG indexing status - replaces `embedded` boolean with full lifecycle states. */
+  indexingStatus?: IndexingStatus;
+  /** File visibility scope. */
+  visibility?: FileVisibility;
+  /** Display metadata - unified location for all rendering-related fields. */
+  display?: FileDisplayMetadata;
   metadata?: {
     fileIdentifier?: string;
     /**
@@ -159,6 +248,8 @@ export type TFile = {
      * resolve via `resolveCodeEnvRef`.
      */
     codeEnvRef?: CodeEnvRef;
+    /** Error details when indexingStatus === 'failed'. */
+    indexingError?: string;
   };
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -247,10 +338,68 @@ export type BatchFile = {
   filepath: string;
   storageRegion?: string;
   storageKey?: string;
+  /** @deprecated Use `indexingStatus` instead. */
   embedded: boolean;
   source: FileSources;
   temp_file_id?: string;
+  purpose?: FilePurpose;
+  indexingStatus?: IndexingStatus;
 };
+
+export function normalizeFileMetadata<T extends Partial<TFile>>(file: T): T {
+  const normalized = { ...file };
+
+  if (normalized.indexingStatus === undefined && normalized.embedded !== undefined) {
+    normalized.indexingStatus = indexingStatusFromEmbedded(normalized.embedded);
+  }
+  if (normalized.embedded === undefined && normalized.indexingStatus !== undefined) {
+    normalized.embedded = embeddedFromIndexingStatus(normalized.indexingStatus);
+  }
+
+  if (normalized.purpose === undefined && normalized.context !== undefined) {
+    normalized.purpose = purposeFromContext(normalized.context);
+  }
+
+  if (normalized.visibility === undefined) {
+    normalized.visibility = normalized.conversationId
+      ? FileVisibility.conversation
+      : FileVisibility.private;
+  }
+
+  if (normalized.display === undefined) {
+    normalized.display = {
+      width: normalized.width,
+      height: normalized.height,
+      text: normalized.text,
+      textFormat: normalized.textFormat,
+    };
+  } else {
+    if (normalized.display.width === undefined && normalized.width !== undefined) {
+      normalized.display.width = normalized.width;
+    }
+    if (normalized.display.height === undefined && normalized.height !== undefined) {
+      normalized.display.height = normalized.height;
+    }
+    if (normalized.display.text === undefined && normalized.text !== undefined) {
+      normalized.display.text = normalized.text;
+    }
+    if (normalized.display.textFormat === undefined && normalized.textFormat !== undefined) {
+      normalized.display.textFormat = normalized.textFormat;
+    }
+  }
+
+  return normalized as T;
+}
+
+export function createFileDefaults(): Partial<TFile> {
+  return {
+    purpose: FilePurpose.unknown,
+    indexingStatus: IndexingStatus.not_required,
+    visibility: FileVisibility.private,
+    display: {},
+    embedded: false,
+  };
+}
 
 export type DeleteFilesBody = {
   files: BatchFile[];

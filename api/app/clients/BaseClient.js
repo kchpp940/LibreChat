@@ -24,10 +24,18 @@ const {
   supportsBalanceCheck,
   isBedrockDocumentType,
   getEndpointFileConfig,
+  IndexingStatus,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { logViolation } = require('~/cache');
 const TextStream = require('./TextStream');
+
+function isIndexed(file) {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return file.embedded === true;
+}
 const db = require('~/models');
 
 class BaseClient {
@@ -1235,7 +1243,7 @@ class BaseClient {
         continue;
       }
       if (
-        file.embedded === true ||
+        isIndexed(file) ||
         file.metadata?.codeEnvRef != null ||
         file.metadata?.fileIdentifier != null
       ) {

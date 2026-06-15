@@ -1,8 +1,69 @@
-import { EToolResources, FileContext } from 'librechat-data-provider';
+import {
+  EToolResources,
+  FileContext,
+  FilePurpose,
+  IndexingStatus,
+  FileVisibility,
+  indexingStatusFromEmbedded,
+  embeddedFromIndexingStatus,
+  purposeFromContext,
+} from 'librechat-data-provider';
 import type { FilterQuery, SortOrder, Model } from 'mongoose';
 import type { IMongoFile } from '~/types/file';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import logger from '../config/winston';
+
+function normalizeFileData(data: Partial<IMongoFile>): Partial<IMongoFile> {
+  const normalized = { ...data };
+
+  if (normalized.indexingStatus === undefined && normalized.embedded !== undefined) {
+    normalized.indexingStatus = indexingStatusFromEmbedded(normalized.embedded);
+  }
+  if (normalized.embedded === undefined && normalized.indexingStatus !== undefined) {
+    normalized.embedded = embeddedFromIndexingStatus(normalized.indexingStatus);
+  }
+
+  if (normalized.purpose === undefined && normalized.context !== undefined) {
+    normalized.purpose = purposeFromContext(normalized.context as FileContext);
+  }
+
+  if (normalized.visibility === undefined) {
+    normalized.visibility = normalized.conversationId
+      ? FileVisibility.conversation
+      : FileVisibility.private;
+  }
+
+  if (normalized.display === undefined) {
+    normalized.display = {};
+  }
+
+  const display = normalized.display || {};
+  if (display.width === undefined && normalized.width !== undefined) {
+    display.width = normalized.width;
+  }
+  if (display.height === undefined && normalized.height !== undefined) {
+    display.height = normalized.height;
+  }
+  if (display.text === undefined && normalized.text !== undefined) {
+    display.text = normalized.text;
+  }
+  if (display.textFormat === undefined && normalized.textFormat !== undefined) {
+    display.textFormat = normalized.textFormat;
+  }
+  normalized.display = display;
+
+  if (normalized.purpose === undefined) {
+    normalized.purpose = FilePurpose.unknown;
+  }
+  if (normalized.indexingStatus === undefined) {
+    normalized.indexingStatus = IndexingStatus.not_required;
+  }
+  if (normalized.embedded === undefined) {
+    normalized.embedded = false;
+  }
+
+  return normalized;
+}
 
 /** Factory function that takes mongoose instance and returns the file methods */
 export function createFileMethods(mongoose: typeof import('mongoose')): {
@@ -128,7 +189,9 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
         orConditions.push({ text: { $exists: true, $ne: null }, context: FileContext.agents });
       }
       if (toolResourceSet.has(EToolResources.file_search)) {
-        orConditions.push({ embedded: true });
+        orConditions.push({
+          $or: [{ embedded: true }, { indexingStatus: IndexingStatus.completed }],
+        });
       }
 
       // If no conditions to match, return empty
@@ -268,9 +331,16 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
   }): Promise<IMongoFile> {
     const File = mongoose.models.File as Model<IMongoFile>;
     const tenantFilter = data.tenantId ? { tenantId: data.tenantId } : { tenantId: null };
-    const insertData = data.tenantId
+    const baseInsertData = data.tenantId
       ? { file_id: data.file_id, user: data.user, tenantId: data.tenantId }
       : { file_id: data.file_id, user: data.user };
+    const insertData = normalizeFileData({
+      ...baseInsertData,
+      context: FileContext.execute_code,
+      purpose: FilePurpose.code_execution_output,
+      visibility: FileVisibility.conversation,
+      indexingStatus: IndexingStatus.not_required,
+    });
     const result = await File.findOneAndUpdate(
       {
         filename: data.filename,
@@ -300,8 +370,9 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
     disableTTL?: boolean,
   ): Promise<IMongoFile | null> {
     const File = mongoose.models.File as Model<IMongoFile>;
+    const normalizedData = normalizeFileData(data);
     const fileData: Partial<IMongoFile> = {
-      ...data,
+      ...normalizedData,
       expiresAt: new Date(Date.now() + 3600 * 1000),
     };
 
@@ -338,8 +409,9 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
   ): Promise<IMongoFile | null> {
     const File = mongoose.models.File as Model<IMongoFile>;
     const { file_id, ...update } = data;
+    const normalizedUpdate = normalizeFileData(update);
     const updateOperation = {
-      $set: update,
+      $set: normalizedUpdate,
       $unset: { expiresAt: '' },
     };
     const query: FilterQuery<IMongoFile> = extraFilter ? { file_id, ...extraFilter } : { file_id };

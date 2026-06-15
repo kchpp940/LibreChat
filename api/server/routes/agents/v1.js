@@ -47,7 +47,6 @@ router.get('/categories', v1.getAgentCategories);
  * @returns {AgentPrecheckResult} 200 - Precheck result with errors and warnings
  */
 router.post('/precheck', checkAgentCreate, v1.precheckAgent);
-router.post('/toolAvailability', requireJwtAuth, configMiddleware, v1.getToolAvailability);
 /**
  * Creates an agent.
  * @route POST /agents

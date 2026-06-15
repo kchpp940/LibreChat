@@ -1,6 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
-import { FileSources, LocalStorageKeys } from 'librechat-data-provider';
+import {
+  FileSources,
+  LocalStorageKeys,
+  IndexingStatus,
+} from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import useResetArtifactsOnConversationChange from '~/hooks/Artifacts/useResetArtifactsOnConversationChange';
 import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
@@ -10,6 +14,13 @@ import Artifacts from '~/components/Artifacts/Artifacts';
 import { SidePanelGroup } from '~/components/SidePanel';
 import { useSetFilesToDelete } from '~/hooks';
 import store from '~/store';
+
+function isIndexed(file: { embedded?: boolean; indexingStatus?: IndexingStatus }): boolean {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return !!(file.embedded ?? false);
+}
 
 export default function Presentation({ children }: { children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);
@@ -43,13 +54,14 @@ export default function Presentation({ children }: { children: React.ReactNode }
     const files = Object.values(map)
       .filter(
         (file) =>
-          file.filepath != null && file.source && !(file.embedded ?? false) && file.temp_file_id,
+          file.filepath != null && file.source && !isIndexed(file) && file.temp_file_id,
       )
       .map((file) => ({
         file_id: file.file_id,
         filepath: file.filepath as string,
         source: file.source as FileSources,
-        embedded: !!(file.embedded ?? false),
+        embedded: isIndexed(file),
+        indexingStatus: file.indexingStatus,
       }));
 
     if (files.length === 0) {

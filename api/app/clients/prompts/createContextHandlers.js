@@ -1,6 +1,14 @@
 const axios = require('axios');
 const { logger } = require('@librechat/data-schemas');
 const { isEnabled, generateShortLivedToken } = require('@librechat/api');
+const { IndexingStatus } = require('librechat-data-provider');
+
+function isIndexed(file) {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return !!file.embedded;
+}
 
 const footer = `Use the context as your learned knowledge to better answer the user.
 
@@ -47,7 +55,7 @@ function createContextHandlers(req, userMessageContent) {
   };
 
   const processFile = async (file) => {
-    if (file.embedded && !processedIds.has(file.file_id)) {
+    if (isIndexed(file) && !processedIds.has(file.file_id)) {
       try {
         const promise = query(file);
         queryPromises.push(promise);

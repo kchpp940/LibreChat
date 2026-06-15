@@ -1,5 +1,11 @@
 import { Document, Types } from 'mongoose';
-import type { CodeEnvRef } from 'librechat-data-provider';
+import type {
+  CodeEnvRef,
+  FilePurpose,
+  IndexingStatus,
+  FileVisibility,
+  FileDisplayMetadata,
+} from 'librechat-data-provider';
 
 export interface IMongoFile extends Omit<Document, 'model'> {
   user: Types.ObjectId;
@@ -8,6 +14,7 @@ export interface IMongoFile extends Omit<Document, 'model'> {
   file_id: string;
   temp_file_id?: string;
   bytes: number;
+  /** @deprecated Use `display.text` instead. */
   text?: string;
   /**
    * Format of the `text` field — `'html'` when the backend produced
@@ -18,6 +25,7 @@ export interface IMongoFile extends Omit<Document, 'model'> {
    * `'text'` and refuse to inject the value into HTML contexts —
    * otherwise plain document text containing `<script>` tags would
    * become executable markup. See Codex P1 review on PR #12934.
+   * @deprecated Use `display.textFormat` instead.
    */
   textFormat?: 'html' | 'text';
   /**
@@ -54,14 +62,21 @@ export interface IMongoFile extends Omit<Document, 'model'> {
   storageKey?: string;
   storageRegion?: string;
   object: 'file';
+  /** @deprecated Use `indexingStatus` instead. */
   embedded?: boolean;
   type: string;
   context?: string;
   usage: number;
   source: string;
   model?: string;
+  /** @deprecated Use `display.width` and `display.height` instead. */
   width?: number;
+  /** @deprecated Use `display.width` and `display.height` instead. */
   height?: number;
+  purpose: FilePurpose;
+  indexingStatus: IndexingStatus;
+  visibility: FileVisibility;
+  display: FileDisplayMetadata;
   metadata?: {
     /**
      * Code-environment cache pointer for files re-uploadable to
@@ -70,6 +85,8 @@ export interface IMongoFile extends Omit<Document, 'model'> {
      * derive the sessionKey explicitly.
      */
     codeEnvRef?: CodeEnvRef;
+    /** Error details when indexingStatus === 'failed'. */
+    indexingError?: string;
   };
   expiresAt?: Date;
   expiredAt?: Date | null;

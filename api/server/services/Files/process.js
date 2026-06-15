@@ -17,6 +17,7 @@ const {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   documentParserMimeTypes,
+  IndexingStatus,
 } = require('librechat-data-provider');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
@@ -27,6 +28,13 @@ const {
   sweepExpiredFiles: sweepExpiredFilesWithDeps,
   startExpiredFileSweep: startExpiredFileSweepWithDeps,
 } = require('@librechat/api');
+
+function isIndexed(file) {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return file.embedded === true;
+}
 const {
   convertImage,
   resizeAndConvert,
@@ -163,7 +171,7 @@ const getDeleteMethod = ({ source, deletionMethods }) => {
 const createDeleteFileWithSecondaryStorage = ({ source, deleteFile, deletionMethods }) => {
   return async (req, file, openai) => {
     const secondaryDeleteMethods = [];
-    if (file.embedded === true && source !== FileSources.vectordb) {
+    if (isIndexed(file) && source !== FileSources.vectordb) {
       secondaryDeleteMethods.push(
         getDeleteMethod({ source: FileSources.vectordb, deletionMethods }),
       );
@@ -581,6 +589,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
     storageKey: _storageKey,
     storageRegion: _storageRegion,
     embedded,
+    indexingStatus,
     height,
     width,
   } = await sanitizedUploadFn({
@@ -641,6 +650,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
       type: file.mimetype,
       ...(await getRetentionExpiry(req)),
       embedded,
+      indexingStatus,
       source,
       height,
       width,
@@ -918,8 +928,10 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
   } = storageResult;
   // For RAG files, use embedding result; for others, use storage result
   let embedded = storageResult.embedded;
+  let indexingStatus = storageResult.indexingStatus;
   if (tool_resource === EToolResources.file_search) {
     embedded = embeddingResult?.embedded;
+    indexingStatus = embeddingResult?.indexingStatus;
     filename = embeddingResult?.filename || filename;
   }
 
@@ -975,6 +987,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       metadata: fileInfoMetadata,
       type: file.mimetype,
       embedded,
+      indexingStatus,
       source,
       height,
       width,

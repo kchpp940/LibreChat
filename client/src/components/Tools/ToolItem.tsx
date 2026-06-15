@@ -1,5 +1,5 @@
-import { XCircle, PlusCircleIcon, Wrench, AlertCircle } from 'lucide-react';
-import type { TPlugin, AgentToolType, ToolAvailability } from 'librechat-data-provider';
+import { XCircle, PlusCircleIcon, Wrench } from 'lucide-react';
+import type { TPlugin, AgentToolType } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 
 type ToolItemProps = {
@@ -7,10 +7,9 @@ type ToolItemProps = {
   onAddTool: () => void;
   onRemoveTool: () => void;
   isInstalled?: boolean;
-  availability?: ToolAvailability;
 };
 
-function ToolItem({ tool, onAddTool, onRemoveTool, isInstalled = false, availability }: ToolItemProps) {
+function ToolItem({ tool, onAddTool, onRemoveTool, isInstalled = false }: ToolItemProps) {
   const localize = useLocalize();
   const handleClick = () => {
     if (isInstalled) {
@@ -27,9 +26,6 @@ function ToolItem({ tool, onAddTool, onRemoveTool, isInstalled = false, availabi
   const description =
     (tool as AgentToolType).metadata?.description || (tool as TPlugin).description || '';
   const icon = (tool as AgentToolType).metadata?.icon || (tool as TPlugin).icon;
-
-  const isAvailable = availability ? availability.isAvailable : true;
-  const unavailabilityMessage = availability?.message;
 
   return (
     <div className="flex flex-col gap-4 rounded border border-border-medium bg-transparent p-6">
@@ -54,18 +50,7 @@ function ToolItem({ tool, onAddTool, onRemoveTool, isInstalled = false, availabi
           <div className="mb-2 line-clamp-1 max-w-full text-lg leading-5 text-text-primary">
             {name}
           </div>
-          {!isAvailable && !isInstalled ? (
-            <button
-              className="btn btn-neutral border-token-border-light relative opacity-50 cursor-not-allowed"
-              aria-label={`${localize('com_ui_unavailable')} ${name}`}
-              disabled
-            >
-              <div className="flex w-full items-center justify-center gap-2">
-                {localize('com_ui_unavailable')}
-                <AlertCircle className="flex h-4 w-4 items-center stroke-2" aria-hidden="true" />
-              </div>
-            </button>
-          ) : !isInstalled ? (
+          {!isInstalled ? (
             <button
               className="btn btn-primary relative"
               aria-label={`${localize('com_ui_add')} ${name}`}
@@ -91,12 +76,6 @@ function ToolItem({ tool, onAddTool, onRemoveTool, isInstalled = false, availabi
         </div>
       </div>
       <div className="line-clamp-3 h-[60px] text-sm text-text-secondary">{description}</div>
-      {!isAvailable && unavailabilityMessage && (
-        <div className="flex items-start gap-1 text-xs text-red-500 dark:text-red-400">
-          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-          <span>{unavailabilityMessage}</span>
-        </div>
-      )}
     </div>
   );
 }
