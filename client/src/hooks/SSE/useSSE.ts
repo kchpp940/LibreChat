@@ -12,7 +12,7 @@ import { useChatStreamDispatch } from '~/store';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
-  'setMessages' | 'getMessages' | 'setConversation' | 'setIsSubmitting' | 'newConversation'
+  'setMessages' | 'getMessages' | 'setConversation' | 'newConversation'
 >;
 
 export default function useSSE(
@@ -26,7 +26,7 @@ export default function useSSE(
   const { token, isAuthenticated } = useAuthContext();
   const [completed, setCompleted] = useState(new Set());
 
-  const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation } =
+  const { setMessages, getMessages, setConversation, newConversation } =
     chatHelpers;
 
   const {
@@ -47,9 +47,7 @@ export default function useSSE(
     setCompleted,
     isAddedRequest,
     setConversation,
-    setIsSubmitting,
     newConversation,
-    setShowStopButton: () => {},
     runIndex,
   });
 

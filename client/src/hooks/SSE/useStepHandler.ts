@@ -18,7 +18,6 @@ import type {
   TMessageContentParts,
   SubagentUpdateEvent,
 } from 'librechat-data-provider';
-import type { SetterOrUpdater } from 'recoil';
 import type { AnnounceOptions } from '~/common';
 import {
   foldSubagentEvent,
@@ -33,8 +32,6 @@ type TUseStepHandler = {
   announcePolite: (options: AnnounceOptions) => void;
   setMessages: (messages: TMessage[]) => void;
   getMessages: () => TMessage[] | undefined;
-  /** @deprecated - isSubmitting should be derived from submission state */
-  setIsSubmitting?: SetterOrUpdater<boolean>;
   lastAnnouncementTimeRef: React.MutableRefObject<number>;
 };
 

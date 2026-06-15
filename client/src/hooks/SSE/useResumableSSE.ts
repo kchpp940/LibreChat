@@ -42,7 +42,7 @@ import store, { useChatStreamDispatch } from '~/store';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
-  'setMessages' | 'getMessages' | 'setConversation' | 'setIsSubmitting' | 'newConversation'
+  'setMessages' | 'getMessages' | 'setConversation' | 'newConversation'
 >;
 
 const getStreamStartFailureData = (errorData?: Record<string, unknown>): TResData =>
@@ -372,7 +372,7 @@ export default function useResumableSSE(
   const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const { token, isAuthenticated } = useAuthContext();
-  const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation } =
+  const { setMessages, getMessages, setConversation, newConversation } =
     chatHelpers;
 
   /**
@@ -435,15 +435,12 @@ export default function useResumableSSE(
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);
   const setSubmission = useSetRecoilState(store.submissionByIndex(runIndex));
-
   const sseRef = useRef<SSE | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const submissionRef = useRef<TSubmission | null>(null);
   const optimisticStreamIdsRef = useRef(new Set<string>());
   const createdStreamIdsRef = useRef(new Set<string>());
-
-  const setShowStopButton = () => {};
 
   const {
     stepHandler,
@@ -463,9 +460,7 @@ export default function useResumableSSE(
     setCompleted,
     isAddedRequest,
     setConversation,
-    setIsSubmitting,
     newConversation,
-    setShowStopButton,
     runIndex,
   });
 

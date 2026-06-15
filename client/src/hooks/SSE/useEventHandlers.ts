@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { v4 } from 'uuid';
-import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -23,6 +22,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 import type { SetterOrUpdater } from 'recoil';
 import type { TResData, TFinalResData, ConvoGenerator } from '~/common';
 import type { ConversationCursorData } from '~/utils';
+import type { ChatStreamAction } from '~/store/chatStream';
 import {
   logger,
   setDraft,
@@ -46,8 +46,7 @@ import { useApplyAgentTemplate } from '~/hooks/Agents';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';
 import { useLiveAnnouncer } from '~/Providers';
-import store, { useChatStreamDispatch } from '~/store';
-import type { ChatStreamAction } from '~/store/chatStream';
+import { useChatStreamDispatch } from '~/store';
 
 type TSyncData = {
   sync: boolean;
@@ -149,11 +148,9 @@ export type EventHandlerParams = {
   setCompleted: React.Dispatch<React.SetStateAction<Set<unknown>>>;
   setMessages: (messages: TMessage[]) => void;
   getMessages: () => TMessage[] | undefined;
-  setIsSubmitting: SetterOrUpdater<boolean>;
   setConversation?: SetterOrUpdater<TConversation | null>;
   newConversation?: ConvoGenerator;
-  setShowStopButton: SetterOrUpdater<boolean>;
-  /** Run index for multi-conversation support; enables unified ChatStream state */
+  /** Run index for multi-conversation support */
   runIndex?: string | number;
 };
 
@@ -264,15 +261,12 @@ export default function useEventHandlers({
   setCompleted,
   isAddedRequest = false,
   setConversation,
-  setIsSubmitting,
   newConversation,
-  setShowStopButton,
   runIndex = 0,
 }: EventHandlerParams) {
   const queryClient = useQueryClient();
   const { announcePolite } = useLiveAnnouncer();
   const applyAgentTemplate = useApplyAgentTemplate();
-  const setAbortScroll = useSetRecoilState(store.abortScroll);
   const navigate = useNavigate();
   const location = useLocation();
   const chatStreamDispatch = useChatStreamDispatch(runIndex);
@@ -286,7 +280,6 @@ export default function useEventHandlers({
     setMessages,
     getMessages,
     announcePolite,
-    setIsSubmitting,
     lastAnnouncementTimeRef,
   });
   const attachmentHandler = useAttachmentHandler(queryClient);
@@ -570,12 +563,11 @@ export default function useEventHandlers({
         });
       }
 
-      scrollToEnd(() => setAbortScroll(false));
+      scrollToEnd(() => chatStreamDispatch({ type: 'SET_ABORT_SCROLL', payload: false }));
     },
     [
       setMessages,
       queryClient,
-      setAbortScroll,
       isAddedRequest,
       announcePolite,
       setConversation,
