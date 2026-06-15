@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PermissionTypes, Permissions } from 'librechat-data-provider';
+import { PermissionTypes, Permissions, normalizeError, isConflictError, getErrorMessage, } from 'librechat-data-provider';
 import { OGDialog, OGDialogTemplate, Button, Label, Input, Spinner, useToastContext, } from '@librechat/client';
 import { useUpdateMemoryMutation, useMemoriesQuery } from '~/data-provider';
 import { useLocalize, useHasAccess } from '~/hooks';
@@ -35,23 +35,15 @@ export default function MemoryEditDialog({ memory, open, onOpenChange, children,
             });
         },
         onError: (error) => {
-            let errorMessage = localize('com_ui_error');
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error;
-                if (axiosError.response?.data?.error) {
-                    errorMessage = axiosError.response.data.error;
-                    // Check for duplicate key error
-                    if (axiosError.response?.status === 409 || errorMessage.includes('already exists')) {
-                        errorMessage = localize('com_ui_memory_key_exists');
-                    }
-                    // Check for key validation error (lowercase and underscores only)
-                    else if (errorMessage.includes('lowercase letters and underscores')) {
-                        errorMessage = localize('com_ui_memory_key_validation');
-                    }
+            const appError = normalizeError(error);
+            let errorMessage = getErrorMessage(appError, localize('com_ui_error'));
+            if (errorMessage !== localize('com_ui_error')) {
+                if (isConflictError(appError) || errorMessage.includes('already exists')) {
+                    errorMessage = localize('com_ui_memory_key_exists');
                 }
-            }
-            else if (error.message) {
-                errorMessage = error.message;
+                else if (errorMessage.includes('lowercase letters and underscores')) {
+                    errorMessage = localize('com_ui_memory_key_validation');
+                }
             }
             showToast({
                 message: errorMessage,

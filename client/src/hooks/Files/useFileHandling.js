@@ -4,7 +4,7 @@ import debounce from 'lodash/debounce';
 import { useToastContext } from '@librechat/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
-import { QueryKeys, Constants, EToolResources, mergeFileConfig, isAssistantsEndpoint, getEndpointFileConfig, defaultAssistantsVersion, } from 'librechat-data-provider';
+import { QueryKeys, Constants, EToolResources, mergeFileConfig, isAssistantsEndpoint, getEndpointFileConfig, defaultAssistantsVersion, normalizeError, getErrorMessage, isAbortedError, } from 'librechat-data-provider';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
 import { useGetFileConfig, useUploadFileMutation } from '~/data-provider';
 import useLocalize from '~/hooks/useLocalize';
@@ -101,8 +101,8 @@ const useFileHandlingCore = (params, fileState) => {
             }, 300);
         },
         onError: (_error, body) => {
-            const error = _error;
-            console.log('upload error', error);
+            const appError = normalizeError(_error);
+            console.log('upload error', appError);
             const file_id = body.get('file_id');
             const tool_resource = body.get('tool_resource');
             if (tool_resource === EToolResources.execute_code) {
@@ -114,11 +114,14 @@ const useFileHandlingCore = (params, fileState) => {
             clearUploadTimer(file_id);
             deleteFileById(file_id);
             let errorMessage = 'com_error_files_upload';
-            if (error?.code === 'ERR_CANCELED') {
+            if (isAbortedError(appError)) {
                 errorMessage = 'com_error_files_upload_canceled';
             }
-            else if (error?.response?.data?.message) {
-                errorMessage = error.response.data.message;
+            else {
+                const msg = getErrorMessage(appError);
+                if (msg) {
+                    errorMessage = msg;
+                }
             }
             setError(errorMessage);
         },

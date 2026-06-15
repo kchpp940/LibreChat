@@ -1,6 +1,6 @@
 import { QueryKeys, dataService, EModelEndpoint, isAgentsEndpoint, defaultOrderQuery, defaultAssistantsVersion, } from 'librechat-data-provider';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { findConversationInInfinite, isNotFoundError } from '~/utils';
+import { findConversationInInfinite, isNotFoundError, isRetryableError } from '~/utils';
 export const useGetPresetsQuery = (config) => {
     return useQuery([QueryKeys.presets], () => dataService.getPresets(), {
         staleTime: 1000 * 10,
@@ -26,7 +26,7 @@ export const useGetConvoIdQuery = (id, config) => {
         refetchOnReconnect: false,
         refetchOnMount: false,
         retry: (failureCount, error) => {
-            if (isNotFoundError(error)) {
+            if (!isRetryableError(error) || isNotFoundError(error)) {
                 return false;
             }
             return failureCount < 3;

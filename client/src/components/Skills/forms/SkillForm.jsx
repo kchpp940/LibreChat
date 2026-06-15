@@ -3,7 +3,7 @@ import { Info, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller, FormProvider } from 'react-hook-form';
 import { Input, Button, Skeleton, TextareaAutosize, useToastContext } from '@librechat/client';
-import { InvocationMode, SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, } from 'librechat-data-provider';
+import { InvocationMode, SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, normalizeError, isConflictError, getErrorMessage, } from 'librechat-data-provider';
 import { useGetSkillQuery, useUpdateSkillMutation } from '~/data-provider';
 import { useLocalize, useSkillPermissions } from '~/hooks';
 import SkillContentEditor from './SkillContentEditor';
@@ -61,14 +61,13 @@ export default function SkillForm({ skillId }) {
             reset(toValues(updated));
         },
         onError: (error) => {
-            const status = error?.response?.status;
-            if (status === 409) {
+            const appError = normalizeError(error);
+            if (isConflictError(appError)) {
                 showToast({ status: 'warning', message: localize('com_ui_skill_update_conflict') });
                 skillQuery.refetch();
                 return;
             }
-            const message = error?.response?.data?.message ??
-                localize('com_ui_skill_update_error');
+            const message = getErrorMessage(appError, localize('com_ui_skill_update_error'));
             showToast({ status: 'error', message });
         },
     });

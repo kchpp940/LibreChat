@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
-import { request, Constants, QueryKeys, ErrorTypes, StepEvents, apiBaseUrl, createPayload, ViolationTypes, removeNullishValues, } from 'librechat-data-provider';
+import { request, Constants, QueryKeys, ErrorTypes, StepEvents, apiBaseUrl, createPayload, ViolationTypes, removeNullishValues, normalizeError, isNetworkError, isServerNotReadyError, isAppError, } from 'librechat-data-provider';
+import axios from 'axios';
 import { clearAllDrafts, removeConvoFromAllQueries, upsertConvoInAllQueries, markStreamStartFailedMetadata, } from '~/utils';
 import { useGetUserBalance, useGetStartupConfig, queueTitleGeneration, streamStatusQueryKey, } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
@@ -17,21 +18,14 @@ const getStreamStartFailureData = (errorData) => ({
 const MAX_RETRIES = 5;
 const START_GENERATION_NETWORK_RETRIES = 3;
 const START_GENERATION_READINESS_TIMEOUT_MS = 120000;
-const SERVER_NOT_READY_CODE = 'SERVER_NOT_READY';
 const toStartGenerationError = (error) => error != null && typeof error === 'object' ? error : undefined;
 const isRetryableNetworkError = (error) => {
-    if (!(error instanceof Error)) {
-        return false;
-    }
-    const { code } = toStartGenerationError(error) ?? {};
-    return code === 'ERR_NETWORK' || code === 'ERR_INTERNET_DISCONNECTED';
-};
-const isServerNotReadyError = (error) => {
-    const candidate = toStartGenerationError(error);
-    return (candidate?.response?.status === 503 && candidate.response?.data?.code === SERVER_NOT_READY_CODE);
+    return isNetworkError(error);
 };
 const getRetryAfterDelay = (error, fallbackDelay) => {
-    const headers = toStartGenerationError(error)?.response?.headers;
+    const appError = normalizeError(error);
+    const original = isAppError(error) ? error.originalError : error;
+    const headers = axios.isAxiosError(original) ? original.response?.headers : undefined;
     const rawValue = headers?.['retry-after'] ?? headers?.['Retry-After'];
     const retryAfter = Array.isArray(rawValue) ? rawValue[0] : rawValue;
     const seconds = typeof retryAfter === 'number' ? retryAfter : Number(retryAfter);
@@ -744,13 +738,13 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                     return null;
                 }
                 lastError = error;
-                const isNetworkError = isRetryableNetworkError(error);
+                const isRetryableNetwork = isRetryableNetworkError(error);
                 const isServerNotReady = isServerNotReadyError(error);
                 const remainingReadinessMs = readinessDeadline - Date.now();
-                const shouldRetryNetwork = isNetworkError && networkAttempts < START_GENERATION_NETWORK_RETRIES - 1;
+                const shouldRetryNetwork = isRetryableNetwork && networkAttempts < START_GENERATION_NETWORK_RETRIES - 1;
                 const shouldRetryServerNotReady = isServerNotReady && remainingReadinessMs > 0;
                 if (shouldRetryNetwork || shouldRetryServerNotReady) {
-                    networkAttempts += isNetworkError ? 1 : 0;
+                    networkAttempts += isRetryableNetwork ? 1 : 0;
                     readinessAttempts += isServerNotReady ? 1 : 0;
                     const fallbackDelay = Math.min(1000 * Math.pow(2, requestAttempts - 1), 8000);
                     const retryDelay = isServerNotReady

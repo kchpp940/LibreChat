@@ -13,7 +13,12 @@ import {
   createPayload,
   ViolationTypes,
   removeNullishValues,
+  normalizeError,
+  isNetworkError,
+  isServerNotReadyError,
+  isAppError,
 } from 'librechat-data-provider';
+import axios from 'axios';
 import type {
   Agents,
   TMessage,
@@ -57,7 +62,6 @@ const getStreamStartFailureData = (errorData?: Record<string, unknown>): TResDat
 const MAX_RETRIES = 5;
 const START_GENERATION_NETWORK_RETRIES = 3;
 const START_GENERATION_READINESS_TIMEOUT_MS = 120000;
-const SERVER_NOT_READY_CODE = 'SERVER_NOT_READY';
 
 type StartGenerationError = {
   code?: string;
@@ -74,23 +78,13 @@ const toStartGenerationError = (error: unknown): StartGenerationError | undefine
   error != null && typeof error === 'object' ? (error as StartGenerationError) : undefined;
 
 const isRetryableNetworkError = (error: unknown) => {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const { code } = toStartGenerationError(error) ?? {};
-  return code === 'ERR_NETWORK' || code === 'ERR_INTERNET_DISCONNECTED';
-};
-
-const isServerNotReadyError = (error: unknown) => {
-  const candidate = toStartGenerationError(error);
-  return (
-    candidate?.response?.status === 503 && candidate.response?.data?.code === SERVER_NOT_READY_CODE
-  );
+  return isNetworkError(error);
 };
 
 const getRetryAfterDelay = (error: unknown, fallbackDelay: number) => {
-  const headers = toStartGenerationError(error)?.response?.headers;
+  const appError = normalizeError(error);
+  const original = isAppError(error) ? (error as any).originalError : error;
+  const headers = axios.isAxiosError(original) ? original.response?.headers : undefined;
   const rawValue = headers?.['retry-after'] ?? headers?.['Retry-After'];
   const retryAfter = Array.isArray(rawValue) ? rawValue[0] : rawValue;
   const seconds = typeof retryAfter === 'number' ? retryAfter : Number(retryAfter);
@@ -1035,15 +1029,15 @@ export default function useResumableSSE(
           }
 
           lastError = error;
-          const isNetworkError = isRetryableNetworkError(error);
+          const isRetryableNetwork = isRetryableNetworkError(error);
           const isServerNotReady = isServerNotReadyError(error);
           const remainingReadinessMs = readinessDeadline - Date.now();
           const shouldRetryNetwork =
-            isNetworkError && networkAttempts < START_GENERATION_NETWORK_RETRIES - 1;
+            isRetryableNetwork && networkAttempts < START_GENERATION_NETWORK_RETRIES - 1;
           const shouldRetryServerNotReady = isServerNotReady && remainingReadinessMs > 0;
 
           if (shouldRetryNetwork || shouldRetryServerNotReady) {
-            networkAttempts += isNetworkError ? 1 : 0;
+            networkAttempts += isRetryableNetwork ? 1 : 0;
             readinessAttempts += isServerNotReady ? 1 : 0;
             const fallbackDelay = Math.min(1000 * Math.pow(2, requestAttempts - 1), 8000);
             const retryDelay = isServerNotReady

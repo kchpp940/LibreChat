@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { Search, X } from 'lucide-react';
-import { useFormContext } from 'react-hook-form';
-import { isAgentsEndpoint } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
+import { useFormContext } from 'react-hook-form';
+import { isAgentsEndpoint, normalizeError, getErrorMessage } from 'librechat-data-provider';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
 import { useAgentPanelContext } from '~/Providers/AgentPanelContext';
@@ -18,9 +18,10 @@ function ToolSelectDialog({ isOpen, endpoint, setIsOpen, }) {
     const updateUserPlugins = useUpdateUserPluginsMutation();
     const handleInstallError = (error) => {
         setError(true);
-        const errorMessage = error.response?.data?.message ?? '';
-        if (errorMessage) {
-            setErrorMessage(errorMessage);
+        const appError = normalizeError(error);
+        const msg = getErrorMessage(appError);
+        if (msg) {
+            setErrorMessage(msg);
         }
         setTimeout(() => {
             setError(false);

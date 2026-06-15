@@ -14,6 +14,7 @@ import { getThemeFromEnv } from './utils/getThemeFromEnv';
 import { initializeFontSize } from '~/store/fontSize';
 import { LiveAnnouncer } from '~/a11y';
 import { router } from './routes';
+import { isUnauthorizedError } from 'librechat-data-provider';
 
 const App = () => {
   const { setError } = useApiErrorBoundary();
@@ -31,7 +32,7 @@ const App = () => {
     },
     queryCache: new QueryCache({
       onError: (error) => {
-        if (error?.response?.status === 401) {
+        if (isUnauthorizedError(error)) {
           setError(error);
         }
       },

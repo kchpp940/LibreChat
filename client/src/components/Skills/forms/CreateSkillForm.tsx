@@ -8,6 +8,8 @@ import {
   SKILL_NAME_PATTERN,
   SKILL_NAME_MAX_LENGTH,
   SKILL_DESCRIPTION_MAX_LENGTH,
+  normalizeError,
+  getErrorMessage,
 } from 'librechat-data-provider';
 import type { TSkill, TCreateSkill, TSkillWarning } from 'librechat-data-provider';
 import { useCreateSkillMutation } from '~/data-provider';
@@ -96,9 +98,8 @@ export default function CreateSkillForm({
       }
     },
     onError: (error: unknown) => {
-      const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        localize('com_ui_skill_create_error');
+      const appError = normalizeError(error);
+      const message = getErrorMessage(appError, localize('com_ui_skill_create_error'));
       showToast({ status: 'error', message });
     },
   });

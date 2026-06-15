@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { normalizeError, getErrorMessage } from 'librechat-data-provider';
 import { useCreateMCPServerMutation, useUpdateMCPServerMutation, useDeleteMCPServerMutation, } from '~/data-provider/MCP';
 import { useToastContext } from '@librechat/client';
 import { useLocalize } from '~/hooks';
@@ -181,21 +182,17 @@ export function useMCPServerForm({ server, onSuccess, onClose }) {
             onSuccess?.(result.serverName, isOAuth && !server);
         }
         catch (error) {
+            const appError = normalizeError(error);
             let errorMessage = localize('com_ui_error');
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error;
-                if (axiosError.response?.data?.error === 'MCP_INSPECTION_FAILED') {
-                    errorMessage = localize('com_ui_mcp_server_connection_failed');
-                }
-                else if (axiosError.response?.data?.error === 'MCP_DOMAIN_NOT_ALLOWED') {
-                    errorMessage = localize('com_ui_mcp_domain_not_allowed');
-                }
-                else if (axiosError.response?.data?.error) {
-                    errorMessage = axiosError.response.data.error;
-                }
+            const rawMessage = getErrorMessage(appError);
+            if (rawMessage === 'MCP_INSPECTION_FAILED') {
+                errorMessage = localize('com_ui_mcp_server_connection_failed');
             }
-            else if (error instanceof Error) {
-                errorMessage = error.message;
+            else if (rawMessage === 'MCP_DOMAIN_NOT_ALLOWED') {
+                errorMessage = localize('com_ui_mcp_domain_not_allowed');
+            }
+            else if (rawMessage && rawMessage !== localize('com_ui_error')) {
+                errorMessage = rawMessage;
             }
             showToast({
                 message: errorMessage,
@@ -221,15 +218,17 @@ export function useMCPServerForm({ server, onSuccess, onClose }) {
             onClose?.();
         }
         catch (error) {
+            const appError = normalizeError(error);
             let errorMessage = localize('com_ui_error');
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error;
-                if (axiosError.response?.data?.error) {
-                    errorMessage = axiosError.response.data.error;
-                }
+            const rawMessage = getErrorMessage(appError);
+            if (rawMessage === 'MCP_INSPECTION_FAILED') {
+                errorMessage = localize('com_ui_mcp_server_connection_failed');
             }
-            else if (error instanceof Error) {
-                errorMessage = error.message;
+            else if (rawMessage === 'MCP_DOMAIN_NOT_ALLOWED') {
+                errorMessage = localize('com_ui_mcp_domain_not_allowed');
+            }
+            else if (rawMessage && rawMessage !== localize('com_ui_error')) {
+                errorMessage = rawMessage;
             }
             showToast({
                 message: errorMessage,

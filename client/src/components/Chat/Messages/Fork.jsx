@@ -7,7 +7,8 @@ import { useToastContext } from '@librechat/client';
 import { ForkOptions } from 'librechat-data-provider';
 import { GitCommit, GitBranchPlus, ListTree } from 'lucide-react';
 import { useLocalize, useNavigateToConvo } from '~/hooks';
-import { useForkConvoMutation } from '~/data-provider';
+import { useForkConversationMutation } from '~/data-provider';
+import { isRateLimitError as _isRateLimitError } from 'librechat-data-provider';
 import { cn } from '~/utils';
 import store from '~/store';
 const optionLabels = {
@@ -136,11 +137,9 @@ export default function Fork({ messageId, conversationId: _convoId, forkingSuppo
         },
         onError: (error) => {
             /** Rate limit error (429 status code) */
-            const isRateLimitError = error?.response?.status === 429 ||
-                error?.status === 429 ||
-                error?.statusCode === 429;
+            const rateLimited = _isRateLimitError(error);
             showToast({
-                message: isRateLimitError
+                message: rateLimited
                     ? localize('com_ui_fork_error_rate_limit')
                     : localize('com_ui_fork_error'),
                 status: 'error',

@@ -12,8 +12,11 @@ import {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAssistantsVersion,
+  normalizeError,
+  getErrorMessage,
+  isAbortedError,
 } from 'librechat-data-provider';
-import type { EModelEndpoint, TEndpointsConfig, TError } from 'librechat-data-provider';
+import type { EModelEndpoint, TEndpointsConfig } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
@@ -158,8 +161,8 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
         }, 300);
       },
       onError: (_error, body) => {
-        const error = _error as TError | undefined;
-        console.log('upload error', error);
+        const appError = normalizeError(_error);
+        console.log('upload error', appError);
         const file_id = body.get('file_id');
         const tool_resource = body.get('tool_resource');
         if (tool_resource === EToolResources.execute_code) {
@@ -173,10 +176,13 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
 
         let errorMessage = 'com_error_files_upload';
 
-        if (error?.code === 'ERR_CANCELED') {
+        if (isAbortedError(appError)) {
           errorMessage = 'com_error_files_upload_canceled';
-        } else if (error?.response?.data?.message) {
-          errorMessage = error.response.data.message;
+        } else {
+          const msg = getErrorMessage(appError);
+          if (msg) {
+            errorMessage = msg;
+          }
         }
         setError(errorMessage);
       },

@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useAtom } from 'jotai';
 import { useToastContext } from '@librechat/client';
+import { normalizeError, isAppError, ErrorCode } from 'librechat-data-provider';
 import { useGetFavoritesQuery, useUpdateFavoritesMutation } from '~/data-provider';
 import { favoritesAtom } from '~/store';
 import { useLocalize } from '~/hooks';
@@ -63,13 +64,18 @@ export default function useFavorites() {
             }
         }
     }, [getFavoritesQuery.data, setFavorites, updateFavoritesMutation.isLoading]);
-    const getErrorMessage = useCallback((error) => {
-        if (error && typeof error === 'object' && 'response' in error) {
-            const axiosError = error;
-            const { code, limit } = axiosError.response?.data ?? {};
-            if (code === 'MAX_FAVORITES_EXCEEDED') {
-                return localize('com_ui_max_favorites_reached', { 0: String(limit ?? MAX_FAVORITES) });
-            }
+    const getFavoriteErrorMessage = useCallback((error) => {
+        const appError = normalizeError(error);
+        if (appError.code === ErrorCode.MAX_FAVORITES_EXCEEDED) {
+            const limit =
+                (isAppError(error) && typeof error.details?.limit === 'number'
+                    ? error.details.limit
+                    : undefined) ??
+                (typeof (appError.originalError?.response?.data?.limit) === 'number'
+                    ? appError.originalError.response.data.limit
+                    : undefined) ??
+                MAX_FAVORITES;
+            return localize('com_ui_max_favorites_reached', { 0: String(limit) });
         }
         return localize('com_ui_error');
     }, [localize]);
@@ -82,7 +88,7 @@ export default function useFavorites() {
         }
         catch (error) {
             logger.error('Error updating favorites:', error);
-            showToast({ message: getErrorMessage(error), status: 'error' });
+            showToast({ message: getFavoriteErrorMessage(error), status: 'error' });
             // Refetch to resync state with server
             getFavoritesQuery.refetch();
         }
@@ -93,7 +99,7 @@ export default function useFavorites() {
                 isMutatingRef.current = false;
             }, 100);
         }
-    }, [setFavorites, updateFavoritesMutation, showToast, getErrorMessage, getFavoritesQuery]);
+    }, [setFavorites, updateFavoritesMutation, showToast, getFavoriteErrorMessage, getFavoritesQuery]);
     const addFavoriteAgent = (agentId) => {
         if (favorites.some((f) => f.agentId === agentId))
             return;
@@ -179,7 +185,7 @@ export default function useFavorites() {
             }
             catch (error) {
                 logger.error('Error reordering favorites:', error);
-                showToast({ message: getErrorMessage(error), status: 'error' });
+                showToast({ message: getFavoriteErrorMessage(error), status: 'error' });
                 // Refetch to resync state with server
                 getFavoritesQuery.refetch();
             }
@@ -189,7 +195,7 @@ export default function useFavorites() {
                 }, 100);
             }
         }
-    }, [setFavorites, updateFavoritesMutation, showToast, getErrorMessage, getFavoritesQuery]);
+    }, [setFavorites, updateFavoritesMutation, showToast, getFavoriteErrorMessage, getFavoritesQuery]);
     return {
         favorites,
         addFavoriteAgent,

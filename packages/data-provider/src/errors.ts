@@ -1,17 +1,18 @@
 import axios, { AxiosError } from 'axios';
 import type {
   AppError,
-  ErrorCode,
-  ErrorCategory,
   NormalizeErrorOptions,
   ValidationIssue,
   RateLimitInfo,
   LocalizedMessageFn,
   LocalizeFunction,
 } from './types/errors';
-import { ErrorCode as EC, ErrorCategory as ECat } from './types/errors';
+import { ErrorCode, ErrorCategory } from './types/errors';
+const EC = ErrorCode;
+const ECat = ErrorCategory;
 
-export type { AppError, ErrorCode, ErrorCategory, NormalizeErrorOptions, ValidationIssue, RateLimitInfo, LocalizedMessageFn, LocalizeFunction, ErrorPredicate } from './types/errors';
+export { ErrorCode, ErrorCategory } from './types/errors';
+export type { AppError, NormalizeErrorOptions, ValidationIssue, RateLimitInfo, LocalizedMessageFn, LocalizeFunction, ErrorPredicate } from './types/errors';
 
 class AppErrorImpl extends Error implements AppError {
   readonly code: ErrorCode;
@@ -106,6 +107,8 @@ function extractResponseData(error: AxiosError): {
 
   if ('message' in data && typeof (data as { message?: unknown }).message === 'string') {
     result.message = (data as { message: string }).message;
+  } else if ('error' in data && typeof (data as { error?: unknown }).error === 'string') {
+    result.message = (data as { error: string }).error;
   }
 
   if ('code' in data && typeof (data as { code?: unknown }).code === 'string') {
@@ -127,7 +130,7 @@ function extractResponseData(error: AxiosError): {
     result.requestId = (data as { requestId: string }).requestId;
   }
 
-  const knownKeys = new Set(['message', 'code', 'limit', 'errors', 'requestId']);
+  const knownKeys = new Set(['message', 'error', 'code', 'limit', 'errors', 'requestId']);
   const extraEntries = Object.entries(data).filter(([k]) => !knownKeys.has(k));
   if (extraEntries.length > 0) {
     result.details = Object.fromEntries(extraEntries) as Record<string, unknown>;
@@ -186,6 +189,8 @@ function mapBusinessCode(code: string): {
       return { code: EC.BALANCE_INSUFFICIENT, category: ECat.BUSINESS };
     case 'INVALID_API_KEY':
       return { code: EC.INVALID_API_KEY, category: ECat.AUTH };
+    case 'SERVER_NOT_READY':
+      return { code: EC.SERVER_NOT_READY, category: ECat.SERVER };
     default:
       return null;
   }
@@ -405,6 +410,19 @@ export function isValidationError(error: unknown): boolean {
 export function isServerError(error: unknown): boolean {
   const appError = isAppError(error) ? error : normalizeError(error);
   return appError.category === ECat.SERVER;
+}
+
+export function isConflictError(error: unknown): boolean {
+  const appError = isAppError(error) ? error : normalizeError(error);
+  return appError.code === EC.CONFLICT || appError.status === 409;
+}
+
+export function isServerNotReadyError(error: unknown): boolean {
+  const appError = isAppError(error) ? error : normalizeError(error);
+  return (
+    appError.code === EC.SERVER_NOT_READY ||
+    appError.status === 503
+  );
 }
 
 export function isFileError(error: unknown): boolean {

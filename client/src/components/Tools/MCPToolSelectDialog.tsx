@@ -2,10 +2,10 @@ import { useEffect, useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useFormContext } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
-import { Constants, EModelEndpoint, QueryKeys } from 'librechat-data-provider';
+import { Constants, EModelEndpoint, QueryKeys, normalizeError, getErrorMessage } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
-import type { TError, AgentToolType } from 'librechat-data-provider';
+import type { AgentToolType } from 'librechat-data-provider';
 import type { AgentForm, ToolDialogProps } from '~/common';
 import {
   usePluginDialogHelpers,
@@ -64,11 +64,12 @@ function MCPToolSelectDialog({
 
   const updateUserPlugins = useUpdateUserPluginsMutation();
 
-  const handleInstallError = (error: TError) => {
+  const handleInstallError = (error: unknown) => {
     setError(true);
-    const errorMessage = error.response?.data?.message ?? '';
-    if (errorMessage) {
-      setErrorMessage(errorMessage);
+    const appError = normalizeError(error);
+    const msg = getErrorMessage(appError);
+    if (msg) {
+      setErrorMessage(msg);
     }
     setTimeout(() => {
       setError(false);
@@ -111,7 +112,7 @@ function MCPToolSelectDialog({
       setIsInitializing(null);
     } catch (error) {
       console.error('Error adding MCP server:', error);
-      handleInstallError(error as TError);
+      handleInstallError(error);
       setIsInitializing(null);
     }
   };
@@ -156,7 +157,7 @@ function MCPToolSelectDialog({
       setConfiguringServer(null);
     } catch (error) {
       console.error('Error saving custom vars:', error);
-      handleInstallError(error as TError);
+      handleInstallError(error);
     } finally {
       setIsSavingCustomVars(false);
     }
@@ -173,7 +174,7 @@ function MCPToolSelectDialog({
       },
       {
         onError: (error: unknown) => {
-          handleInstallError(error as TError);
+          handleInstallError(error);
           setIsSavingCustomVars(false);
         },
         onSuccess: async () => {

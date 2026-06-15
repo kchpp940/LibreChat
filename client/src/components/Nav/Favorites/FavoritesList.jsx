@@ -5,7 +5,13 @@ import { useDrag, useDrop } from 'react-dnd';
 import { Skeleton } from '@librechat/client';
 import { useNavigate } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
-import { QueryKeys, dataService } from 'librechat-data-provider';
+import {
+  QueryKeys,
+  dataService,
+  normalizeError,
+  isNotFoundError,
+  isForbiddenError,
+} from 'librechat-data-provider';
 import { useGetConversation, useFavorites, useLocalize, useShowMarketplace, useNewConvo, } from '~/hooks';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import { useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
@@ -152,12 +158,9 @@ export default function FavoritesList({ isSmallScreen, toggleNav, }) {
                     return { found: true, agent };
                 }
                 catch (error) {
-                    if (error && typeof error === 'object' && 'response' in error) {
-                        const axiosError = error;
-                        const status = axiosError.response?.status;
-                        if (status === 404 || status === 403) {
-                            return { found: false };
-                        }
+                    const appError = normalizeError(error);
+                    if (isNotFoundError(appError) || isForbiddenError(appError)) {
+                        return { found: false };
                     }
                     throw error;
                 }

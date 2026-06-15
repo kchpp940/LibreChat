@@ -2,32 +2,20 @@ import React from 'react';
 import { Button } from '@librechat/client';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
-
-// Comprehensive error type that handles all possible error structures
-type ApiError =
-  | string
-  | Error
-  | {
-      message?: string;
-      status?: number;
-      code?: string;
-      response?: {
-        data?: {
-          userMessage?: string;
-          suggestion?: string;
-          message?: string;
-        };
-        status?: number;
-      };
-      data?: {
-        userMessage?: string;
-        suggestion?: string;
-        message?: string;
-      };
-    };
+import {
+  normalizeError,
+  isAppError,
+  isNetworkError,
+  isNotFoundError,
+  isServerError,
+  isValidationError,
+  isUnauthorizedError,
+  isAbortedError,
+  getErrorMessage,
+} from 'librechat-data-provider';
 
 interface ErrorDisplayProps {
-  error: ApiError;
+  error: unknown;
   onRetry?: () => void;
   context?: {
     searchQuery?: string;
@@ -41,99 +29,60 @@ interface ErrorDisplayProps {
 export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry, context }) => {
   const localize = useLocalize();
 
-  // Type guards
-  const isErrorObject = (err: ApiError): err is { [key: string]: unknown } => {
-    return typeof err === 'object' && err !== null && !(err instanceof Error);
-  };
-
-  const isErrorInstance = (err: ApiError): err is Error => {
-    return err instanceof Error;
-  };
-
-  // Extract user-friendly error information
   const getErrorInfo = (): { title: string; message: string; suggestion: string } => {
-    // Handle different error types
-    let errorData: unknown;
+    const appError = isAppError(error)
+      ? error
+      : normalizeError(error, {
+          fallbackMessage: typeof error === 'string' ? error : undefined,
+        });
+    const errorMessage = getErrorMessage(appError);
+    const message = appError.userMessage ?? errorMessage;
 
-    if (typeof error === 'string') {
-      errorData = { message: error };
-    } else if (isErrorInstance(error)) {
-      errorData = { message: error.message };
-    } else if (isErrorObject(error)) {
-      // Handle axios error response structure
-      errorData = (error as any)?.response?.data || (error as any)?.data || error;
-    } else {
-      errorData = error;
-    }
-
-    // Handle network errors first
-    let errorMessage = '';
-    if (isErrorInstance(error)) {
-      errorMessage = error.message;
-    } else if (isErrorObject(error) && (error as any)?.message) {
-      errorMessage = (error as any).message;
-    }
-
-    const errorCode = isErrorObject(error) ? (error as any)?.code : '';
-
-    // Handle timeout errors specifically
-    if (errorCode === 'ECONNABORTED' || errorMessage?.includes('timeout')) {
+    if (isAbortedError(appError) || errorMessage?.includes('timeout') || errorMessage?.includes('ECONNABORTED')) {
       return {
         title: localize('com_agents_error_timeout_title'),
         message: localize('com_agents_error_timeout_message'),
         suggestion: localize('com_agents_error_timeout_suggestion'),
       };
     }
-
-    if (errorCode === 'NETWORK_ERROR' || errorMessage?.includes('Network Error')) {
+    if (isNetworkError(appError) && !isAbortedError(appError)) {
       return {
         title: localize('com_agents_error_network_title'),
         message: localize('com_agents_error_network_message'),
         suggestion: localize('com_agents_error_network_suggestion'),
       };
     }
-
-    // Handle specific HTTP status codes before generic userMessage
-    const status = isErrorObject(error) ? (error as any)?.response?.status : null;
-    if (status) {
-      if (status === 404) {
-        return {
-          title: localize('com_agents_error_not_found_title'),
-          message: getNotFoundMessage(),
-          suggestion: localize('com_agents_error_not_found_suggestion'),
-        };
-      }
-
-      if (status === 400) {
-        return {
-          title: localize('com_agents_error_invalid_request'),
-          message:
-            (errorData as any)?.userMessage || localize('com_agents_error_bad_request_message'),
-          suggestion:
-            (errorData as any)?.suggestion || localize('com_agents_error_bad_request_suggestion'),
-        };
-      }
-
-      if (status >= 500) {
-        return {
-          title: localize('com_agents_error_server_title'),
-          message: localize('com_agents_error_server_message'),
-          suggestion: localize('com_agents_error_server_suggestion'),
-        };
-      }
-    }
-
-    // Use user-friendly message from backend if available (after specific status code handling)
-    if (errorData && typeof errorData === 'object' && (errorData as any)?.userMessage) {
+    if (isNotFoundError(appError)) {
       return {
-        title: getContextualTitle(),
-        message: (errorData as any).userMessage,
-        suggestion:
-          (errorData as any).suggestion || localize('com_agents_error_suggestion_generic'),
+        title: localize('com_agents_error_not_found_title'),
+        message: getNotFoundMessage(),
+        suggestion: localize('com_agents_error_not_found_suggestion'),
       };
     }
-
-    // Fallback to generic error with contextual title
+    if (isValidationError(appError)) {
+      const suggestion = (appError.details?.suggestion as string | undefined);
+      return {
+        title: localize('com_agents_error_invalid_request'),
+        message: appError.userMessage || localize('com_agents_error_bad_request_message'),
+        suggestion: suggestion || localize('com_agents_error_bad_request_suggestion'),
+      };
+    }
+    if (isServerError(appError)) {
+      return {
+        title: localize('com_agents_error_server_title'),
+        message: localize('com_agents_error_server_message'),
+        suggestion: localize('com_agents_error_server_suggestion'),
+      };
+    }
+    if (appError.userMessage || (appError.details?.userMessage as string | undefined)) {
+      const userMsg = (appError.details?.userMessage as string | undefined);
+      const suggestion = (appError.details?.suggestion as string | undefined);
+      return {
+        title: getContextualTitle(),
+        message: appError.userMessage || (userMsg as string),
+        suggestion: (suggestion as string) || localize('com_agents_error_suggestion_generic'),
+      };
+    }
     return {
       title: getContextualTitle(),
       message: localize('com_agents_error_generic'),

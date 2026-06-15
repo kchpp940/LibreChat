@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { MCPServerCreateParams } from 'librechat-data-provider';
+import { normalizeError, getErrorMessage } from 'librechat-data-provider';
 import {
   useCreateMCPServerMutation,
   useUpdateMCPServerMutation,
@@ -246,19 +247,15 @@ export function useMCPServerForm({ server, onSuccess, onClose }: UseMCPServerFor
       const isOAuth = formData.auth.auth_type === AuthTypeEnum.OAuth;
       onSuccess?.(result.serverName, isOAuth && !server);
     } catch (error: unknown) {
+      const appError = normalizeError(error);
       let errorMessage = localize('com_ui_error');
-
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { data?: { error?: string } } };
-        if (axiosError.response?.data?.error === 'MCP_INSPECTION_FAILED') {
-          errorMessage = localize('com_ui_mcp_server_connection_failed');
-        } else if (axiosError.response?.data?.error === 'MCP_DOMAIN_NOT_ALLOWED') {
-          errorMessage = localize('com_ui_mcp_domain_not_allowed');
-        } else if (axiosError.response?.data?.error) {
-          errorMessage = axiosError.response.data.error;
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
+      const rawMessage = getErrorMessage(appError);
+      if (rawMessage === 'MCP_INSPECTION_FAILED') {
+        errorMessage = localize('com_ui_mcp_server_connection_failed');
+      } else if (rawMessage === 'MCP_DOMAIN_NOT_ALLOWED') {
+        errorMessage = localize('com_ui_mcp_domain_not_allowed');
+      } else if (rawMessage && rawMessage !== localize('com_ui_error')) {
+        errorMessage = rawMessage;
       }
 
       showToast({
@@ -287,15 +284,15 @@ export function useMCPServerForm({ server, onSuccess, onClose }: UseMCPServerFor
 
       onClose?.();
     } catch (error: unknown) {
+      const appError = normalizeError(error);
       let errorMessage = localize('com_ui_error');
-
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { data?: { error?: string } } };
-        if (axiosError.response?.data?.error) {
-          errorMessage = axiosError.response.data.error;
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
+      const rawMessage = getErrorMessage(appError);
+      if (rawMessage === 'MCP_INSPECTION_FAILED') {
+        errorMessage = localize('com_ui_mcp_server_connection_failed');
+      } else if (rawMessage === 'MCP_DOMAIN_NOT_ALLOWED') {
+        errorMessage = localize('com_ui_mcp_domain_not_allowed');
+      } else if (rawMessage && rawMessage !== localize('com_ui_error')) {
+        errorMessage = rawMessage;
       }
 
       showToast({

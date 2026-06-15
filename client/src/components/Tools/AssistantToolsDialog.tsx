@@ -2,13 +2,12 @@ import { useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useFormContext } from 'react-hook-form';
-import { isAgentsEndpoint } from 'librechat-data-provider';
+import { isAgentsEndpoint, normalizeError, getErrorMessage } from 'librechat-data-provider';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
 import type {
   AssistantsEndpoint,
   EModelEndpoint,
   TPluginAction,
-  TError,
 } from 'librechat-data-provider';
 import type { ToolDialogProps } from '~/common/types';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
@@ -52,11 +51,12 @@ function AssistantToolsDialog({
   } = usePluginDialogHelpers();
 
   const updateUserPlugins = useUpdateUserPluginsMutation();
-  const handleInstallError = (error: TError) => {
+  const handleInstallError = (error: unknown) => {
     setError(true);
-    const errorMessage = error.response?.data?.message ?? '';
-    if (errorMessage) {
-      setErrorMessage(errorMessage);
+    const appError = normalizeError(error);
+    const msg = getErrorMessage(appError);
+    if (msg) {
+      setErrorMessage(msg);
     }
     setTimeout(() => {
       setError(false);
@@ -77,7 +77,7 @@ function AssistantToolsDialog({
 
     updateUserPlugins.mutate(pluginAction, {
       onError: (error: unknown) => {
-        handleInstallError(error as TError);
+        handleInstallError(error);
       },
       onSuccess: addFunction,
     });
@@ -91,7 +91,7 @@ function AssistantToolsDialog({
       { pluginKey: tool, action: 'uninstall', auth: null, isEntityTool: true },
       {
         onError: (error: unknown) => {
-          handleInstallError(error as TError);
+          handleInstallError(error);
         },
         onSuccess: () => {
           const fns = getValues('functions').filter((fn: string) => fn !== tool);
