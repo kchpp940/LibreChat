@@ -1426,7 +1426,15 @@ const precheckAgentHandler = async (req, res) => {
 
 const getToolAvailabilityHandler = async (req, res) => {
   try {
-    const { tools = [], agent_id } = req.body;
+    const {
+      tools = [],
+      agent_id,
+      endpoint,
+      model,
+      provider,
+      enabledCapabilities,
+      selectedTools,
+    } = req.body;
     if (!Array.isArray(tools) || tools.length === 0) {
       return res.status(200).json({
         tools: {},
@@ -1493,6 +1501,7 @@ const getToolAvailabilityHandler = async (req, res) => {
       resolveConfigServers: () => resolveConfigServers(req),
       isEphemeralAgentId,
       defaultAgentCapabilities,
+      supportsToolCalling: () => true,
     };
 
     const result = await resolveToolAvailability(
@@ -1501,6 +1510,11 @@ const getToolAvailabilityHandler = async (req, res) => {
         userId: req.user.id,
         userRole: req.user.role,
         agentId: agent_id,
+        endpoint,
+        model,
+        provider,
+        enabledCapabilities,
+        selectedTools,
         checkMCPConnection: true,
         checkMCPPermissions: true,
       },

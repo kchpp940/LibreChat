@@ -69,6 +69,7 @@ export interface ToolAvailabilityDeps {
   resolveConfigServers?: () => Promise<Record<string, unknown>>;
   isEphemeralAgentId?: (agentId?: string) => boolean;
   defaultAgentCapabilities?: string[];
+  supportsToolCalling?: (model: string, provider: string, endpoint?: string) => boolean;
 }
 
 function normalizeCapabilities(
@@ -183,6 +184,16 @@ export async function resolveToolAvailability(
     enabledCapabilities.size === 0 ? true : enabledCapabilities.has(cap);
   const areToolsEnabled = checkCapability(AgentCapabilities.tools);
   const actionsEnabled = checkCapability(AgentCapabilities.actions);
+
+  let modelSupportsToolCalling = true;
+  if (
+    options.model &&
+    options.provider &&
+    deps.supportsToolCalling &&
+    !deps.supportsToolCalling(options.model, options.provider, options.endpoint)
+  ) {
+    modelSupportsToolCalling = false;
+  }
 
   const hasMCPTools = tools.some(
     (t) => typeof t === 'string' && t.includes(Constants.mcp_delimiter) && !isActionTool(t),
@@ -309,6 +320,14 @@ export async function resolveToolAvailability(
       continue;
     }
 
+    if (!modelSupportsToolCalling) {
+      availability.reason = ToolUnavailableReason.model_not_supported;
+      availability.message = `Model "${options.model ?? 'unknown'}" does not support tool calling`;
+      availability.permissionStatus = ToolPermissionStatus.denied;
+      addToResult(result, availability);
+      continue;
+    }
+
     if (toolType === ToolType.action) {
       availability.capability = AgentCapabilities.actions;
       availability.capabilityEnabled = actionsEnabled;
@@ -387,7 +406,7 @@ export async function resolveToolAvailability(
         continue;
       }
 
-      if (mcpServerConfigs && !Object.hasOwn(mcpServerConfigs, serverName)) {
+      if (mcpServerConfigs && !Object.prototype.hasOwnProperty.call(mcpServerConfigs, serverName)) {
         availability.reason = ToolUnavailableReason.mcp_server_unavailable;
         availability.message = `MCP server "${serverName}" is not accessible or does not exist`;
         availability.permissionStatus = ToolPermissionStatus.denied;

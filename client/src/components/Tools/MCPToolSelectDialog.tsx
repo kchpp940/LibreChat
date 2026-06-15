@@ -200,11 +200,7 @@ function MCPToolSelectDialog({
     const requiresUserVars = availability?.requiresUserVars === true;
     const hasMissingUserVars = (availability?.missingUserVars?.length ?? 0) > 0;
 
-    const serverConfig = availableMCPServersMap?.[serverName];
-    const hasCustomUserVarsConfig =
-      serverConfig?.customUserVars && Object.keys(serverConfig.customUserVars).length > 0;
-
-    if (requiresUserVars || hasMissingUserVars || hasCustomUserVarsConfig) {
+    if (requiresUserVars || hasMissingUserVars) {
       setConfiguringServer(serverName);
     } else {
       await handleDirectAdd(serverName);

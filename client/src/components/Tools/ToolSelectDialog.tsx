@@ -107,12 +107,9 @@ function ToolSelectDialog({
     setSelectedPlugin(availablePluginFromKey);
 
     const toolAvailability = toolAvailabilityMap[pluginKey];
-    const permissionRequiresAuth = toolAvailability?.permissionStatus === ('requires_auth' as ToolPermissionStatus);
+    const requiresAuth = toolAvailability?.permissionStatus === ('requires_auth' as ToolPermissionStatus);
 
-    const { authConfig, authenticated = false } = availablePluginFromKey ?? {};
-    const legacyRequiresAuth = authConfig && authConfig.length > 0 && !authenticated;
-
-    if (permissionRequiresAuth || legacyRequiresAuth) {
+    if (requiresAuth) {
       setShowPluginAuthForm(true);
     } else {
       handleInstall({

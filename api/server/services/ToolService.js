@@ -140,6 +140,7 @@ function buildToolAvailabilityDeps(req) {
     resolveConfigServers: () => resolveConfigServers(req),
     isEphemeralAgentId,
     defaultAgentCapabilities,
+    supportsToolCalling: () => true,
   };
 }
 

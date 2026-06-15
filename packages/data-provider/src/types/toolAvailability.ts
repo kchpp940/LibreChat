@@ -106,4 +106,10 @@ export interface ToolValidationIssue {
 export interface ResolveToolAvailabilityParams {
   tools: string[];
   agent_id?: string;
+  endpoint?: string;
+  model?: string;
+  provider?: string;
+  enabledCapabilities?: string[];
+  /** Per-tool overrides currently selected in the agent form */
+  selectedTools?: string[];
 }

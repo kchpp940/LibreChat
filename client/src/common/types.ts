@@ -217,6 +217,14 @@ export interface MCPServerInfo {
   availability?: ToolAvailability;
 }
 
+export interface AgentFormContext {
+  model?: string | null;
+  provider?: string | null;
+  endpoint?: string;
+  enabledCapabilities?: string[];
+  selectedTools?: string[];
+}
+
 export type AgentPanelContextType = {
   action?: t.Action;
   actions?: t.Action[];
@@ -233,11 +241,12 @@ export type AgentPanelContextType = {
   startupConfig?: t.TStartupConfig | null;
   agentsConfig?: t.TAgentsEndpoint | null;
   endpointsConfig?: t.TEndpointsConfig | null;
-  /** Pre-computed MCP server information indexed by server key */
   mcpServersMap: Map<string, MCPServerInfo>;
   availableMCPServers: MCPServerDefinition[];
   availableMCPServersMap: t.MCPServersListResponse | undefined;
   toolAvailabilityMap: Record<string, ToolAvailability>;
+  formContext: AgentFormContext;
+  updateFormContext: (ctx: Partial<AgentFormContext>) => void;
 };
 
 export type AgentModelPanelProps = {

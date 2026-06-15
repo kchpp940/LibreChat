@@ -55,7 +55,7 @@ export const getPresetTitle = (preset: TPreset, mention?: boolean) => {
 
 export const removeUnavailableTools = (
   preset: TPreset,
-  availableTools: Record<string, TPlugin | undefined>,
+  _availableTools: Record<string, TPlugin | undefined>,
   toolAvailabilityMap?: Record<string, ToolAvailability>,
 ) => {
   const newPreset = { ...preset };
@@ -74,7 +74,7 @@ export const removeUnavailableTools = (
           return toolAvailabilityMap[pluginKey]?.isAvailable === true;
         }
 
-        return !!availableTools[pluginKey];
+        return true;
       })
       .map((tool) => {
         if (typeof tool === 'string') {

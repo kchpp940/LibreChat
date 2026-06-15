@@ -1,8 +1,8 @@
-import React, { createContext, useCallback, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { EModelEndpoint, Constants } from 'librechat-data-provider';
 import type { MCP, Action, TPlugin, ToolAvailability } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
-import type { AgentPanelContextType, MCPServerInfo } from '~/common';
+import type { AgentPanelContextType, AgentFormContext, MCPServerInfo } from '~/common';
 import {
   useAvailableToolsQuery,
   useGetActionsQuery,
@@ -51,7 +51,8 @@ const collectToolKeys = (
   return Array.from(keys);
 };
 
-/** Houses relevant state for the Agent Form Panels (formerly 'commonProps') */
+const INITIAL_FORM_CONTEXT: AgentFormContext = {};
+
 export function AgentPanelProvider({ children }: { children: React.ReactNode }) {
   const localize = useLocalize();
   const [mcp, setMcp] = useState<MCP | undefined>(undefined);
@@ -62,6 +63,10 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
   const [toolAvailabilityMap, setToolAvailabilityMap] = useState<Record<string, ToolAvailability>>(
     {},
   );
+  const [formContext, setFormContext] = useState<AgentFormContext>(INITIAL_FORM_CONTEXT);
+  const formContextRef = useRef(formContext);
+  formContextRef.current = formContext;
+
   const { availableMCPServers, isLoading, availableMCPServersMap } = useMCPServerManager();
   const { data: startupConfig } = useGetStartupConfig();
   const { data: actions } = useGetActionsQuery(EModelEndpoint.agents, {
@@ -90,6 +95,14 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
 
   const resolveToolAvailability = useResolveToolAvailabilityMutation();
 
+  const updateFormContext = useCallback((ctx: Partial<AgentFormContext>) => {
+    setFormContext((prev) => {
+      const next = { ...prev, ...ctx };
+      const unchanged = Object.keys(ctx).every((key) => prev[key] === ctx[key]);
+      return unchanged ? prev : next;
+    });
+  }, []);
+
   const fetchToolAvailability = useCallback(() => {
     if (!agent_id || isEphemeralAgent(agent_id)) {
       setToolAvailabilityMap({});
@@ -100,8 +113,26 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
       setToolAvailabilityMap({});
       return;
     }
+    const fc = formContextRef.current;
+    const enabledCapabilities: string[] = [];
+    if (fc.enabledCapabilities) {
+      enabledCapabilities.push(...fc.enabledCapabilities);
+    } else {
+      if (endpointsConfig?.[EModelEndpoint.agents]?.capabilities) {
+        enabledCapabilities.push(...endpointsConfig[EModelEndpoint.agents].capabilities);
+      }
+    }
+
     resolveToolAvailability.mutate(
-      { tools: toolKeys, agent_id },
+      {
+        tools: toolKeys,
+        agent_id,
+        endpoint: fc.endpoint ?? EModelEndpoint.agents,
+        model: fc.model ?? undefined,
+        provider: fc.provider ?? undefined,
+        enabledCapabilities: enabledCapabilities.length > 0 ? enabledCapabilities : undefined,
+        selectedTools: fc.selectedTools,
+      },
       {
         onSuccess: (data) => {
           setToolAvailabilityMap(data.tools);
@@ -111,11 +142,11 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
         },
       },
     );
-  }, [agent_id, mcpData, regularTools, resolveToolAvailability]);
+  }, [agent_id, mcpData, regularTools, resolveToolAvailability, endpointsConfig]);
 
   useEffect(() => {
     fetchToolAvailability();
-  }, [fetchToolAvailability]);
+  }, [fetchToolAvailability, formContext.model, formContext.provider, formContext.enabledCapabilities, formContext.selectedTools]);
 
   const mcpServersMap = useMemo(() => {
     const configuredServers = new Set(mcpServerNames);
@@ -216,6 +247,8 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
     availableMCPServers,
     availableMCPServersMap,
     toolAvailabilityMap,
+    formContext,
+    updateFormContext,
   };
 
   return <AgentPanelContext.Provider value={value}>{children}</AgentPanelContext.Provider>;
