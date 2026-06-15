@@ -1,4 +1,11 @@
-import { Constants, serializeFileMetadata } from 'librechat-data-provider';
+import {
+  Constants,
+  FilePurpose,
+  IndexingStatus,
+  FileVisibility,
+  FileDisplayMetadata,
+  serializeFileMetadata,
+} from 'librechat-data-provider';
 import type { TFile, TMessage } from 'librechat-data-provider';
 
 /** Minimal shape for request file entries (from `req.body.files`) */
@@ -25,7 +32,13 @@ type GetMessagesByParentId = (
  */
 export function sanitizeFileForTransmit<T extends Partial<TFile>>(
   file: T,
-) {
+): T & {
+  purpose: FilePurpose;
+  indexingStatus: IndexingStatus;
+  visibility: FileVisibility;
+  display: FileDisplayMetadata;
+  embedded: boolean;
+} {
   return serializeFileMetadata(file, { stripText: true, stripInternal: true });
 }
 
@@ -36,7 +49,7 @@ const MESSAGE_STRIP_FIELDS = ['fileContext'] as const;
 export function buildMessageFiles<T extends Partial<TFile>>(
   requestFiles: RequestFile[],
   attachments: T[],
-) {
+): (T & { purpose: FilePurpose; indexingStatus: IndexingStatus; visibility: FileVisibility; display: FileDisplayMetadata; embedded: boolean })[] {
   const requestFileIds = new Set<string>();
   for (const f of requestFiles) {
     if (f.file_id) {

@@ -20,7 +20,7 @@ import {
   ReasoningResponseKey,
 } from '../src/schemas';
 import { specsConfigSchema } from '../src/models';
-import { FileSources } from '../src/types/files';
+import { FileSources } from '../src/file-metadata';
 
 describe('paramDefinitionSchema', () => {
   it('accepts a minimal definition with only key', () => {

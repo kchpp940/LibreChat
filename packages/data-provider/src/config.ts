@@ -13,7 +13,7 @@ import { specsConfigSchema, TSpecsConfig } from './models';
 import { REFILL_INTERVAL_UNITS } from './balance';
 import { fileConfigSchema } from './file-config';
 import { apiBaseUrl } from './api-endpoints';
-import { FileSources } from './types/files';
+import { FileSources } from './file-metadata';
 import { MCPServersSchema } from './mcp';
 export { MAX_SUBAGENTS } from './limits';
 

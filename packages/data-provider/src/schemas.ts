@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { TMessageContentParts, FunctionTool, FunctionToolCall } from './types/assistants';
 import type { SearchResultData } from './types/web';
-import type { TFile } from './types/files';
+import type { TFile } from './file-metadata';
 import { TFeedback, feedbackSchema } from './feedback';
 import { Tools } from './types/assistants';
 

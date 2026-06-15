@@ -700,7 +700,7 @@ export type AgentAvatar = {
   source: string;
 };
 
-export { FilePurpose } from './files';
+export { FilePurpose } from '../file-metadata';
 
 export const defaultOrderQuery: {
   order: 'desc';
