@@ -29,6 +29,7 @@
     "test": "jest --coverage --watch",
     "test:ci": "jest --coverage --ci --logHeapUsage",
     "verify": "npm run test:ci",
+    "check:boundaries": "node ../../scripts/check-file-metadata-boundaries.mjs",
     "b:clean": "bun run rimraf dist",
     "b:build": "bun run b:clean && bun run tsdown && bun run tsc -p tsconfig.build.json"
   },
