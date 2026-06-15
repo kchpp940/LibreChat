@@ -6,10 +6,10 @@ import type { TSkillStatesResponse } from 'librechat-data-provider';
 import {
   useGetSkillStatesQuery,
   useUpdateSkillStatesMutation,
-  useGetStartupConfig,
 } from '~/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { logger } from '~/utils';
+import { useCapabilities } from '~/Providers/CapabilitiesContext';
 
 const EMPTY_STATES: TSkillStatesResponse = {};
 
@@ -100,7 +100,7 @@ export default function useSkillActiveState() {
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const queryClient = useQueryClient();
-  const configQuery = useGetStartupConfig();
+  const caps = useCapabilities();
   const getQuery = useGetSkillStatesQuery();
   const updateMutation = useUpdateSkillStatesMutation();
 
@@ -123,12 +123,12 @@ export default function useSkillActiveState() {
   }, [userId]);
 
   const defaultActiveOnShare = useMemo(() => {
-    const skills = configQuery.data?.interface?.skills;
+    const skills = caps.skills;
     if (typeof skills === 'object' && skills !== null && 'defaultActiveOnShare' in skills) {
       return skills.defaultActiveOnShare === true;
     }
     return false;
-  }, [configQuery.data]);
+  }, [caps]);
 
   const skillStates = useMemo<TSkillStatesResponse>(
     () => (getQuery.data && typeof getQuery.data === 'object' ? getQuery.data : EMPTY_STATES),

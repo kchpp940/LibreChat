@@ -10,7 +10,7 @@ import {
 import type { SearchApiKeyFormData } from '~/hooks/Plugins/useAuthSearchTool';
 import type { UseFormRegister, UseFormHandleSubmit } from 'react-hook-form';
 import InputSection, { type DropdownOption } from './InputSection';
-import { useGetStartupConfig } from '~/data-provider';
+import { useWebSearchCapabilities } from '~/Providers/CapabilitiesContext';
 import { useLocalize } from '~/hooks';
 
 export default function ApiKeyDialog({
@@ -37,16 +37,16 @@ export default function ApiKeyDialog({
   triggerRefs?: React.RefObject<HTMLInputElement | HTMLButtonElement>[];
 }) {
   const localize = useLocalize();
-  const { data: config } = useGetStartupConfig();
+  const webSearchCaps = useWebSearchCapabilities();
 
   const [selectedProvider, setSelectedProvider] = useState(
-    config?.webSearch?.searchProvider || SearchProviders.SERPER,
+    webSearchCaps?.searchProvider || SearchProviders.SERPER,
   );
   const [selectedReranker, setSelectedReranker] = useState(
-    config?.webSearch?.rerankerType || RerankerTypes.JINA,
+    webSearchCaps?.rerankerType || RerankerTypes.JINA,
   );
   const [selectedScraper, setSelectedScraper] = useState(
-    config?.webSearch?.scraperProvider || ScraperProviders.FIRECRAWL,
+    webSearchCaps?.scraperProvider || ScraperProviders.FIRECRAWL,
   );
 
   const providerOptions: DropdownOption[] = [
@@ -225,7 +225,7 @@ export default function ApiKeyDialog({
                   selectedKey={selectedProvider}
                   onSelectionChange={handleProviderChange}
                   dropdownOptions={providerOptions}
-                  showDropdown={!config?.webSearch?.searchProvider}
+                  showDropdown={!webSearchCaps?.searchProvider}
                   register={register}
                   dropdownOpen={dropdownOpen.provider}
                   setDropdownOpen={(open) =>
@@ -242,7 +242,7 @@ export default function ApiKeyDialog({
                   selectedKey={selectedScraper}
                   onSelectionChange={handleScraperChange}
                   dropdownOptions={scraperOptions}
-                  showDropdown={!config?.webSearch?.scraperProvider}
+                  showDropdown={!webSearchCaps?.scraperProvider}
                   register={register}
                   dropdownOpen={dropdownOpen.scraper}
                   setDropdownOpen={(open) =>
@@ -259,7 +259,7 @@ export default function ApiKeyDialog({
                   selectedKey={selectedReranker}
                   onSelectionChange={handleRerankerChange}
                   dropdownOptions={rerankerOptions}
-                  showDropdown={!config?.webSearch?.rerankerType}
+                  showDropdown={!webSearchCaps?.rerankerType}
                   register={register}
                   dropdownOpen={dropdownOpen.reranker}
                   setDropdownOpen={(open) =>

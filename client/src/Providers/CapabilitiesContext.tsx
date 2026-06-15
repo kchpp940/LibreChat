@@ -10,7 +10,7 @@ type CapabilitiesProviderProps = {
 
 export const defaultCapabilities: TRuntimeCapabilities = {
   models: { endpoints: {}, models: {} },
-  files: { upload: true, download: true, preview: true },
+  files: { upload: true, download: true, preview: true, sharePointFilePickerEnabled: false, conversationImportMaxFileSize: 0 },
   artifacts: { enabled: false, codeExecution: false },
   sharedLinks: { enabled: false, publicEnabled: false },
   webSearch: { enabled: false },
@@ -20,7 +20,7 @@ export const defaultCapabilities: TRuntimeCapabilities = {
   agents: { use: true, create: true, share: false, public: false },
   skills: { use: true, create: true, share: false, public: false, defaultActiveOnShare: false },
   remoteAgents: { use: false, create: false, share: false, public: false },
-  mcpServers: { use: true, create: true, share: false, public: false, configureObo: false },
+  mcpServers: { use: true, create: true, share: false, public: false, configureObo: false, placeholder: undefined, trustCheckbox: undefined },
   marketplace: { use: false },
   interface: {
     modelSelect: true,
@@ -75,6 +75,11 @@ export function useCanUploadFiles() {
   return caps.files.upload;
 }
 
+export function useFileCapabilities() {
+  const caps = useCapabilities();
+  return caps.files;
+}
+
 export function useCanUseArtifacts() {
   const caps = useCapabilities();
   return caps.artifacts.enabled;
@@ -83,6 +88,11 @@ export function useCanUseArtifacts() {
 export function useCanRunCode() {
   const caps = useCapabilities();
   return caps.artifacts.codeExecution;
+}
+
+export function useArtifactBundlerURLs() {
+  const caps = useCapabilities();
+  return { bundlerURL: caps.artifacts.bundlerURL, staticBundlerURL: caps.artifacts.staticBundlerURL };
 }
 
 export function useCanShareConversations() {
@@ -98,6 +108,11 @@ export function useCanSharePublicly() {
 export function useCanUseWebSearch() {
   const caps = useCapabilities();
   return caps.webSearch.enabled;
+}
+
+export function useWebSearchCapabilities() {
+  const caps = useCapabilities();
+  return caps.webSearch;
 }
 
 export function useCanExportConversations() {
@@ -150,9 +165,24 @@ export function useCanCreateMCPServers() {
   return caps.mcpServers.create;
 }
 
+export function useMcpServerCapabilities() {
+  const caps = useCapabilities();
+  return caps.mcpServers;
+}
+
 export function useInterfaceFlags() {
   const caps = useCapabilities();
   return caps.interface;
+}
+
+export function useCanUseSharePoint() {
+  const caps = useCapabilities();
+  return caps.files.sharePointFilePickerEnabled;
+}
+
+export function useConversationImportMaxFileSize() {
+  const caps = useCapabilities();
+  return caps.files.conversationImportMaxFileSize;
 }
 
 export default CapabilitiesContext;

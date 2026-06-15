@@ -5,6 +5,7 @@ import { Constants } from 'librechat-data-provider';
 import type { TStartupConfig } from 'librechat-data-provider';
 import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { useCapabilities } from '~/Providers/CapabilitiesContext';
 
 type FooterProps = {
   className?: string;
@@ -15,10 +16,11 @@ function Footer({ className, startupConfig }: FooterProps) {
   const shouldFetchConfig = startupConfig === undefined;
   const { data: fetchedConfig } = useGetStartupConfig({ enabled: shouldFetchConfig });
   const config = shouldFetchConfig ? fetchedConfig : startupConfig;
+  const capabilities = useCapabilities();
   const localize = useLocalize();
 
-  const privacyPolicy = config?.interface?.privacyPolicy;
-  const termsOfService = config?.interface?.termsOfService;
+  const privacyPolicy = capabilities.interface.privacyPolicy;
+  const termsOfService = capabilities.interface.termsOfService;
 
   const privacyPolicyRender = privacyPolicy?.externalUrl != null && (
     <a className="text-text-secondary underline" href={privacyPolicy.externalUrl} rel="noreferrer">

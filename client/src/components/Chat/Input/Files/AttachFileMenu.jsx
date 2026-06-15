@@ -7,9 +7,9 @@ import { Providers, EToolResources, EModelEndpoint, isPermissiveMimeConfig, defa
 import { useAgentToolPermissions, useAgentCapabilities, useGetAgentsConfig, useFileHandlingNoChatContext, useLocalize, } from '~/hooks';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
 import { SharePointPickerDialog } from '~/components/SharePoint';
-import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
 import { cn } from '~/utils';
+import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 const AttachFileMenu = ({ agentId, endpoint, disabled, endpointType, conversationId, endpointFileConfig, useResponsesApi, files, setFiles, setFilesLoading, conversation, }) => {
     const localize = useLocalize();
     const isUploadDisabled = disabled ?? false;
@@ -25,8 +25,7 @@ const AttachFileMenu = ({ agentId, endpoint, disabled, endpointType, conversatio
     });
     const { handleSharePointFiles, isProcessing, downloadProgress } = useSharePointFileHandlingNoChatContext({ toolResource: toolResourceRef.current }, { files, setFiles, setFilesLoading, conversation });
     const { agentsConfig } = useGetAgentsConfig();
-    const { data: startupConfig } = useGetStartupConfig();
-    const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
+    const sharePointEnabled = useCanUseSharePoint();
     const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
     /** TODO: Ephemeral Agent Capabilities
      * Allow defining agent capabilities on a per-endpoint basis

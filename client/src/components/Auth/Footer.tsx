@@ -1,13 +1,15 @@
 import { useLocalize } from '~/hooks';
 import { TStartupConfig } from 'librechat-data-provider';
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 
 function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | undefined }) {
   const localize = useLocalize();
+  const interfaceFlags = useInterfaceFlags();
   if (!startupConfig) {
     return null;
   }
-  const privacyPolicy = startupConfig.interface?.privacyPolicy;
-  const termsOfService = startupConfig.interface?.termsOfService;
+  const privacyPolicy = interfaceFlags.privacyPolicy;
+  const termsOfService = interfaceFlags.termsOfService;
 
   const privacyPolicyRender = privacyPolicy?.externalUrl && (
     <a

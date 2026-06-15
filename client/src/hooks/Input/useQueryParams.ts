@@ -21,6 +21,7 @@ import {
 import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage } from '~/hooks';
 import { startupConfigKey, useGetAgentByIdQuery } from '~/data-provider';
 import { useChatContext, useChatFormContext } from '~/Providers';
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import store from '~/store';
 
 const PROJECT_ID_SEARCH_PARAM = 'projectId';
@@ -70,6 +71,7 @@ export default function useQueryParams({
 
   const queryClient = useQueryClient();
   const { conversation, newConversation } = useChatContext();
+  const interfaceFlags = useInterfaceFlags();
 
   const urlAgentId = searchParams.get('agent_id') || '';
   const { data: urlAgent } = useGetAgentByIdQuery(urlAgentId);
@@ -282,7 +284,7 @@ export default function useQueryParams({
       const { decodedPrompt, validSettings, shouldAutoSubmit } = processQueryParams();
       const hasSettings = Object.keys(validSettings).length > 0;
 
-      const autoSubmitAllowed = startupConfig.interface?.autoSubmitFromUrl !== false;
+      const autoSubmitAllowed = interfaceFlags.autoSubmitFromUrl !== false;
       const willAutoSubmit = shouldAutoSubmit && autoSubmitAllowed;
 
       if (!willAutoSubmit) {

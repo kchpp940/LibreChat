@@ -5,6 +5,7 @@ import { useLocalize, useAuthContext } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import useSharePointToken from './useSharePointToken';
 import store from '~/store';
+import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 export default function useSharePointPicker({ containerNode, onFilesSelected, onClose, disabled = false, maxSelectionCount = 10, }) {
     const [langcode] = useRecoilState(store.lang);
     const { user } = useAuthContext();
@@ -14,6 +15,7 @@ export default function useSharePointPicker({ containerNode, onFilesSelected, on
     const portRef = useRef(null);
     const channelIdRef = useRef('');
     const { data: startupConfig } = useGetStartupConfig();
+    const sharePointEnabled = useCanUseSharePoint();
     const sharePointBaseUrl = startupConfig?.sharePointBaseUrl;
     const isEntraIdUser = user?.provider === 'openid';
     const { token, isLoading: isTokenLoading, error: tokenError, } = useSharePointToken({
@@ -294,7 +296,7 @@ export default function useSharePointPicker({ containerNode, onFilesSelected, on
     const handleDialogClose = useCallback(() => {
         cleanup();
     }, [cleanup]);
-    const isAvailable = startupConfig?.sharePointFilePickerEnabled && isEntraIdUser && !tokenError;
+    const isAvailable = sharePointEnabled && isEntraIdUser && !tokenError;
     return {
         openSharePointPicker: isAvailable ? openSharePointPicker : () => { },
         closeSharePointPicker: handleDialogClose,

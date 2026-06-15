@@ -25,8 +25,9 @@ import type {
 import type { MCPServerInitState } from '~/store/mcp';
 import type { ConfigFieldDetail } from '~/common';
 import { useLocalize, useHasAccess, useMCPSelect, useMCPConnectionStatus } from '~/hooks';
-import { useGetStartupConfig, useMCPServersQuery } from '~/data-provider';
+import { useMCPServersQuery } from '~/data-provider';
 import { mcpServerInitStatesAtom, getServerInitState } from '~/store/mcp';
+import { useMcpServerCapabilities } from '~/Providers/CapabilitiesContext';
 
 export interface MCPServerDefinition {
   serverName: string;
@@ -47,8 +48,7 @@ export function useMCPServerManager({
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
-  /** Retained for `interface.mcpServers.placeholder` used by `placeholderText` below */
-  const { data: startupConfig } = useGetStartupConfig();
+  const mcpCaps = useMcpServerCapabilities();
   const canUseMcp = useHasAccess({
     permissionType: PermissionTypes.MCP_SERVERS,
     permission: Permissions.USE,
@@ -464,8 +464,8 @@ export function useMCPServerManager({
   );
 
   const placeholderText = useMemo(
-    () => startupConfig?.interface?.mcpServers?.placeholder || localize('com_ui_mcp_servers'),
-    [startupConfig?.interface?.mcpServers?.placeholder, localize],
+    () => mcpCaps.placeholder || localize('com_ui_mcp_servers'),
+    [mcpCaps.placeholder, localize],
   );
 
   const toggleServerSelection = useCallback(

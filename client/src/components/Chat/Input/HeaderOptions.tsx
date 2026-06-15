@@ -3,19 +3,17 @@ import { Settings2 } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
 import { Root, Anchor } from '@radix-ui/react-popover';
 import { isParamEndpoint, getEndpointField, tConvoUpdateSchema } from 'librechat-data-provider';
-import type { TPreset, TInterfaceConfig } from 'librechat-data-provider';
+import type { TPreset } from 'librechat-data-provider';
 import { EndpointSettings, SaveAsPresetDialog, AlternativeSettings } from '~/components/Endpoints';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
 import { useGetEndpointsQuery } from '~/data-provider';
 import OptionsPopover from './OptionsPopover';
 import PopoverButtons from './PopoverButtons';
 import { useChatContext } from '~/Providers';
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 
-export default function HeaderOptions({
-  interfaceConfig,
-}: {
-  interfaceConfig?: Partial<TInterfaceConfig>;
-}) {
+export default function HeaderOptions() {
+  const interfaceConfig = useInterfaceFlags();
   const { data: endpointsConfig } = useGetEndpointsQuery();
 
   const [saveAsDialogShow, setSaveAsDialogShow] = useState<boolean>(false);

@@ -7,9 +7,11 @@ import { DropdownPopup, TooltipAnchor, useMediaQuery } from '@librechat/client';
 import ExportModal from '~/components/Nav/ExportConversation/ExportModal';
 import { ShareButton } from '~/components/Conversations/ConvoOptions';
 import { useHasAccess, useLocalize } from '~/hooks';
+import { useCanShareConversations } from '~/Providers/CapabilitiesContext';
 import store from '~/store';
-export default function ExportAndShareMenu({ isSharedButtonEnabled, }) {
+export default function ExportAndShareMenu() {
     const localize = useLocalize();
+    const canShareConversations = useCanShareConversations();
     const [showExports, setShowExports] = useState(false);
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [showShareDialog, setShowShareDialog] = useState(false);
@@ -40,7 +42,7 @@ export default function ExportAndShareMenu({ isSharedButtonEnabled, }) {
             label: localize('com_ui_share'),
             onClick: shareHandler,
             icon: <Share2 className="icon-md mr-2 text-text-secondary"/>,
-            show: isSharedButtonEnabled && canCreateSharedLinks,
+            show: canShareConversations && canCreateSharedLinks,
             /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
             hideOnClick: false,
             ref: shareButtonRef,

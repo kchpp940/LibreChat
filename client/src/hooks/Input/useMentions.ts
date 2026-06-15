@@ -7,7 +7,6 @@ import {
   EModelEndpoint,
   PermissionTypes,
   isAgentsEndpoint,
-  getConfigDefaults,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
 import type { TAssistantsMap, TEndpointsConfig } from 'librechat-data-provider';
@@ -24,8 +23,7 @@ import { mapEndpoints, getPresetTitle } from '~/utils';
 import { EndpointIcon } from '~/components/Endpoints';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import { filterMentionEndpoints } from './mentions';
-
-const defaultInterface = getConfigDefaults().interface;
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 
 const assistantMapFn =
   ({
@@ -79,10 +77,7 @@ export default function useMentions({
       description,
     })),
   );
-  const interfaceConfig = useMemo(
-    () => startupConfig?.interface ?? defaultInterface,
-    [startupConfig?.interface],
-  );
+  const interfaceConfig = useInterfaceFlags();
   const includedEndpoints = useMemo(
     () => new Set(startupConfig?.modelSpecs?.addedEndpoints ?? []),
     [startupConfig?.modelSpecs?.addedEndpoints],

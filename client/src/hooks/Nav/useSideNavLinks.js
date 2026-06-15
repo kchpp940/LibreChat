@@ -12,7 +12,9 @@ import { MemoryPanel } from '~/components/SidePanel/Memories';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
 import { PromptsAccordion } from '~/components/Prompts';
 import { SkillsAccordion } from '~/components/Skills';
-export default function useSideNavLinks({ hidePanel, keyProvided, endpoint, endpointType, interfaceConfig, endpointsConfig, includeHidePanel = true, }) {
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
+export default function useSideNavLinks({ hidePanel, keyProvided, endpoint, endpointType, endpointsConfig, includeHidePanel = true, }) {
+    const interfaceConfig = useInterfaceFlags();
     const hasAccessToPrompts = useHasAccess({
         permissionType: PermissionTypes.PROMPTS,
         permission: Permissions.USE,

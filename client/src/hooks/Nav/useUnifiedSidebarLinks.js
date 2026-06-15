@@ -2,18 +2,17 @@ import { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { MessagesSquare } from 'lucide-react';
 import { useUserKeyQuery } from 'librechat-data-provider/react-query';
-import { getConfigDefaults, getEndpointField } from 'librechat-data-provider';
+import { getEndpointField } from 'librechat-data-provider';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
-import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/data-provider';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import store from '~/store';
-const defaultInterface = getConfigDefaults().interface;
 export default function useUnifiedSidebarLinks() {
     const conversation = useRecoilValue(store.conversationByIndex(0));
     const endpoint = conversation?.endpoint;
-    const { data: startupConfig } = useGetStartupConfig();
     const { data: endpointsConfig = {} } = useGetEndpointsQuery();
-    const interfaceConfig = useMemo(() => startupConfig?.interface ?? defaultInterface, [startupConfig]);
+    const interfaceConfig = useInterfaceFlags();
     const endpointType = useMemo(() => getEndpointField(endpointsConfig, endpoint, 'type'), [endpoint, endpointsConfig]);
     const userProvidesKey = useMemo(() => !!(endpointsConfig?.[endpoint ?? '']?.userProvide ?? false), [endpointsConfig, endpoint]);
     const { data: keyExpiry = { expiresAt: undefined } } = useUserKeyQuery(endpoint ?? '');
@@ -22,7 +21,6 @@ export default function useUnifiedSidebarLinks() {
         keyProvided,
         endpoint,
         endpointType,
-        interfaceConfig,
         endpointsConfig,
         includeHidePanel: false,
     });

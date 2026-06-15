@@ -8,8 +8,8 @@ import { useFileHandlingNoChatContext } from '~/hooks/Files/useFileHandling';
 import { useAgentFileConfig, useLocalize, useLazyEffect } from '~/hooks';
 import { SharePointPickerDialog } from '~/components/SharePoint';
 import FileRow from '~/components/Chat/Input/Files/FileRow';
-import { useGetStartupConfig } from '~/data-provider';
 import { ESide, isEphemeralAgent } from '~/common';
+import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 function FileContext({ agent_id, files: _files, }) {
     const localize = useLocalize();
     const fileInputRef = useRef(null);
@@ -17,8 +17,7 @@ function FileContext({ agent_id, files: _files, }) {
     const fileHandlingState = useMemo(() => ({ files, setFiles, conversation: null }), [files]);
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
-    const { data: startupConfig } = useGetStartupConfig();
-    const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
+    const sharePointEnabled = useCanUseSharePoint();
     const { endpointFileConfig, providerValue, endpointType } = useAgentFileConfig();
     const endpointOverride = providerValue || EModelEndpoint.agents;
     const { handleFileChange } = useFileHandlingNoChatContext({

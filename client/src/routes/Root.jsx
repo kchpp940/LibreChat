@@ -10,6 +10,7 @@ import { UnifiedSidebar } from '~/components/UnifiedSidebar';
 import { TermsAndConditionsModal } from '~/components/ui';
 import { useHealthCheck } from '~/data-provider';
 import { Banner } from '~/components/Banners';
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 export default function Root() {
     const [showTerms, setShowTerms] = useState(false);
     const [bannerHeight, setBannerHeight] = useState(0);
@@ -20,9 +21,10 @@ export default function Root() {
     const assistantsMap = useAssistantsMap({ isAuthenticated });
     const agentsMap = useAgentsMap({ isAuthenticated });
     const fileMap = useFileMap({ isAuthenticated });
+    const interfaceFlags = useInterfaceFlags();
     const { data: config } = useGetStartupConfig();
     const { data: termsData } = useUserTermsQuery({
-        enabled: isAuthenticated && config?.interface?.termsOfService?.modalAcceptance === true,
+        enabled: isAuthenticated && interfaceFlags.termsOfService?.modalAcceptance === true,
     });
     useSearchEnabled(isAuthenticated);
     useEffect(() => {
@@ -59,7 +61,7 @@ export default function Root() {
               </div>
             </PromptGroupsProvider>
           </AgentsMapContext.Provider>
-          {config?.interface?.termsOfService?.modalAcceptance === true && (<TermsAndConditionsModal open={showTerms} onOpenChange={setShowTerms} onAccept={handleAcceptTerms} onDecline={handleDeclineTerms} title={config.interface.termsOfService.modalTitle} modalContent={config.interface.termsOfService.modalContent}/>)}
+          {interfaceFlags.termsOfService?.modalAcceptance === true && (<TermsAndConditionsModal open={showTerms} onOpenChange={setShowTerms} onAccept={handleAcceptTerms} onDecline={handleDeclineTerms} title={interfaceFlags.termsOfService?.modalTitle} modalContent={interfaceFlags.termsOfService?.modalContent}/>)}
         </AssistantsMapContext.Provider>
       </FileMapContext.Provider>
     </SetConvoProvider>);

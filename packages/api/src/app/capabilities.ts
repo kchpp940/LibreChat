@@ -59,10 +59,13 @@ function normalizeMcpServers(
     value && typeof value === 'object' && value.trustCheckbox
       ? { label: value.trustCheckbox.label, subLabel: value.trustCheckbox.subLabel }
       : undefined;
+  const placeholder =
+    value && typeof value === 'object' ? value.placeholder : undefined;
   return {
     ...base,
     configureObo:
       value && typeof value === 'object' ? value.configureObo ?? configureOboDefault : configureOboDefault,
+    placeholder,
     trustCheckbox,
   };
 }
@@ -123,11 +126,13 @@ export function buildCapabilities({
   const publicSharedLinksEnabled =
     sharedLinksEnabled && isEnabled(process.env.ALLOW_SHARED_LINKS_PUBLIC);
 
-  const balanceConfig = getBalanceConfig(appConfig);
   const artifactsEnabled = !!(process.env.SANDPACK_BUNDLER_URL || process.env.SANDPACK_STATIC_BUNDLER_URL);
   const codeExecutionEnabled = (interfaceConfig.runCode ?? true) && artifactsEnabled;
 
-  const exportConversationEnabled = true;
+  const sharePointFilePickerEnabled = isEnabled(process.env.ENABLE_SHAREPOINT_FILEPICKER);
+  const conversationImportMaxFileSize = process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES
+    ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
+    : 0;
 
   const endpoints = endpointsConfig ?? {};
   const endpointMap: Record<string, boolean> = {};
@@ -190,9 +195,12 @@ export function buildCapabilities({
       upload: true,
       download: true,
       preview: true,
-      maxFileSize: process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES
-        ? parseInt(process.env.CONVERSATION_IMPORT_MAX_FILE_SIZE_BYTES, 10)
-        : undefined,
+      maxFileSize: conversationImportMaxFileSize || undefined,
+      sharePointFilePickerEnabled,
+      sharePointBaseUrl: process.env.SHAREPOINT_BASE_URL,
+      sharePointPickerGraphScope: process.env.SHAREPOINT_PICKER_GRAPH_SCOPE,
+      sharePointPickerSharePointScope: process.env.SHAREPOINT_PICKER_SHAREPOINT_SCOPE,
+      conversationImportMaxFileSize,
     },
     artifacts: {
       enabled: artifactsEnabled,
@@ -203,8 +211,8 @@ export function buildCapabilities({
     sharedLinks,
     webSearch,
     export: {
-      conversation: exportConversationEnabled,
-      messages: exportConversationEnabled,
+      conversation: true,
+      messages: true,
     },
     memory,
     prompts,
@@ -228,6 +236,9 @@ export function buildCapabilities({
       fileSearch: interfaceConfig.fileSearch ?? true,
       fileCitations: interfaceConfig.fileCitations ?? true,
       buildInfo: interfaceConfig.buildInfo ?? true,
+      customWelcome: interfaceConfig.customWelcome,
+      privacyPolicy: interfaceConfig.privacyPolicy,
+      termsOfService: interfaceConfig.termsOfService,
       peoplePicker: {
         users: interfaceConfig.peoplePicker?.users ?? true,
         groups: interfaceConfig.peoplePicker?.groups ?? true,

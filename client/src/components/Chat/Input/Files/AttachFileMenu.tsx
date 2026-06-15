@@ -35,10 +35,10 @@ import {
 } from '~/hooks';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
 import { SharePointPickerDialog } from '~/components/SharePoint';
-import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
 import { MenuItemProps } from '~/common';
 import { cn } from '~/utils';
+import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 
 type FileUploadType =
   | 'image'
@@ -95,8 +95,7 @@ const AttachFileMenu = ({
     );
 
   const { agentsConfig } = useGetAgentsConfig();
-  const { data: startupConfig } = useGetStartupConfig();
-  const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
+  const sharePointEnabled = useCanUseSharePoint();
 
   const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
 

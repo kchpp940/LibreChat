@@ -1338,6 +1338,11 @@ export type TFileCapabilities = {
   preview: boolean;
   maxFileSize?: number;
   allowedMimeTypes?: string[];
+  sharePointFilePickerEnabled: boolean;
+  sharePointBaseUrl?: string;
+  sharePointPickerGraphScope?: string;
+  sharePointPickerSharePointScope?: string;
+  conversationImportMaxFileSize: number;
 };
 
 export type TRuntimeCapabilities = {
@@ -1373,6 +1378,7 @@ export type TRuntimeCapabilities = {
   remoteAgents: TCapabilityUseCreateShare;
   mcpServers: TCapabilityUseCreateShare & {
     configureObo: boolean;
+    placeholder?: string;
     trustCheckbox?: {
       label?: LocalizedString;
       subLabel?: LocalizedString;
@@ -1392,6 +1398,9 @@ export type TRuntimeCapabilities = {
     fileSearch: boolean;
     fileCitations: boolean;
     buildInfo: boolean;
+    customWelcome?: string;
+    privacyPolicy?: { url?: string; externalUrl?: string };
+    termsOfService?: { url?: string; externalUrl?: string; modalAcceptance?: boolean; modalTitle?: string; modalContent?: string };
     peoplePicker: {
       users: boolean;
       groups: boolean;

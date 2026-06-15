@@ -9,7 +9,9 @@ import { useGetEndpointsQuery } from '~/data-provider';
 import OptionsPopover from './OptionsPopover';
 import PopoverButtons from './PopoverButtons';
 import { useChatContext } from '~/Providers';
-export default function HeaderOptions({ interfaceConfig, }) {
+import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
+export default function HeaderOptions() {
+    const interfaceConfig = useInterfaceFlags();
     const { data: endpointsConfig } = useGetEndpointsQuery();
     const [saveAsDialogShow, setSaveAsDialogShow] = useState(false);
     const localize = useLocalize();

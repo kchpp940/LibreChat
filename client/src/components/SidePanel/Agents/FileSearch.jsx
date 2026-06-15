@@ -9,9 +9,9 @@ import { useFileHandlingNoChatContext } from '~/hooks/Files/useFileHandling';
 import { useAgentFileConfig, useLocalize, useLazyEffect } from '~/hooks';
 import { SharePointPickerDialog } from '~/components/SharePoint';
 import FileRow from '~/components/Chat/Input/Files/FileRow';
-import { useGetStartupConfig } from '~/data-provider';
 import FileSearchCheckbox from './FileSearchCheckbox';
 import { isEphemeralAgent } from '~/common';
+import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 function FileSearch({ agent_id, files: _files, }) {
     const localize = useLocalize();
     const { watch } = useFormContext();
@@ -20,8 +20,7 @@ function FileSearch({ agent_id, files: _files, }) {
     const fileHandlingState = useMemo(() => ({ files, setFiles, conversation: null }), [files]);
     const [isPopoverActive, setIsPopoverActive] = useState(false);
     const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
-    // Get startup configuration for SharePoint feature flag
-    const { data: startupConfig } = useGetStartupConfig();
+    const sharePointEnabled = useCanUseSharePoint();
     const { endpointFileConfig, providerValue, endpointType } = useAgentFileConfig();
     const endpointOverride = providerValue || EModelEndpoint.agents;
     const { handleFileChange } = useFileHandlingNoChatContext({
@@ -43,7 +42,6 @@ function FileSearch({ agent_id, files: _files, }) {
     }, [_files], 750);
     const fileSearchChecked = watch(AgentCapabilities.file_search);
     const isUploadDisabled = endpointFileConfig?.disabled ?? false;
-    const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
     const disabledUploadButton = isEphemeralAgent(agent_id) || fileSearchChecked === false;
     const handleSharePointFilesSelected = async (sharePointFiles) => {
         try {
