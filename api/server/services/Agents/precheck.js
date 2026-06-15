@@ -11,6 +11,7 @@ const {
   AgentCapabilities,
   isEphemeralAgentId,
   defaultAgentCapabilities,
+  supportsToolCalling,
 } = require('librechat-data-provider');
 const {
   createMCPPermissionContext,
@@ -97,7 +98,8 @@ function buildToolAvailabilityDeps(req) {
     resolveConfigServers: () => resolveConfigServers(req),
     isEphemeralAgentId,
     defaultAgentCapabilities,
-    supportsToolCalling: () => true,
+    supportsToolCalling: (model, provider, endpoint) =>
+      supportsToolCalling(model, provider, endpoint),
   };
 }
 

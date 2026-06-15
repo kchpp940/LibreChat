@@ -168,7 +168,16 @@ export default function usePresets(index = 0) {
     }
 
     const conversation = getConversation();
-    const newPreset = removeUnavailableTools(_newPreset, availableTools);
+    const newPreset = removeUnavailableTools(
+      _newPreset,
+      availableTools,
+      undefined,
+      _newPreset.endpoint,
+      typeof _newPreset.model === 'string'
+        ? _newPreset.model
+        : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
+      typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
+    );
 
     const toastTitle = newPreset.title
       ? `"${newPreset.title}"`

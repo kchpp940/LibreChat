@@ -242,7 +242,16 @@ export default function useSelectMention({
 
       const conversation = getConversation();
 
-      const newPreset = removeUnavailableTools(_newPreset, availableTools);
+      const newPreset = removeUnavailableTools(
+        _newPreset,
+        availableTools,
+        undefined,
+        _newPreset.endpoint,
+        typeof _newPreset.model === 'string'
+          ? _newPreset.model
+          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
+        typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
+      );
       const newEndpoint = newPreset.endpoint ?? '';
 
       const {

@@ -37,6 +37,7 @@ const {
   removeNullishValues,
   isEphemeralAgentId,
   defaultAgentCapabilities,
+  supportsToolCalling,
 } = require('librechat-data-provider');
 const {
   findPubliclyAccessibleResources,
@@ -1501,7 +1502,8 @@ const getToolAvailabilityHandler = async (req, res) => {
       resolveConfigServers: () => resolveConfigServers(req),
       isEphemeralAgentId,
       defaultAgentCapabilities,
-      supportsToolCalling: () => true,
+      supportsToolCalling: (model, provider, endpoint) =>
+        supportsToolCalling(model, provider, endpoint),
     };
 
     const result = await resolveToolAvailability(

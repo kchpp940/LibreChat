@@ -51,6 +51,7 @@ const {
   actionDomainSeparator,
   defaultAgentCapabilities,
   validateAndParseOpenAPISpec,
+  supportsToolCalling,
 } = require('librechat-data-provider');
 const {
   createActionTool,
@@ -140,7 +141,8 @@ function buildToolAvailabilityDeps(req) {
     resolveConfigServers: () => resolveConfigServers(req),
     isEphemeralAgentId,
     defaultAgentCapabilities,
-    supportsToolCalling: () => true,
+    supportsToolCalling: (model, provider, endpoint) =>
+      supportsToolCalling(model, provider, endpoint),
   };
 }
 

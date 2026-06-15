@@ -4,6 +4,7 @@ export * from './bedrock';
 export * from './balance';
 export * from './config';
 export * from './file-config';
+export * from './toolCapabilities';
 /* messages  */
 export * from './messages';
 /* artifacts  */

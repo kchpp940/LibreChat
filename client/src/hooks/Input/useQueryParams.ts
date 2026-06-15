@@ -93,7 +93,16 @@ export default function useQueryParams({
       if (!_newPreset) {
         return;
       }
-      let newPreset = removeUnavailableTools(_newPreset, availableTools);
+      let newPreset = removeUnavailableTools(
+        _newPreset,
+        availableTools,
+        undefined,
+        _newPreset.endpoint,
+        typeof _newPreset.model === 'string'
+          ? _newPreset.model
+          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
+        typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
+      );
       if (newPreset.spec != null && newPreset.spec !== '') {
         const startupConfig = queryClient.getQueryData<TStartupConfig>(startupConfigKey(true));
         const modelSpecs = startupConfig?.modelSpecs?.list ?? [];
