@@ -155,6 +155,11 @@ export function useCanCreateSkills() {
   return caps.skills.create;
 }
 
+export function useSkillCapabilities() {
+  const caps = useCapabilities();
+  return caps.skills;
+}
+
 export function useCanUseMCPServers() {
   const caps = useCapabilities();
   return caps.mcpServers.use;
@@ -173,6 +178,14 @@ export function useMcpServerCapabilities() {
 export function useInterfaceFlags() {
   const caps = useCapabilities();
   return caps.interface;
+}
+
+export function useLegalPolicyLinks() {
+  const caps = useCapabilities();
+  return {
+    privacyPolicy: caps.interface.privacyPolicy,
+    termsOfService: caps.interface.termsOfService,
+  };
 }
 
 export function useCanUseSharePoint() {

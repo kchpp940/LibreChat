@@ -11,6 +11,14 @@ const CLIENT_SRC = path.resolve(__dirname, '..', 'client', 'src');
 
 const FORBIDDEN_PATTERNS = [
   {
+    pattern: /import.*\buseCapabilities\b.*from.*CapabilitiesContext/g,
+    message: 'Do not import `useCapabilities()` directly in business code. Use a dedicated semantic hook like `useCanShareConversations()`, `useInterfaceFlags()`, `useSkillCapabilities()`, etc. from CapabilitiesContext.',
+  },
+  {
+    pattern: /\buseCapabilities\s*\(\)/g,
+    message: 'Do not call `useCapabilities()` directly in business code. Use a dedicated semantic hook like `useCanShareConversations()`, `useInterfaceFlags()`, `useSkillCapabilities()`, etc. If no suitable hook exists, add one to CapabilitiesContext.tsx.',
+  },
+  {
     pattern: /startupConfig\??\.sharedLinksEnabled/g,
     message: 'Use `useCanShareConversations()` from CapabilitiesContext instead of `startupConfig.sharedLinksEnabled`',
   },

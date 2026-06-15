@@ -4,13 +4,15 @@ import ReactMarkdown from 'react-markdown';
 import { Constants } from 'librechat-data-provider';
 import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { useLegalPolicyLinks } from '~/Providers/CapabilitiesContext';
 function Footer({ className, startupConfig }) {
     const shouldFetchConfig = startupConfig === undefined;
     const { data: fetchedConfig } = useGetStartupConfig({ enabled: shouldFetchConfig });
     const config = shouldFetchConfig ? fetchedConfig : startupConfig;
+    const legalPolicies = useLegalPolicyLinks();
     const localize = useLocalize();
-    const privacyPolicy = config?.interface?.privacyPolicy;
-    const termsOfService = config?.interface?.termsOfService;
+    const privacyPolicy = legalPolicies.privacyPolicy;
+    const termsOfService = legalPolicies.termsOfService;
     const privacyPolicyRender = privacyPolicy?.externalUrl != null && (<a className="text-text-secondary underline" href={privacyPolicy.externalUrl} rel="noreferrer">
       {localize('com_ui_privacy_policy')}
     </a>);

@@ -9,7 +9,7 @@ import {
 } from '~/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { logger } from '~/utils';
-import { useCapabilities } from '~/Providers/CapabilitiesContext';
+import { useSkillCapabilities } from '~/Providers/CapabilitiesContext';
 
 const EMPTY_STATES: TSkillStatesResponse = {};
 
@@ -100,7 +100,7 @@ export default function useSkillActiveState() {
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const queryClient = useQueryClient();
-  const caps = useCapabilities();
+  const skills = useSkillCapabilities();
   const getQuery = useGetSkillStatesQuery();
   const updateMutation = useUpdateSkillStatesMutation();
 
@@ -123,12 +123,11 @@ export default function useSkillActiveState() {
   }, [userId]);
 
   const defaultActiveOnShare = useMemo(() => {
-    const skills = caps.skills;
     if (typeof skills === 'object' && skills !== null && 'defaultActiveOnShare' in skills) {
       return skills.defaultActiveOnShare === true;
     }
     return false;
-  }, [caps]);
+  }, [skills]);
 
   const skillStates = useMemo<TSkillStatesResponse>(
     () => (getQuery.data && typeof getQuery.data === 'object' ? getQuery.data : EMPTY_STATES),
