@@ -12,13 +12,8 @@ import {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAssistantsVersion,
-  getDisplayWidth,
-  getDisplayHeight,
-  isIndexed,
-  getFilePurpose,
-  getIndexingStatus,
 } from 'librechat-data-provider';
-import type { EModelEndpoint, TEndpointsConfig, TError, TFile } from 'librechat-data-provider';
+import type { EModelEndpoint, TEndpointsConfig, TError } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
@@ -144,7 +139,6 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             cachePreview(data.file_id, cachedBlob);
             removePreviewEntry(data.temp_file_id);
           }
-          const file = data as TFile;
           updateFileById(
             data.temp_file_id,
             {
@@ -153,14 +147,11 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
               temp_file_id: data.temp_file_id,
               filepath: data.filepath,
               type: data.type,
-              height: getDisplayHeight(file),
-              width: getDisplayWidth(file),
+              height: data.height,
+              width: data.width,
               filename: data.filename,
               source: data.source,
-              embedded: isIndexed(file),
-              indexingStatus: getIndexingStatus(file),
-              purpose: getFilePurpose(file),
-              display: data.display,
+              embedded: data.embedded,
             },
             assistant_id ? true : false,
           );
@@ -213,8 +204,8 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
       formData.append('isTemporary', 'true');
     }
 
-    const width = getDisplayWidth(extendedFile) ?? 0;
-    const height = getDisplayHeight(extendedFile) ?? 0;
+    const width = extendedFile.width ?? 0;
+    const height = extendedFile.height ?? 0;
     if (width) {
       formData.append('width', width.toString());
     }
@@ -279,14 +270,11 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
   const loadImage = (extendedFile: ExtendedFile, preview: string) => {
     const img = new Image();
     img.onload = async () => {
+      extendedFile.width = img.width;
+      extendedFile.height = img.height;
       extendedFile = {
         ...extendedFile,
         progress: 0.6,
-        display: {
-          ...extendedFile.display,
-          width: img.width,
-          height: img.height,
-        },
       };
       replaceFile(extendedFile);
 

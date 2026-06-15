@@ -9,8 +9,6 @@ import {
   LocalStorageKeys,
   isImageVisionTool,
   defaultAssistantFormValues,
-  getDisplayWidth,
-  getDisplayHeight,
 } from 'librechat-data-provider';
 import type {
   TPlugin,
@@ -100,8 +98,8 @@ export default function AssistantSelect({
                 type: file.type,
                 filepath: file.filepath,
                 filename: file.filename,
-                width: getDisplayWidth(file),
-                height: getDisplayHeight(file),
+                width: file.width,
+                height: file.height,
                 size: file.bytes,
                 preview: file.filepath,
                 progress: 1,

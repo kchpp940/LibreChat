@@ -5,9 +5,7 @@ const {
   isActionTool,
   EModelEndpoint,
   AgentCapabilities,
-  isIndexed,
 } = require('librechat-data-provider');
-
 const {
   createMCPPermissionContext,
   resolveConfigServers,
@@ -326,7 +324,6 @@ async function checkFileIndexStatus(data, existingAgentId) {
     const files = await db.getFiles({ file_id: { $in: fileIds } }, null, {
       file_id: 1,
       embedded: 1,
-      indexingStatus: 1,
       filename: 1,
     });
 
@@ -336,7 +333,7 @@ async function checkFileIndexStatus(data, existingAgentId) {
       const file = filesById.get(fileId);
       if (!file) {
         unindexed.push({ fileId, reason: 'not_found' });
-      } else if (!isIndexed(file)) {
+      } else if (file.embedded !== true) {
         unindexed.push({ fileId, reason: 'not_indexed', filename: file.filename });
       }
     }

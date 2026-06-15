@@ -46,7 +46,8 @@ import { useApplyAgentTemplate } from '~/hooks/Agents';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';
 import { useLiveAnnouncer } from '~/Providers';
-import store from '~/store';
+import store, { useChatStreamDispatch } from '~/store';
+import type { ChatStreamAction } from '~/store/chatStream';
 
 type TSyncData = {
   sync: boolean;
@@ -152,6 +153,8 @@ export type EventHandlerParams = {
   setConversation?: SetterOrUpdater<TConversation | null>;
   newConversation?: ConvoGenerator;
   setShowStopButton: SetterOrUpdater<boolean>;
+  /** Run index for multi-conversation support; enables unified ChatStream state */
+  runIndex?: string | number;
 };
 
 const createErrorMessage = ({
@@ -264,6 +267,7 @@ export default function useEventHandlers({
   setIsSubmitting,
   newConversation,
   setShowStopButton,
+  runIndex = 0,
 }: EventHandlerParams) {
   const queryClient = useQueryClient();
   const { announcePolite } = useLiveAnnouncer();
@@ -271,6 +275,7 @@ export default function useEventHandlers({
   const setAbortScroll = useSetRecoilState(store.abortScroll);
   const navigate = useNavigate();
   const location = useLocation();
+  const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const lastAnnouncementTimeRef = useRef(Date.now());
   const { conversationId: paramId } = useParams();
@@ -416,6 +421,15 @@ export default function useEventHandlers({
         ...responseMessage,
       };
 
+      chatStreamDispatch({
+        type: 'STREAM_RESUMED',
+        payload: { streamId: conversationId },
+      });
+      chatStreamDispatch({
+        type: 'MESSAGE_UPDATE',
+        payload: { responseMessage: nextResponseMessage as TMessage },
+      });
+
       setMessages([...messages, requestMessage, nextResponseMessage]);
 
       announcePolite({
@@ -466,7 +480,7 @@ export default function useEventHandlers({
 
       setShowStopButton(true);
     },
-    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, setShowStopButton],
+    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, setShowStopButton, chatStreamDispatch],
   );
 
   const createdHandler = useCallback(
@@ -489,6 +503,16 @@ export default function useEventHandlers({
         userMessage,
         isRegenerate,
       });
+
+      chatStreamDispatch({
+        type: 'STREAM_CREATED',
+        payload: {
+          runId: (data as { runId?: string }).runId ?? v4(),
+          userMessage: userMessage as TMessage,
+          responseMessage: initialResponse,
+        },
+      });
+
       if (isRegenerate) {
         setMessages([...messages, initialResponse]);
       } else {
@@ -561,6 +585,7 @@ export default function useEventHandlers({
       announcePolite,
       setConversation,
       applyAgentTemplate,
+      chatStreamDispatch,
     ],
   );
 
@@ -615,6 +640,7 @@ export default function useEventHandlers({
         // Handle early abort - aborted before any response message was saved.
         if ((data as Record<string, unknown>).earlyAbort) {
           console.log('[finalHandler] Early abort detected - no response message saved');
+          chatStreamDispatch({ type: 'STREAM_ABORTED' });
           setShowStopButton(false);
           setIsSubmitting(false);
 
@@ -668,6 +694,8 @@ export default function useEventHandlers({
         }
 
         setCompleted((prev) => new Set(prev.add(submission.initialResponse.messageId)));
+        chatStreamDispatch({ type: 'ADD_COMPLETED_ID', payload: submission.initialResponse.messageId });
+        chatStreamDispatch({ type: 'STREAM_COMPLETED', payload: data });
 
         const currentMessages = getMessages();
         /* Early return if messages are empty; i.e., the user navigated away */
@@ -840,6 +868,7 @@ export default function useEventHandlers({
       location.pathname,
       applyAgentTemplate,
       attachmentHandler,
+      chatStreamDispatch,
     ],
   );
 
@@ -847,6 +876,18 @@ export default function useEventHandlers({
     ({ data, submission }: { data?: TResData; submission: EventSubmission }) => {
       const { messages, userMessage, initialResponse } = submission;
       setCompleted((prev) => new Set(prev.add(initialResponse.messageId)));
+      chatStreamDispatch({ type: 'ADD_COMPLETED_ID', payload: initialResponse.messageId });
+      chatStreamDispatch({
+        type: 'STREAM_ERROR',
+        payload: {
+          error: {
+            message:
+              (data as { text?: string } | undefined)?.text ??
+              'Error connecting to server, try refreshing the page.',
+            data,
+          },
+        },
+      });
 
       const conversationId =
         userMessage.conversationId ?? submission.conversation?.conversationId ?? '';
@@ -941,6 +982,7 @@ export default function useEventHandlers({
       setIsSubmitting,
       getMessages,
       queryClient,
+      chatStreamDispatch,
     ],
   );
 

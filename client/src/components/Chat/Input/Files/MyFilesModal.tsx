@@ -1,4 +1,4 @@
-import { FileSources, FilePurpose, getFilePurpose } from 'librechat-data-provider';
+import { FileSources, FileContext } from 'librechat-data-provider';
 import type { TFile } from 'librechat-data-provider';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '@librechat/client';
 import { useGetFiles } from '~/data-provider';
@@ -19,7 +19,7 @@ export function MyFilesModal({
   const { data: files = [] } = useGetFiles<TFile[]>({
     select: (files) =>
       files.map((file) => {
-        file.purpose = getFilePurpose(file) ?? FilePurpose.unknown;
+        file.context = file.context ?? FileContext.unknown;
         file.filterSource = file.source === FileSources.firebase ? FileSources.local : file.source;
         return file;
       }),

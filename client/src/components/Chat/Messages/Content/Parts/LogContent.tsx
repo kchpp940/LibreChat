@@ -1,6 +1,6 @@
 import { isAfter } from 'date-fns';
 import React, { useMemo } from 'react';
-import { isImageFile, getDisplayWidth, getDisplayHeight, getDisplayText } from 'librechat-data-provider';
+import { imageExtRegex } from 'librechat-data-provider';
 import type { TFile, TAttachment, TAttachmentMetadata } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 import {
@@ -74,7 +74,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       const { filepath = null } = fileData;
       // LogContent uses a looser image check than Attachment.tsx (no
       // width/height requirement) to keep parity with the legacy log surface.
-      const isImage = isImageFile(fileData) && filepath != null;
+      const isImage = imageExtRegex.test(attachment.filename ?? '') && filepath != null;
       if (isImage) {
         imageAtts.push(attachment as ImageAttachment);
         return;
@@ -94,10 +94,10 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       }
       const artType = artifactTypeForAttachment(attachment);
       if (artType === TOOL_ARTIFACT_TYPES.MERMAID) {
-        if (getDisplayText(fileData)) {
+        if (fileData.text) {
           mermaidAtts.push({
             attachment,
-            text: getDisplayText(fileData),
+            text: fileData.text,
           });
         }
         return;
@@ -227,7 +227,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
                 </div>
               )}
               <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-text-primary">
-                {getDisplayText(file as TFile)}
+                {file.text}
               </pre>
             </div>
           ))}
@@ -235,8 +235,8 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       )}
       {imageAttachments?.map((attachment, index) => (
         <Image
-          width={getDisplayWidth(attachment as TFile)}
-          height={getDisplayHeight(attachment as TFile)}
+          width={attachment.width}
+          height={attachment.height}
           key={renderAttachmentKey('image', attachment, index)}
           altText={attachment.filename}
           imagePath={attachment.filepath}

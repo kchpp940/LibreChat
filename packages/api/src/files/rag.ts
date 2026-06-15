@@ -1,17 +1,14 @@
 import axios from 'axios';
 import { logger } from '@librechat/data-schemas';
-import { isIndexed } from 'librechat-data-provider';
 import { generateShortLivedToken } from '~/crypto/jwt';
 
 interface DeleteRagFileParams {
   /** The user ID. Required for authentication. If not provided, the function returns false and logs an error. */
   userId: string;
-  /** The file object. Must have `embedded` or `indexingStatus` and `file_id` properties. */
+  /** The file object. Must have `embedded` and `file_id` properties. */
   file: {
     file_id: string;
-    /** @deprecated Use `indexingStatus` instead. */
     embedded?: boolean;
-    indexingStatus?: import('librechat-data-provider').IndexingStatus;
   };
 }
 
@@ -22,11 +19,11 @@ interface DeleteRagFileParams {
  *
  * @param params - The parameters object.
  * @param params.userId - The user ID for authentication.
- * @param params.file - The file object. Must have `embedded` or `indexingStatus` and `file_id` properties.
+ * @param params.file - The file object. Must have `embedded` and `file_id` properties.
  * @returns Returns true if deletion was successful or skipped, false if there was an error.
  */
 export async function deleteRagFile({ userId, file }: DeleteRagFileParams): Promise<boolean> {
-  if (!isIndexed(file) || !process.env.RAG_API_URL) {
+  if (!file.embedded || !process.env.RAG_API_URL) {
     return true;
   }
 

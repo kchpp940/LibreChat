@@ -700,7 +700,13 @@ export type AgentAvatar = {
   source: string;
 };
 
-export { FilePurpose } from '../file-metadata';
+export enum FilePurpose {
+  Vision = 'vision',
+  FineTune = 'fine-tune',
+  FineTuneResults = 'fine-tune-results',
+  Assistants = 'assistants',
+  AssistantsOutput = 'assistants_output',
+}
 
 export const defaultOrderQuery: {
   order: 'desc';

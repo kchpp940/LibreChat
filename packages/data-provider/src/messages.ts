@@ -1,4 +1,4 @@
-import type { TFile } from './file-metadata';
+import type { TFile } from './types/files';
 import type { TMessage } from './types';
 
 export type ParentMessage = TMessage & { children: TMessage[]; depth: number };

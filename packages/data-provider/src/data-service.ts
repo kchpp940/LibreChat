@@ -9,7 +9,7 @@ import * as m from './types/mutations';
 import * as ag from './types/agents';
 import * as q from './types/queries';
 import * as sk from './types/skills';
-import * as f from './file-metadata';
+import * as f from './types/files';
 import * as config from './config';
 import request from './request';
 import * as s from './schemas';

@@ -15,7 +15,6 @@ import {
   isEphemeralAgentId,
   isAssistantsEndpoint,
   getDefaultParamsEndpoint,
-  isIndexed,
 } from 'librechat-data-provider';
 import type {
   TPreset,
@@ -42,7 +41,6 @@ import { useApplyModelSpecEffects } from './Agents';
 import { usePauseGlobalAudio } from './Audio';
 import { useHasAccess } from '~/hooks';
 import store from '~/store';
-
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
@@ -349,13 +347,12 @@ const useNewConvo = (index = 0) => {
               file.filepath != null &&
               file.filepath !== '' &&
               file.source &&
-              !isIndexed(file) &&
+              !(file.embedded ?? false) &&
               file.temp_file_id,
           )
           .map((file) => ({
             file_id: file.file_id,
-            embedded: isIndexed(file),
-            indexingStatus: file.indexingStatus,
+            embedded: !!(file.embedded ?? false),
             filepath: file.filepath as string,
             source: file.source as FileSources, // Ensure that the source is of type FileSources
           }));

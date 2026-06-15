@@ -1,37 +1,7 @@
-import {
-  imageExtRegex,
-  isImageFile,
-  isTextFile,
-  hasDisplayDimensions,
-  getDisplayWidth,
-  getDisplayHeight,
-  getDisplayText,
-  getDisplayTextFormat,
-  getFilePurpose,
-  getIndexingStatus,
-} from 'librechat-data-provider';
-import type {
-  TAttachment,
-  TAttachmentMetadata,
-  TFile,
-  FileDisplayMetadata,
-} from 'librechat-data-provider';
+import { imageExtRegex } from 'librechat-data-provider';
+import type { TAttachment, TAttachmentMetadata, TFile } from 'librechat-data-provider';
 import type { ToolArtifactType } from '~/utils/artifacts';
 import { detectArtifactTypeFromFile } from '~/utils/artifacts';
-
-function getDisplayMetadata(
-  attachment: TAttachment,
-): FileDisplayMetadata & { width?: number; height?: number; text?: string } {
-  const file = attachment as TFile & TAttachmentMetadata;
-  return {
-    width: getDisplayWidth(file),
-    height: getDisplayHeight(file),
-    text: getDisplayText(file),
-    textFormat: getDisplayTextFormat(file),
-    pageCount: file.display?.pageCount,
-    duration: file.display?.duration,
-  };
-}
 
 /**
  * Empty-folder placeholders the bash executor drops in the stateless
@@ -179,9 +149,10 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
   if (!attachment.filename) {
     return false;
   }
-  const file = attachment as TFile & TAttachmentMetadata;
-  const { filepath = null } = file;
-  return isImageFile(file) && hasDisplayDimensions(file) && filepath != null;
+  const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
+  return (
+    imageExtRegex.test(attachment.filename) && width != null && height != null && filepath != null
+  );
 };
 
 /**
@@ -190,8 +161,8 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
  * treated as "no inline text available" and fall through to the download UI.
  */
 export const isTextAttachment = (attachment: TAttachment): boolean => {
-  const file = attachment as TFile & TAttachmentMetadata;
-  return isTextFile(file) || typeof getDisplayText(file) === 'string' && getDisplayText(file)!.length > 0;
+  const { text } = attachment as TFile & TAttachmentMetadata;
+  return typeof text === 'string' && text.length > 0;
 };
 
 /**

@@ -2,7 +2,7 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const { logger } = require('@librechat/data-schemas');
-const { FileSources, isIndexed } = require('librechat-data-provider');
+const { FileSources } = require('librechat-data-provider');
 const { logAxiosError, generateShortLivedToken } = require('@librechat/api');
 
 /**
@@ -18,7 +18,7 @@ const { logAxiosError, generateShortLivedToken } = require('@librechat/api');
  *          file path is invalid or if there is an error in deletion.
  */
 const deleteVectors = async (req, file) => {
-  if (!isIndexed(file) || !process.env.RAG_API_URL) {
+  if (!file.embedded || !process.env.RAG_API_URL) {
     return;
   }
   try {
@@ -109,7 +109,6 @@ async function uploadVectors({ req, file, file_id, entity_id, storageMetadata })
       filename: file.originalname,
       filepath: FileSources.vectordb,
       embedded: Boolean(responseData.known_type),
-      indexingStatus: responseData.known_type ? IndexingStatus.completed : IndexingStatus.failed,
     };
   } catch (error) {
     logAxiosError({

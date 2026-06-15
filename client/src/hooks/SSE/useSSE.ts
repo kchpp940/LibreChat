@@ -10,7 +10,7 @@ import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useEventHandlers from './useEventHandlers';
 import { clearAllDrafts } from '~/utils';
-import store from '~/store';
+import store, { useChatStreamDispatch } from '~/store';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -24,6 +24,7 @@ export default function useSSE(
   runIndex = 0,
 ) {
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
+  const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const { token, isAuthenticated } = useAuthContext();
   const [completed, setCompleted] = useState(new Set());
@@ -54,6 +55,7 @@ export default function useSSE(
     setIsSubmitting,
     newConversation,
     setShowStopButton,
+    runIndex,
   });
 
   const { data: startupConfig } = useGetStartupConfig();
@@ -65,6 +67,16 @@ export default function useSSE(
     if (submission == null || Object.keys(submission).length === 0) {
       return;
     }
+
+    chatStreamDispatch({
+      type: 'SUBMIT_START',
+      payload: {
+        submission,
+        conversation: submission.conversation,
+        userMessage: submission.userMessage,
+        responseMessage: submission.initialResponse,
+      },
+    });
 
     let { userMessage } = submission;
 
@@ -146,6 +158,7 @@ export default function useSSE(
     });
 
     sse.addEventListener('open', () => {
+      chatStreamDispatch({ type: 'STREAM_OPEN' });
       setAbortScroll(false);
       console.log('connection is opened');
     });
@@ -162,6 +175,8 @@ export default function useSSE(
       }
 
       setCompleted((prev) => new Set(prev.add(streamKey)));
+      chatStreamDispatch({ type: 'ADD_COMPLETED_ID', payload: streamKey });
+      chatStreamDispatch({ type: 'STREAM_ABORTED' });
       const latestMessages = getMessages();
       const conversationId = latestMessages?.[latestMessages.length - 1]?.conversationId;
       try {

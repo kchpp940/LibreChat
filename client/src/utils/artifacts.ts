@@ -1,10 +1,5 @@
 import dedent from 'dedent';
-import {
-  excelMimeTypes,
-  shadcnComponents,
-  getDisplayText,
-  getDisplayTextFormat,
-} from 'librechat-data-provider';
+import { excelMimeTypes, shadcnComponents } from 'librechat-data-provider';
 import type {
   SandpackProviderProps,
   SandpackPredefinedTemplate,
@@ -752,14 +747,14 @@ export function detectArtifactTypeFromFile(
    * text is "fall through to the legacy download path"; preserve that
    * by returning null here. The downgrade only matters when there's
    * actual text content that needs safe-escaping. */
-  if (OFFICE_HTML_BUCKETS.has(type) && getDisplayTextFormat(attachment as TFile) !== 'html') {
-    if (!getDisplayText(attachment as TFile)) {
+  if (OFFICE_HTML_BUCKETS.has(type) && attachment.textFormat !== 'html') {
+    if (!attachment.text) {
       return null;
     }
     return TOOL_ARTIFACT_TYPES.PLAIN_TEXT;
   }
   if (
-    !getDisplayText(attachment as TFile) &&
+    !attachment.text &&
     type !== TOOL_ARTIFACT_TYPES.PLAIN_TEXT &&
     type !== TOOL_ARTIFACT_TYPES.MARKDOWN &&
     type !== TOOL_ARTIFACT_TYPES.CODE
@@ -856,7 +851,7 @@ export function fileToArtifact(
   // their viewers would error on. Plain-text and markdown are still
   // tolerated empty — the markdown viewer renders empty cleanly.
   if (
-    !getDisplayText(attachment as TFile) &&
+    !attachment.text &&
     type !== TOOL_ARTIFACT_TYPES.PLAIN_TEXT &&
     type !== TOOL_ARTIFACT_TYPES.MARKDOWN &&
     type !== TOOL_ARTIFACT_TYPES.CODE
@@ -890,7 +885,7 @@ export function fileToArtifact(
     // panel rather than be replaced by the deferred-extraction
     // placeholder. Only `null`/`undefined` fall through to the
     // placeholder, matching "no extraction has run yet."
-    content: getDisplayText(attachment as TFile) ?? options?.placeholder ?? '',
+    content: attachment.text ?? options?.placeholder ?? '',
     language,
     messageId: attachment.messageId ?? undefined,
     lastUpdateTime: toLastUpdate(attachment),

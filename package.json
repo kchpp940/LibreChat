@@ -79,8 +79,6 @@
     "lint": "eslint \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "sort-imports": "node scripts/sort-imports.mts",
     "sort-imports:check": "node scripts/sort-imports.mts --check",
-    "check:file-metadata-boundaries": "node scripts/check-file-metadata-boundaries.mjs",
-    "check": "npm run lint && npm run sort-imports:check && npm run check:file-metadata-boundaries",
     "format": "npx prettier --write \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "b:api": "NODE_ENV=production bun run api/server/index.js",
     "b:api-inspect": "NODE_ENV=production bun --inspect run api/server/index.js",

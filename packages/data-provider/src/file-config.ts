@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { EndpointFileConfig, FileConfig } from './file-metadata';
+import type { EndpointFileConfig, FileConfig } from './types/files';
 import { EModelEndpoint, isAgentsEndpoint, isDocumentSupportedProvider } from './schemas';
 import { normalizeEndpointName } from './utils';
 

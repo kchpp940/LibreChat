@@ -1,4 +1,4 @@
-import type { FileConfig } from './file-metadata';
+import type { FileConfig } from './types/files';
 import {
   fileConfig as baseFileConfig,
   isPermissiveMimeConfig,

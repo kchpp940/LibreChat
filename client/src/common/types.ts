@@ -577,13 +577,9 @@ export interface ExtendedFile {
   progress: number;
   source?: FileSources;
   attached?: boolean;
-  /** @deprecated Use `indexingStatus` instead. */
   embedded?: boolean;
-  indexingStatus?: t.IndexingStatus;
-  purpose?: t.FilePurpose;
   tool_resource?: string;
   metadata?: t.TFile['metadata'];
-  display?: t.FileDisplayMetadata;
 }
 
 export interface ModelItemProps {

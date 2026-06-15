@@ -61,7 +61,6 @@ const {
   isEphemeralAgentId,
   removeNullishValues,
   DEFAULT_MEMORY_MAX_INPUT_TOKENS,
-  isIndexed,
 } = require('librechat-data-provider');
 const { filterFilesByAgentAccess } = require('~/server/services/Files/permissions');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
@@ -71,7 +70,6 @@ const { getMCPServerTools } = require('~/server/services/Config');
 const BaseClient = require('~/app/clients/BaseClient');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
-
 
 const loadAgent = (params) => loadAgentFn(params, { getAgent: db.getAgent, getMCPServerTools });
 
@@ -374,7 +372,7 @@ class AgentClient extends BaseClient {
       if (this.message_file_map && this.message_file_map[message.messageId]) {
         const attachments = this.message_file_map[message.messageId];
         for (const file of attachments) {
-          if (isIndexed(file)) {
+          if (file.embedded) {
             this.contextHandlers?.processFile(file);
             continue;
           }

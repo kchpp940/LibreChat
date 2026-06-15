@@ -17,10 +17,6 @@ const {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   documentParserMimeTypes,
-  IndexingStatus,
-  isIndexed,
-  isCodeEnvFile,
-  serializeFileMetadata,
 } = require('librechat-data-provider');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
@@ -45,21 +41,35 @@ const { LB_QueueAsyncCall } = require('~/server/utils/queue');
 const { getRetentionExpiry, getAgentFileRetentionExpiry } = require('./retention');
 const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
-const STTService = require('./Audio/STTService');
+const { STTService } = require('./Audio/STTService');
 const db = require('~/models');
 
+/**
+ * Creates a modular file upload wrapper that ensures filename sanitization
+ * across all storage strategies. This prevents storage-specific implementations
+ * from having to handle sanitization individually.
+ *
+ * @param {Function} uploadFunction - The storage strategy's upload function
+ * @returns {Function} - Wrapped upload function with sanitization
+ */
 const createSanitizedUploadWrapper = (uploadFunction) => {
   return async (params) => {
     const { req, file, file_id, ...restParams } = params;
+
+    // Create a modified file object with sanitized original name
+    // This ensures consistent filename handling across all storage strategies
     const sanitizedFile = {
       ...file,
       originalname: sanitizeFilename(file.originalname),
     };
+
     return uploadFunction({ req, file: sanitizedFile, file_id, ...restParams });
   };
 };
 
-const isMissingStorageError = (err) => {{
+const hasCodeEnvRef = (file) => file?.metadata?.codeEnvRef != null;
+
+const isMissingStorageError = (err) => {
   const code = err?.code ?? err?.status ?? err?.statusCode ?? err?.response?.status;
   if ([404, '404', 'ENOENT', 'NoSuchKey', 'NotFound', 'ResourceNotFound'].includes(code)) {
     return true;
@@ -153,12 +163,12 @@ const getDeleteMethod = ({ source, deletionMethods }) => {
 const createDeleteFileWithSecondaryStorage = ({ source, deleteFile, deletionMethods }) => {
   return async (req, file, openai) => {
     const secondaryDeleteMethods = [];
-    if (isIndexed(file) && source !== FileSources.vectordb) {
+    if (file.embedded === true && source !== FileSources.vectordb) {
       secondaryDeleteMethods.push(
         getDeleteMethod({ source: FileSources.vectordb, deletionMethods }),
       );
     }
-    if (isCodeEnvFile(file) && source !== FileSources.execute_code) {
+    if (hasCodeEnvRef(file) && source !== FileSources.execute_code) {
       secondaryDeleteMethods.push(
         getDeleteMethod({ source: FileSources.execute_code, deletionMethods }),
       );
@@ -476,10 +486,7 @@ const processImageFile = async ({ req, res, metadata, returnFile = false }) => {
   if (returnFile) {
     return result;
   }
-  res.status(200).json({
-    message: 'File uploaded and processed successfully',
-    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
-  });
+  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
 };
 
 /**
@@ -574,7 +581,6 @@ const processFileUpload = async ({ req, res, metadata }) => {
     storageKey: _storageKey,
     storageRegion: _storageRegion,
     embedded,
-    indexingStatus,
     height,
     width,
   } = await sanitizedUploadFn({
@@ -635,7 +641,6 @@ const processFileUpload = async ({ req, res, metadata }) => {
       type: file.mimetype,
       ...(await getRetentionExpiry(req)),
       embedded,
-      indexingStatus,
       source,
       height,
       width,
@@ -643,10 +648,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
     },
     true,
   );
-  res.status(200).json({
-    message: 'File uploaded and processed successfully',
-    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
-  });
+  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
 };
 
 /**
@@ -786,10 +788,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       const result = await db.createFile(fileInfo, true);
       return res
         .status(200)
-        .json({
-          message: 'Agent file uploaded and processed successfully',
-          ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
-        });
+        .json({ message: 'Agent file uploaded and processed successfully', ...result });
     };
 
     const fileConfig = mergeFileConfig(appConfig.fileConfig);
@@ -919,10 +918,8 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
   } = storageResult;
   // For RAG files, use embedding result; for others, use storage result
   let embedded = storageResult.embedded;
-  let indexingStatus = storageResult.indexingStatus;
   if (tool_resource === EToolResources.file_search) {
     embedded = embeddingResult?.embedded;
-    indexingStatus = embeddingResult?.indexingStatus;
     filename = embeddingResult?.filename || filename;
   }
 
@@ -978,7 +975,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       metadata: fileInfoMetadata,
       type: file.mimetype,
       embedded,
-      indexingStatus,
       source,
       height,
       width,
@@ -989,10 +985,7 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
 
   const result = await db.createFile(fileInfo, true);
 
-  res.status(200).json({
-    message: 'Agent file uploaded and processed successfully',
-    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
-  });
+  res.status(200).json({ message: 'Agent file uploaded and processed successfully', ...result });
 };
 
 /**

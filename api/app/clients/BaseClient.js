@@ -24,12 +24,6 @@ const {
   supportsBalanceCheck,
   isBedrockDocumentType,
   getEndpointFileConfig,
-  isIndexed,
-  isCodeEnvFile,
-  isImageFile,
-  isPdfFile,
-  isVideoFile,
-  isAudioFile,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { logViolation } = require('~/cache');
@@ -1241,25 +1235,26 @@ class BaseClient {
         continue;
       }
       if (
-        isIndexed(file) ||
-        isCodeEnvFile(file)
+        file.embedded === true ||
+        file.metadata?.codeEnvRef != null ||
+        file.metadata?.fileIdentifier != null
       ) {
         allFiles.push(file);
         continue;
       }
 
-      if (isImageFile(file)) {
+      if (file.type.startsWith('image/')) {
         categorizedAttachments.images.push(file);
-      } else if (isPdfFile(file)) {
+      } else if (file.type === 'application/pdf') {
         categorizedAttachments.documents.push(file);
         allFiles.push(file);
       } else if (isBedrock && isBedrockDocumentType(file.type)) {
         categorizedAttachments.documents.push(file);
         allFiles.push(file);
-      } else if (isVideoFile(file)) {
+      } else if (file.type.startsWith('video/')) {
         categorizedAttachments.videos.push(file);
         allFiles.push(file);
-      } else if (isAudioFile(file)) {
+      } else if (file.type.startsWith('audio/')) {
         categorizedAttachments.audios.push(file);
         allFiles.push(file);
       } else if (

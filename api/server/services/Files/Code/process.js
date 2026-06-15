@@ -3,8 +3,6 @@ const { v4 } = require('uuid');
 const { logger } = require('@librechat/data-schemas');
 const { getCodeBaseURL } = require('@librechat/agents');
 const {
-  FilePurpose,
-  getFilePurpose,
   withTimeout,
   getBasePath,
   logAxiosError,
@@ -734,7 +732,7 @@ const getPreviewContextSuffix = (file) => {
 };
 
 const getVisibleCodeFileContextLine = (file, agentResourceIds) => {
-  if (getFilePurpose(file) === FilePurpose.code_execution_output) {
+  if (file.context === FileContext.execute_code) {
     return '';
   }
 

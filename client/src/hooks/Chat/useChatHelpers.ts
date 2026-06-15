@@ -9,11 +9,13 @@ import { useAbortStreamMutation } from '~/data-provider';
 import useNewConvo from '~/hooks/useNewConvo';
 import { useLatestMessage, useLatestMessageId } from '~/hooks/Messages/useLatestMessage';
 import { getMessageCacheIds } from './cache';
-import store from '~/store';
+import store, { useChatStreamDispatch, useChatStream } from '~/store';
 
 // this to be set somewhere else
 export default function useChatHelpers(index = 0, paramId?: string) {
   const clearAllSubmissions = store.useClearSubmissionState();
+  const chatStream = useChatStream(index);
+  const chatStreamDispatch = useChatStreamDispatch(index);
   const [files, setFiles] = useRecoilState(store.filesByIndex(index));
   const [filesLoading, setFilesLoading] = useState(false);
 
@@ -138,6 +140,8 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       isAssistants,
     });
 
+    chatStreamDispatch({ type: 'STREAM_ABORTED' });
+
     // For non-assistants endpoints (using resumable streams), call abort endpoint first
     if (conversationId && !isAssistants) {
       queryClient.setQueryData<ActiveJobsResponse>([QueryKeys.activeJobs], (old) => ({
@@ -161,7 +165,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       console.log('[useChatHelpers] Assistants endpoint, just clearing submissions');
       clearAllSubmissions();
     }
-  }, [conversationId, endpoint, endpointType, abortMutation, clearAllSubmissions, queryClient]);
+  }, [conversationId, endpoint, endpointType, abortMutation, clearAllSubmissions, queryClient, chatStreamDispatch]);
 
   const handleStopGenerating = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -229,6 +233,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
+      chatStream,
     }),
     [
       newConversation,
@@ -260,6 +265,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       setFiles,
       filesLoading,
       setFilesLoading,
+      chatStream,
     ],
   );
 }

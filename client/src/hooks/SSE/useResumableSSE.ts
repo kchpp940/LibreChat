@@ -39,7 +39,7 @@ import {
 } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
-import store from '~/store';
+import store, { useChatStreamDispatch } from '~/store';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -371,6 +371,7 @@ export default function useResumableSSE(
 ) {
   const queryClient = useQueryClient();
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
+  const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const { token, isAuthenticated } = useAuthContext();
   const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation } =
@@ -467,6 +468,7 @@ export default function useResumableSSE(
     setIsSubmitting,
     newConversation,
     setShowStopButton,
+    runIndex,
   });
 
   const { data: startupConfig } = useGetStartupConfig();
@@ -507,6 +509,7 @@ export default function useResumableSSE(
 
       sse.addEventListener('open', () => {
         console.log('[ResumableSSE] Stream connected');
+        chatStreamDispatch({ type: 'STREAM_OPEN' });
         setAbortScroll(false);
         // Restore UI state on successful connection (including reconnection)
         setIsSubmitting(true);
@@ -887,6 +890,11 @@ export default function useResumableSSE(
             `[ResumableSSE] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current}/${MAX_RETRIES})`,
           );
 
+          chatStreamDispatch({
+            type: 'STREAM_RECONNECT',
+            payload: { attempt: reconnectAttemptRef.current },
+          });
+
           sse.close();
 
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -1125,6 +1133,15 @@ export default function useResumableSSE(
         return;
       }
 
+      chatStreamDispatch({
+        type: 'SUBMIT_START',
+        payload: {
+          submission,
+          conversation: submission.conversation,
+          userMessage: submission.userMessage,
+          responseMessage: submission.initialResponse,
+        },
+      });
       setIsSubmitting(true);
       setShowStopButton(true);
 
@@ -1135,6 +1152,7 @@ export default function useResumableSSE(
         // Resume: just subscribe to existing stream, don't start new generation
         console.log('[ResumableSSE] Resuming existing stream:', resumeStreamId);
         setStreamId(resumeStreamId);
+        chatStreamDispatch({ type: 'STREAM_ID_SET', payload: resumeStreamId });
         // Optimistically add to active jobs (in case it's not already there)
         addActiveJob(resumeStreamId);
         subscribeToStream(resumeStreamId, submission, true); // isResume=true
@@ -1147,6 +1165,7 @@ export default function useResumableSSE(
         }
         if (newStreamId) {
           setStreamId(newStreamId);
+          chatStreamDispatch({ type: 'STREAM_ID_SET', payload: newStreamId });
           // Optimistically add to active jobs
           addActiveJob(newStreamId);
           // Queue title generation if this is a new conversation (first message).
