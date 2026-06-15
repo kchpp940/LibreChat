@@ -1,13 +1,20 @@
 import { useCallback, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useSearchParams } from 'react-router-dom';
-import { EModelEndpoint, isAgentsEndpoint, isAssistantsEndpoint } from 'librechat-data-provider';
+import {
+  EModelEndpoint,
+  isAgentsEndpoint,
+  isAssistantsEndpoint,
+  dataService,
+} from 'librechat-data-provider';
 import type {
   TPreset,
   TModelSpec,
   TConversation,
   TAssistantsMap,
   TEndpointsConfig,
+  TPlugin,
+  ToolAvailability,
 } from 'librechat-data-provider';
 import type { MentionOption, ConvoGenerator } from '~/common';
 import {
@@ -235,23 +242,38 @@ export default function useSelectMention({
   );
 
   const onSelectPreset = useCallback(
-    (_newPreset?: TPreset) => {
+    async (_newPreset?: TPreset) => {
       if (!_newPreset) {
         return;
       }
 
       const conversation = getConversation();
 
-      const newPreset = removeUnavailableTools(
-        _newPreset,
-        availableTools,
-        undefined,
-        _newPreset.endpoint,
-        typeof _newPreset.model === 'string'
-          ? _newPreset.model
-          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
-        typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
-      );
+      let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
+      const presetTools = _newPreset.tools;
+      if (presetTools && presetTools.length > 0) {
+        const toolKeys = presetTools.map((tool: string | TPlugin) =>
+          typeof tool === 'string' ? tool : tool.pluginKey,
+        );
+        const model =
+          typeof _newPreset.model === 'string'
+            ? _newPreset.model
+            : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
+        try {
+          const result = await dataService.resolveToolAvailability({
+            tools: toolKeys,
+            endpoint: _newPreset.endpoint ?? undefined,
+            model,
+            provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
+            enabledCapabilities: undefined,
+          });
+          toolAvailabilityMap = result.tools;
+        } catch (e) {
+          toolAvailabilityMap = undefined;
+        }
+      }
+
+      const newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
       const newEndpoint = newPreset.endpoint ?? '';
 
       const {

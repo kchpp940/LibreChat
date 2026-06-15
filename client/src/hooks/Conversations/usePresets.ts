@@ -1,12 +1,12 @@
 import filenamify from 'filenamify';
 import exportFromJSON from 'export-from-json';
 import { useToastContext } from '@librechat/client';
-import { QueryKeys } from 'librechat-data-provider';
+import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRecoilState, useSetRecoilState, useRecoilValue } from 'recoil';
 import { useCreatePresetMutation, useGetModelsQuery } from 'librechat-data-provider/react-query';
-import type { TPreset, TEndpointsConfig } from 'librechat-data-provider';
+import type { TPreset, TEndpointsConfig, TPlugin, ToolAvailability } from 'librechat-data-provider';
 import {
   useUpdatePresetMutation,
   useDeletePresetMutation,
@@ -162,22 +162,38 @@ export default function usePresets(index = 0) {
     importPreset(jsonPreset);
   };
 
-  const onSelectPreset = (_newPreset: TPreset) => {
+  const onSelectPreset = async (_newPreset: TPreset) => {
     if (!_newPreset) {
       return;
     }
 
     const conversation = getConversation();
-    const newPreset = removeUnavailableTools(
-      _newPreset,
-      availableTools,
-      undefined,
-      _newPreset.endpoint,
-      typeof _newPreset.model === 'string'
-        ? _newPreset.model
-        : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
-      typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
-    );
+
+    let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
+    const presetTools = _newPreset.tools;
+    if (presetTools && presetTools.length > 0) {
+      const toolKeys = presetTools.map((tool: string | TPlugin) =>
+        typeof tool === 'string' ? tool : tool.pluginKey,
+      );
+      const model =
+        typeof _newPreset.model === 'string'
+          ? _newPreset.model
+          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
+      try {
+        const result = await dataService.resolveToolAvailability({
+          tools: toolKeys,
+          endpoint: _newPreset.endpoint ?? undefined,
+          model,
+          provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
+          enabledCapabilities: undefined,
+        });
+        toolAvailabilityMap = result.tools;
+      } catch (e) {
+        toolAvailabilityMap = undefined;
+      }
+    }
+
+    const newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
 
     const toastTitle = newPreset.title
       ? `"${newPreset.title}"`

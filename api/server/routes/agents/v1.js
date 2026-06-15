@@ -47,14 +47,7 @@ router.get('/categories', v1.getAgentCategories);
  * @returns {AgentPrecheckResult} 200 - Precheck result with errors and warnings
  */
 router.post('/precheck', checkAgentCreate, v1.precheckAgent);
-/**
- * Resolves tool availability for a set of tools.
- * @route POST /agents/toolAvailability
- * @param {string[]} req.body.tools - Tool keys to check
- * @param {string} [req.body.agent_id] - Optional agent ID for capability context
- * @returns {ToolAvailabilityResult} 200 - Availability result for each tool
- */
-router.post('/toolAvailability', checkAgentAccess, v1.getToolAvailability);
+router.post('/toolAvailability', requireJwtAuth, configMiddleware, v1.getToolAvailability);
 /**
  * Creates an agent.
  * @route POST /agents

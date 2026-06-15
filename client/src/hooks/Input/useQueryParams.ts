@@ -2,12 +2,14 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useSearchParams } from 'react-router-dom';
 import { QueryClient, useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, EModelEndpoint, PermissionBits } from 'librechat-data-provider';
+import { QueryKeys, EModelEndpoint, PermissionBits, dataService } from 'librechat-data-provider';
 import type {
   AgentListResponse,
   TEndpointsConfig,
   TStartupConfig,
   TPreset,
+  TPlugin,
+  ToolAvailability,
 } from 'librechat-data-provider';
 import {
   clearModelForNonEphemeralAgent,
@@ -89,20 +91,36 @@ export default function useQueryParams({
    * Ensures tools compatibility and preserves existing conversation when appropriate.
    */
   const newQueryConvo = useCallback(
-    (_newPreset?: TPreset) => {
+    async (_newPreset?: TPreset) => {
       if (!_newPreset) {
         return;
       }
-      let newPreset = removeUnavailableTools(
-        _newPreset,
-        availableTools,
-        undefined,
-        _newPreset.endpoint,
-        typeof _newPreset.model === 'string'
-          ? _newPreset.model
-          : (_newPreset.model as unknown as { value?: string } | null)?.value ?? null,
-        typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : null,
-      );
+
+      let toolAvailabilityMap: Record<string, ToolAvailability> | undefined = undefined;
+      const presetTools = _newPreset.tools;
+      if (presetTools && presetTools.length > 0) {
+        const toolKeys = presetTools.map((tool: string | TPlugin) =>
+          typeof tool === 'string' ? tool : tool.pluginKey,
+        );
+        const model =
+          typeof _newPreset.model === 'string'
+            ? _newPreset.model
+            : (_newPreset.model as unknown as { value?: string } | null)?.value ?? undefined;
+        try {
+          const result = await dataService.resolveToolAvailability({
+            tools: toolKeys,
+            endpoint: _newPreset.endpoint ?? undefined,
+            model,
+            provider: typeof _newPreset.endpointType === 'string' ? _newPreset.endpointType : undefined,
+            enabledCapabilities: undefined,
+          });
+          toolAvailabilityMap = result.tools;
+        } catch (e) {
+          toolAvailabilityMap = undefined;
+        }
+      }
+
+      let newPreset = removeUnavailableTools(_newPreset, availableTools, toolAvailabilityMap);
       if (newPreset.spec != null && newPreset.spec !== '') {
         const startupConfig = queryClient.getQueryData<TStartupConfig>(startupConfigKey(true));
         const modelSpecs = startupConfig?.modelSpecs?.list ?? [];

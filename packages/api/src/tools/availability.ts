@@ -147,10 +147,22 @@ function baseAvailability(toolKey: string): ToolAvailability {
 export async function resolveAgentCapabilities(
   agentId: string | undefined,
   deps: ToolAvailabilityDeps,
+  fallbackEndpoint?: string,
 ): Promise<Set<string>> {
+  const targetEndpoint = fallbackEndpoint ?? EModelEndpoint.agents;
   const appConfig = deps.appConfig;
-  const endpointsAgentConfig = deps.endpointsConfig?.[EModelEndpoint.agents];
-  let capabilities = new Set(endpointsAgentConfig?.capabilities ?? []);
+  const endpointsConfig = deps.endpointsConfig;
+  let capabilities = new Set<string>();
+  if (endpointsConfig && endpointsConfig[targetEndpoint]?.capabilities) {
+    capabilities = new Set(endpointsConfig[targetEndpoint].capabilities);
+  }
+
+  if (capabilities.size === 0) {
+    const appCapabilities = appConfig?.endpoints?.[targetEndpoint]?.capabilities;
+    if (appCapabilities) {
+      capabilities = new Set(appCapabilities);
+    }
+  }
 
   if (capabilities.size === 0 && deps.isEphemeralAgentId?.(agentId)) {
     capabilities = new Set(
@@ -177,7 +189,7 @@ export async function resolveToolAvailability(
   if (options.enabledCapabilities) {
     enabledCapabilities = normalizeCapabilities(options.enabledCapabilities);
   } else {
-    enabledCapabilities = await resolveAgentCapabilities(options.agentId, deps);
+    enabledCapabilities = await resolveAgentCapabilities(options.agentId, deps, options.endpoint);
   }
 
   const checkCapability = (cap: string): boolean =>
