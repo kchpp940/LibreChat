@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Constants, EModelEndpoint, QueryKeys } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
-import type { TError, AgentToolType } from 'librechat-data-provider';
+import type { TError, AgentToolType, ToolAvailability } from 'librechat-data-provider';
 import type { AgentForm, ToolDialogProps } from '~/common';
 import {
   usePluginDialogHelpers,
@@ -34,7 +34,7 @@ function MCPToolSelectDialog({
   const { initializeServer } = useMCPServerManager();
   const { getValues, setValue } = useFormContext<AgentForm>();
   const { removeTool } = useRemoveMCPTool({ showToast: false });
-  const { mcpServersMap, availableMCPServersMap } = useAgentPanelContext();
+  const { mcpServersMap, availableMCPServersMap, toolAvailabilityMap } = useAgentPanelContext();
   const { refetch: refetchMCPTools } = useMCPToolsQuery({
     enabled: mcpServersMap.size > 0,
   });
@@ -184,6 +184,11 @@ function MCPToolSelectDialog({
     );
   };
 
+  const getServerAvailability = (serverName: string): ToolAvailability | undefined => {
+    const serverKey = `${Constants.mcp_server}${Constants.mcp_delimiter}${serverName}`;
+    return toolAvailabilityMap[serverKey] || toolAvailabilityMap[serverName];
+  };
+
   const onAddTool = async (serverName: string) => {
     if (configuringServer === serverName) {
       setConfiguringServer(null);
@@ -191,11 +196,15 @@ function MCPToolSelectDialog({
       return;
     }
 
+    const availability = getServerAvailability(serverName);
+    const requiresUserVars = availability?.requiresUserVars === true;
+    const hasMissingUserVars = (availability?.missingUserVars?.length ?? 0) > 0;
+
     const serverConfig = availableMCPServersMap?.[serverName];
-    const hasCustomUserVars =
+    const hasCustomUserVarsConfig =
       serverConfig?.customUserVars && Object.keys(serverConfig.customUserVars).length > 0;
 
-    if (hasCustomUserVars) {
+    if (requiresUserVars || hasMissingUserVars || hasCustomUserVarsConfig) {
       setConfiguringServer(serverName);
     } else {
       await handleDirectAdd(serverName);
@@ -334,6 +343,7 @@ function MCPToolSelectDialog({
                     const isInstalled = installedToolsSet.has(serverInfo.serverName);
                     const isConfiguring = configuringServer === serverInfo.serverName;
                     const isServerInitializing = isInitializing === serverInfo.serverName;
+                    const serverAvailability = serverInfo.availability || getServerAvailability(serverInfo.serverName);
 
                     const tool: AgentToolType = {
                       agent_id: agentId,
@@ -349,6 +359,7 @@ function MCPToolSelectDialog({
                         isInstalled={isInstalled}
                         key={serverInfo.serverName}
                         isConfiguring={isConfiguring}
+                        availability={serverAvailability}
                         isInitializing={isServerInitializing}
                         onAddTool={() => onAddTool(serverInfo.serverName)}
                         onRemoveTool={() => removeTool(serverInfo.serverName)}

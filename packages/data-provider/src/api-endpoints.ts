@@ -126,9 +126,6 @@ export const forkConversation = () => `${conversationsRoot}/fork`;
 
 export const duplicateConversation = () => `${conversationsRoot}/duplicate`;
 
-export const exportConversation = (conversationId: string) =>
-  `${conversationsRoot}/${encodeURIComponent(conversationId)}/export`;
-
 export const projectsRoot = `${BASE_URL}/api/projects`;
 
 export const projects = (params: q.ProjectListParams = {}) => {

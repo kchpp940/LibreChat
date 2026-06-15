@@ -1,5 +1,6 @@
 import { RefObject } from 'react';
 import { FileSources, EModelEndpoint, isEphemeralAgentId } from 'librechat-data-provider';
+import type { ToolAvailability } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type * as InputNumberPrimitive from 'rc-input-number';
 import type { SetterOrUpdater, RecoilState } from 'recoil';
@@ -213,6 +214,7 @@ export interface MCPServerInfo {
   isConnected: boolean;
   consumeOnly?: boolean;
   metadata: t.TPlugin;
+  availability?: ToolAvailability;
 }
 
 export type AgentPanelContextType = {
@@ -235,6 +237,7 @@ export type AgentPanelContextType = {
   mcpServersMap: Map<string, MCPServerInfo>;
   availableMCPServers: MCPServerDefinition[];
   availableMCPServersMap: t.MCPServersListResponse | undefined;
+  toolAvailabilityMap: Record<string, ToolAvailability>;
 };
 
 export type AgentModelPanelProps = {

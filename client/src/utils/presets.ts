@@ -1,4 +1,4 @@
-import type { TPreset, TPlugin } from 'librechat-data-provider';
+import type { TPreset, TPlugin, ToolAvailability } from 'librechat-data-provider';
 import { EModelEndpoint } from 'librechat-data-provider';
 
 type TEndpoints = Array<string | EModelEndpoint>;
@@ -53,10 +53,10 @@ export const getPresetTitle = (preset: TPreset, mention?: boolean) => {
   return `${title}${modelInfo}${label ? ` (${label})` : ''}`.trim();
 };
 
-/** Remove unavailable tools from the preset */
 export const removeUnavailableTools = (
   preset: TPreset,
   availableTools: Record<string, TPlugin | undefined>,
+  toolAvailabilityMap?: Record<string, ToolAvailability>,
 ) => {
   const newPreset = { ...preset };
 
@@ -68,6 +68,10 @@ export const removeUnavailableTools = (
           pluginKey = tool;
         } else {
           ({ pluginKey } = tool);
+        }
+
+        if (toolAvailabilityMap && pluginKey in toolAvailabilityMap) {
+          return toolAvailabilityMap[pluginKey]?.isAvailable === true;
         }
 
         return !!availableTools[pluginKey];

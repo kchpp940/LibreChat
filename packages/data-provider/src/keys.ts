@@ -1,7 +1,6 @@
 export enum QueryKeys {
   messages = 'messages',
   sharedMessages = 'sharedMessages',
-  exportConvo = 'exportConvo',
   sharedLinks = 'sharedLinks',
   allConversations = 'allConversations',
   archivedConversations = 'archivedConversations',
@@ -112,6 +111,7 @@ export enum MutationKeys {
   deleteAgentAction = 'deleteAgentAction',
   revertAgentVersion = 'revertAgentVersion',
   agentPrecheck = 'agentPrecheck',
+  toolAvailability = 'toolAvailability',
   deleteUser = 'deleteUser',
   updateRole = 'updateRole',
   enableTwoFactor = 'enableTwoFactor',

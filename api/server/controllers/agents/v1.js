@@ -13,6 +13,11 @@ const {
   collectToolResourceFileIds,
   convertOcrToContextInPlace,
   stripFileIdsFromToolResources,
+  resolveToolAvailability,
+  filterAuthorizedToolsFromResult,
+  getUserMCPAuthMap,
+  getMissingCustomUserVars,
+  isActionDomainAllowed,
 } = require('@librechat/api');
 const {
   Time,
@@ -30,6 +35,8 @@ const {
   AgentCapabilities,
   EModelEndpoint,
   removeNullishValues,
+  isEphemeralAgentId,
+  defaultAgentCapabilities,
 } = require('librechat-data-provider');
 const {
   findPubliclyAccessibleResources,
@@ -49,7 +56,7 @@ const {
   userCanUseMCPServers,
 } = require('~/server/services/MCP');
 const { performAgentPrecheck } = require('~/server/services/Agents/precheck');
-const { getMCPServersRegistry } = require('~/config');
+const { getMCPServersRegistry, getMCPManager } = require('~/config');
 const { getLogStores } = require('~/cache');
 const db = require('~/models');
 
@@ -200,6 +207,7 @@ const isSubagentsCapabilityEnabled = (req) => {
  * @param {Record<string, unknown>} params.availableTools - Global non-MCP tool cache
  * @param {string[]} [params.existingTools] - Tools already persisted on the agent document
  * @param {Record<string, unknown>} [params.configServers] - Config-source MCP servers resolved from appConfig overrides
+ * @param {object} [params.req] - Express request object for app config access
  * @returns {Promise<string[]>} Only the authorized subset of tools
  */
 const filterAuthorizedTools = async ({
@@ -211,79 +219,124 @@ const filterAuthorizedTools = async ({
   availableTools,
   existingTools,
   configServers,
+  req,
 }) => {
-  const filteredTools = [];
-  let mcpServerConfigs;
-  let registryUnavailable = false;
-  const existingToolSet = existingTools?.length ? new Set(existingTools) : null;
   const hasMCPTools = tools.some((tool) => tool?.includes(Constants.mcp_delimiter));
-  const canUseMCP = hasMCPTools
-    ? await (mcpPermissionContext
-        ? mcpPermissionContext.canUseServers(user)
-        : userCanUseMCPServers(user))
-    : true;
-  let loggedMCPDenied = false;
 
-  for (const tool of tools) {
-    const isActionToolName = typeof tool === 'string' && isActionTool(tool);
-    const isMCPTool = tool?.includes(Constants.mcp_delimiter) && !isActionToolName;
-
-    if (!isMCPTool) {
-      if (availableTools[tool] || systemTools[tool] || isActionToolName) {
-        filteredTools.push(tool);
+  const deps = {
+    getCachedTools: () => Promise.resolve(availableTools),
+    isActionDomainAllowed,
+    canUseMCPServers: (userObj) => {
+      let arg;
+      if (user != null) {
+        arg = { ...user };
+        if (userObj) {
+          for (const key of Object.keys(userObj)) {
+            if (userObj[key] !== undefined) {
+              arg[key] = userObj[key];
+            }
+          }
+        }
       }
-      continue;
-    }
-
-    if (!canUseMCP) {
-      if (!loggedMCPDenied) {
-        logger.warn(`[filterAuthorizedTools] User ${userId} lacks MCP server use permission`);
-        loggedMCPDenied = true;
+      return mcpPermissionContext
+        ? mcpPermissionContext.canUseServers(arg)
+        : userCanUseMCPServers(arg);
+    },
+    getAllMCPServerConfigs: (uid, cfgServers, userRole) => {
+      const registry = getMCPServersRegistry();
+      const finalCfgServers = cfgServers ?? configServers;
+      const finalRole = userRole ?? role;
+      if (finalRole !== undefined) {
+        return registry.getAllServerConfigs(uid, finalCfgServers, finalRole);
       }
-      continue;
-    }
-
-    if (mcpServerConfigs === undefined) {
+      return registry.getAllServerConfigs(uid, finalCfgServers);
+    },
+    getMCPConnectionStatus: async (uid, serverNames) => {
+      const result = {};
       try {
-        mcpServerConfigs =
-          (role
-            ? await getMCPServersRegistry().getAllServerConfigs(userId, configServers, role)
-            : await getMCPServersRegistry().getAllServerConfigs(userId, configServers)) ?? {};
+        const mcpManager = getMCPManager(uid);
+        if (!mcpManager) {
+          return result;
+        }
+        let userConnections = new Map();
+        let appConnections = new Map();
+        try {
+          userConnections = mcpManager.getUserConnections?.(uid) || new Map();
+        } catch (e) {
+          // ignore
+        }
+        try {
+          appConnections = (await mcpManager.appConnections?.getLoaded?.()) || new Map();
+        } catch (e) {
+          // ignore
+        }
+        for (const serverName of serverNames) {
+          const userConn = userConnections.get?.(serverName);
+          const appConn = appConnections.get?.(serverName);
+          const conn = userConn || appConn;
+          if (conn) {
+            result[serverName] = {
+              connectionState: conn.connectionState || 'connected',
+            };
+          }
+        }
       } catch (e) {
-        logger.warn(
-          '[filterAuthorizedTools] MCP registry unavailable, filtering all MCP tools',
-          e.message,
-        );
-        mcpServerConfigs = {};
-        registryUnavailable = true;
+        logger.warn('[filterAuthorizedTools] Failed to get MCP connection status', e.message);
       }
-    }
+      return result;
+    },
+    getMCPUserAuthMap: (params) =>
+      getUserMCPAuthMap({
+        ...params,
+        findPluginAuthsByKeys: db.findPluginAuthsByKeys,
+      }),
+    getMissingMCPCustomUserVars: getMissingCustomUserVars,
+    appConfig: req?.config,
+    endpointsConfig: req?.config?.endpoints,
+    resolveConfigServers: () => Promise.resolve(configServers),
+  };
 
-    const parts = tool.split(Constants.mcp_delimiter);
-    if (parts.length !== 2) {
+  const options = {
+    tools,
+    userId,
+    userRole: role,
+    checkMCPConnection: true,
+    checkMCPPermissions: true,
+  };
+
+  const result = await resolveToolAvailability(options, deps);
+
+  let loggedMCPDenied = false;
+  let loggedRegistryUnavailable = false;
+  for (const key of result.unavailableToolKeys) {
+    const av = result.tools[key];
+    if (!av) {
+      continue;
+    }
+    if (av.reason === 'permission_denied' && av.toolType === 'mcp' && !loggedMCPDenied) {
+      logger.warn(`[filterAuthorizedTools] User ${userId} lacks MCP server use permission`);
+      loggedMCPDenied = true;
+    }
+    if (av.reason === 'registry_unavailable' && !loggedRegistryUnavailable) {
       logger.warn(
-        `[filterAuthorizedTools] Rejected malformed MCP tool key "${tool}" for user ${userId}`,
+        '[filterAuthorizedTools] MCP registry unavailable, filtering all MCP tools',
+        av.message,
       );
-      continue;
+      loggedRegistryUnavailable = true;
     }
-
-    if (registryUnavailable && existingToolSet?.has(tool)) {
-      filteredTools.push(tool);
-      continue;
-    }
-
-    const [, serverName] = parts;
-    if (!serverName || !Object.hasOwn(mcpServerConfigs, serverName)) {
+    if (av.reason === 'mcp_malformed_key') {
       logger.warn(
-        `[filterAuthorizedTools] Rejected MCP tool "${tool}" — server "${serverName}" not accessible to user ${userId}`,
+        `[filterAuthorizedTools] Rejected malformed MCP tool key "${key}" for user ${userId}`,
       );
-      continue;
     }
-
-    filteredTools.push(tool);
+    if (av.reason === 'mcp_server_unavailable') {
+      logger.warn(
+        `[filterAuthorizedTools] Rejected MCP tool "${key}" — server "${av.mcpServerName}" not accessible to user ${userId}`,
+      );
+    }
   }
 
-  return filteredTools;
+  return filterAuthorizedToolsFromResult(result, existingTools);
 };
 
 /**
@@ -351,7 +404,11 @@ const createAgentHandler = async (req, res) => {
     const precheckData = { ...agentData, tools };
     const precheckResult = await performAgentPrecheck(precheckData, req);
     const blockingErrors = precheckResult.items.filter(
-      (item) => item.severity === 'error' && item.category !== 'agent_references',
+      (item) =>
+        item.severity === 'error' &&
+        item.category !== 'agent_references' &&
+        item.category !== 'tool_permissions' &&
+        item.category !== 'mcp_status',
     );
     if (blockingErrors.length > 0) {
       return res.status(400).json({
@@ -434,6 +491,7 @@ const createAgentHandler = async (req, res) => {
       mcpPermissionContext,
       availableTools,
       configServers,
+      req,
     });
 
     const agent = await db.createAgent(agentData);
@@ -600,7 +658,11 @@ const updateAgentHandler = async (req, res) => {
     };
     const precheckResult = await performAgentPrecheck(mergedForPrecheck, req, id);
     const blockingErrors = precheckResult.items.filter(
-      (item) => item.severity === 'error' && item.category !== 'agent_references',
+      (item) =>
+        item.severity === 'error' &&
+        item.category !== 'agent_references' &&
+        item.category !== 'tool_permissions' &&
+        item.category !== 'mcp_status',
     );
     if (blockingErrors.length > 0) {
       return res.status(400).json({
@@ -716,6 +778,7 @@ const updateAgentHandler = async (req, res) => {
             mcpPermissionContext,
             availableTools,
             configServers,
+            req,
           });
           const rejectedSet = new Set(newMCPTools.filter((t) => !approvedNew.includes(t)));
           if (rejectedSet.size > 0) {
@@ -1261,6 +1324,7 @@ const revertAgentVersionHandler = async (req, res) => {
         availableTools,
         existingTools: updatedAgent.tools,
         configServers,
+        req,
       });
       if (filteredTools.length !== updatedAgent.tools.length) {
         revertUpdates.tools = filteredTools;
@@ -1360,6 +1424,96 @@ const precheckAgentHandler = async (req, res) => {
   }
 };
 
+const getToolAvailabilityHandler = async (req, res) => {
+  try {
+    const { tools = [], agent_id } = req.body;
+    if (!Array.isArray(tools) || tools.length === 0) {
+      return res.status(200).json({
+        tools: {},
+        availableToolKeys: [],
+        unavailableToolKeys: [],
+        summary: { total: 0, available: 0, unavailable: 0, byReason: {} },
+      });
+    }
+
+    const mcpPermissionContext = createMCPPermissionContext(req);
+    const deps = {
+      getCachedTools: () => getCachedTools().then((t) => t ?? {}),
+      isActionDomainAllowed,
+      canUseMCPServers: (user) => mcpPermissionContext.canUseServers(user ?? req.user),
+      getAllMCPServerConfigs: async (userId, configServers, role) => {
+        const registry = getMCPServersRegistry();
+        if (role !== undefined) {
+          return (await registry.getAllServerConfigs(userId, configServers, role)) ?? {};
+        }
+        return (await registry.getAllServerConfigs(userId, configServers)) ?? {};
+      },
+      getMCPConnectionStatus: async (userId, serverNames) => {
+        const result = {};
+        try {
+          const mcpManager = getMCPManager(userId);
+          if (!mcpManager) {
+            return result;
+          }
+          let userConnections = new Map();
+          let appConnections = new Map();
+          try {
+            userConnections = mcpManager.getUserConnections?.(userId) || new Map();
+          } catch (e) {
+            // ignore
+          }
+          try {
+            appConnections = (await mcpManager.appConnections?.getLoaded?.()) || new Map();
+          } catch (e) {
+            // ignore
+          }
+          for (const serverName of serverNames) {
+            const userConn = userConnections.get?.(serverName);
+            const appConn = appConnections.get?.(serverName);
+            const conn = userConn || appConn;
+            if (conn) {
+              result[serverName] = {
+                connectionState: conn.connectionState || 'connected',
+              };
+            }
+          }
+        } catch (e) {
+          logger.warn('[toolAvailability] Failed to get MCP connection status', e.message);
+        }
+        return result;
+      },
+      getMCPUserAuthMap: (params) =>
+        getUserMCPAuthMap({
+          ...params,
+          findPluginAuthsByKeys: db.findPluginAuthsByKeys,
+        }),
+      getMissingMCPCustomUserVars: getMissingCustomUserVars,
+      appConfig: req.config,
+      endpointsConfig: req.config?.endpoints,
+      resolveConfigServers: () => resolveConfigServers(req),
+      isEphemeralAgentId,
+      defaultAgentCapabilities,
+    };
+
+    const result = await resolveToolAvailability(
+      {
+        tools,
+        userId: req.user.id,
+        userRole: req.user.role,
+        agentId: agent_id,
+        checkMCPConnection: true,
+        checkMCPPermissions: true,
+      },
+      deps,
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error('[/Agents/toolAvailability] Error', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createAgent: createAgentHandler,
   getAgent: getAgentHandler,
@@ -1372,4 +1526,5 @@ module.exports = {
   getAgentCategories,
   filterAuthorizedTools,
   precheckAgent: precheckAgentHandler,
+  getToolAvailability: getToolAvailabilityHandler,
 };

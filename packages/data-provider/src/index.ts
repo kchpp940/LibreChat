@@ -51,3 +51,29 @@ export * from './feedback';
 export * from './parameterSettings';
 /* code-execution sandbox */
 export * from './codeEnvRef';
+
+import {
+  ToolType,
+  ToolUnavailableReason,
+  MCPAuthStatus,
+  ToolPermissionStatus,
+  MCPConnectionState,
+} from './types/toolAvailability';
+
+export type {
+  ToolAvailability,
+  ToolAvailabilityResult,
+  ResolveToolAvailabilityOptions,
+  ResolveToolAvailabilityParams,
+  ToolValidationIssue,
+} from './types/toolAvailability';
+
+export { ToolType, ToolUnavailableReason, MCPAuthStatus, ToolPermissionStatus, MCPConnectionState };
+
+export const _toolAvailabilityEnums = {
+  ToolType,
+  ToolUnavailableReason,
+  MCPAuthStatus,
+  ToolPermissionStatus,
+  MCPConnectionState,
+};

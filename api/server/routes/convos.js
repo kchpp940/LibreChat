@@ -8,10 +8,7 @@ const {
   deleteAllSharedLinksWithCleanup,
   deleteConvoSharedLinksWithCleanup,
 } = require('@librechat/api');
-const {
-  logger,
-  serializeExportMessages,
-} = require('@librechat/data-schemas');
+const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
 const {
   createImportLimiters,
@@ -344,43 +341,6 @@ router.post('/duplicate', forkIpLimiter, forkUserLimiter, async (req, res) => {
   } catch (error) {
     logger.error('Error duplicating conversation:', error);
     res.status(500).send('Error duplicating conversation');
-  }
-});
-
-router.get('/:conversationId/export', async (req, res) => {
-  const { conversationId } = req.params;
-  try {
-    const convo = await db.searchConversation(conversationId);
-
-    if (!convo) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    if (convo.user !== req.user.id) {
-      return res.status(403).json({ error: 'User not authorized for this conversation' });
-    }
-
-    const messages = await db.getMessages(
-      { conversationId, user: req.user.id },
-      '-_id -__v -user'
-    );
-
-    const serialized = serializeExportMessages(messages);
-
-    res.status(200).json({
-      conversation: {
-        conversationId: convo.conversationId,
-        title: convo.title,
-        endpoint: convo.endpoint,
-        createdAt: convo.createdAt,
-        updatedAt: convo.updatedAt,
-      },
-      messages: serialized.messages,
-      warnings: serialized.warnings.length > 0 ? serialized.warnings : undefined,
-    });
-  } catch (error) {
-    logger.error('Error exporting conversation:', error);
-    res.status(500).json({ error: 'Error exporting conversation' });
   }
 });
 

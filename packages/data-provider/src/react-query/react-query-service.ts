@@ -34,24 +34,6 @@ export const useGetSharedMessages = (
   );
 };
 
-export const useExportConversation = (
-  conversationId: string,
-  config?: UseQueryOptions<s.TExportConversationResponse>,
-): QueryObserverResult<s.TExportConversationResponse> => {
-  return useQuery<s.TExportConversationResponse>(
-    [QueryKeys.exportConvo, conversationId],
-    () => dataService.exportConversation(conversationId),
-    {
-      enabled: !!conversationId,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      staleTime: Infinity,
-      ...config,
-    },
-  );
-};
-
 export const useGetSharedLinkQuery = (
   conversationId: string,
   config?: UseQueryOptions<t.TSharedLinkGetResponse>,

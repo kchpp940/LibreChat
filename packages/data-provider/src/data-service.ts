@@ -5,6 +5,7 @@ import * as permissions from './accessPermissions';
 import * as endpoints from './api-endpoints';
 import * as mcp from './types/mcpServers';
 import * as a from './types/assistants';
+import * as ta from './types/toolAvailability';
 import * as m from './types/mutations';
 import * as ag from './types/agents';
 import * as q from './types/queries';
@@ -495,6 +496,12 @@ export const precheckAgent = (data: a.AgentPrecheckParams): Promise<a.AgentPrech
   return request.post(endpoints.agents({ path: 'precheck' }), data);
 };
 
+export const resolveToolAvailability = (
+  data: ta.ResolveToolAvailabilityParams,
+): Promise<ta.ToolAvailabilityResult> => {
+  return request.post(endpoints.agents({ path: 'toolAvailability' }), data);
+};
+
 export const getAgentById = ({ agent_id }: { agent_id: string }): Promise<a.Agent> => {
   return request.get(
     endpoints.agents({
@@ -763,12 +770,6 @@ export function duplicateConversation(
 
 export function forkConversation(payload: t.TForkConvoRequest): Promise<t.TForkConvoResponse> {
   return request.post(endpoints.forkConversation(), payload);
-}
-
-export function exportConversation(
-  conversationId: string,
-): Promise<s.TExportConversationResponse> {
-  return request.get(endpoints.exportConversation(conversationId));
 }
 
 export function deleteConversation(payload: t.TDeleteConversationRequest) {

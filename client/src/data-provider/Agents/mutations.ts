@@ -417,6 +417,28 @@ export const usePrecheckAgentMutation = (
   );
 };
 
+export const useResolveToolAvailabilityMutation = (
+  options?: {
+    onMutate?: (variables: t.ResolveToolAvailabilityParams) => void;
+    onError?: (error: unknown, variables: t.ResolveToolAvailabilityParams) => void;
+    onSuccess?: (data: t.ToolAvailabilityResult, variables: t.ResolveToolAvailabilityParams) => void;
+  },
+): UseMutationResult<
+  t.ToolAvailabilityResult,
+  unknown,
+  t.ResolveToolAvailabilityParams
+> => {
+  return useMutation(
+    (params: t.ResolveToolAvailabilityParams) => dataService.resolveToolAvailability(params),
+    {
+      mutationKey: [MutationKeys.toolAvailability],
+      onMutate: options?.onMutate,
+      onError: options?.onError,
+      onSuccess: options?.onSuccess,
+    },
+  );
+};
+
 export const invalidateAgentMarketplaceQueries = (queryClient: QueryClient) => {
   queryClient.invalidateQueries([QueryKeys.marketplaceAgents]);
 };

@@ -350,7 +350,7 @@ describe('Share Methods', () => {
         expect(msg.messageId).toMatch(/^msg_/); // Should be anonymized with msg_ prefix
         expect(msg.messageId).not.toBe(messages[0].messageId); // Should be different from original
         expect(msg.conversationId).toBe(result.conversationId);
-        expect((msg as unknown as Record<string, unknown>).user).toBeUndefined(); // User should be removed
+        expect((msg as Record<string, unknown>).user).toBeUndefined(); // User should be removed
       });
     });
 

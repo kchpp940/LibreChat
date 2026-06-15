@@ -14,7 +14,6 @@ import type {
 import type { IConversation, IMessage } from '~/types';
 import logger from '~/config/meiliLogger';
 import { buildRetentionVisibilityFilter, legacyPermanentExpirationFilter } from '~/utils/retention';
-import { serializeSearchIndexMessage } from '~/serializers';
 
 interface MongoMeiliOptions {
   host: string;
@@ -437,14 +436,10 @@ const createMeiliMongooseModel = ({
     }
 
     /**
-     * Preprocesses the current document for indexing.
-     * For message documents, uses the unified publicMessageSerializer.forSearch
-     * to ensure consistent content sanitization across all public-facing APIs.
-     * For conversation documents, applies standard field filtering.
+     * Preprocesses the current document for indexing
      */
     preprocessObjectForIndex(this: DocumentWithMeiliIndex): Record<string, unknown> {
-      const rawObject = this.toJSON();
-      const object = _.omitBy(_.pick(rawObject, attributesToIndex), (v, k) =>
+      const object = _.omitBy(_.pick(this.toJSON(), attributesToIndex), (v, k) =>
         k.startsWith('$'),
       );
 
@@ -456,16 +451,7 @@ const createMeiliMongooseModel = ({
         object.conversationId = object.conversationId.replace(/\|/g, '--');
       }
 
-      if (primaryKey === 'messageId' && object.messageId) {
-        const indexData = serializeSearchIndexMessage(rawObject as unknown as IMessage);
-        object.text = indexData.text;
-        if (indexData.toolCalls) {
-          object.toolCalls = indexData.toolCalls;
-        }
-        for (const field of indexData.strippedFields) {
-          delete object[field];
-        }
-      } else if (object.content && Array.isArray(object.content)) {
+      if (object.content && Array.isArray(object.content)) {
         object.text = parseTextParts(object.content);
         delete object.content;
       }
