@@ -5,13 +5,7 @@ import { useDrag, useDrop } from 'react-dnd';
 import { Skeleton } from '@librechat/client';
 import { useNavigate } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
-import {
-  QueryKeys,
-  dataService,
-  normalizeError,
-  isNotFoundError,
-  isForbiddenError,
-} from 'librechat-data-provider';
+import { QueryKeys, dataService } from 'librechat-data-provider';
 import type { Agent, TEndpointsConfig, TModelSpec } from 'librechat-data-provider';
 import type { AgentQueryResult } from '~/common';
 import {
@@ -234,9 +228,12 @@ export default function FavoritesList({
           const agent = await dataService.getAgentById({ agent_id: agentId });
           return { found: true, agent };
         } catch (error) {
-          const appError = normalizeError(error);
-          if (isNotFoundError(appError) || isForbiddenError(appError)) {
-            return { found: false };
+          if (error && typeof error === 'object' && 'response' in error) {
+            const axiosError = error as { response?: { status?: number } };
+            const status = axiosError.response?.status;
+            if (status === 404 || status === 403) {
+              return { found: false };
+            }
           }
           throw error;
         }

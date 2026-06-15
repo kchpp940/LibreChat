@@ -6,7 +6,6 @@ import { REGEXP_ONLY_DIGITS, REGEXP_ONLY_DIGITS_AND_CHARS } from 'input-otp';
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot, Label } from '@librechat/client';
 import { useVerifyTwoFactorTempMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
-import { normalizeError, getLocalizedErrorMessage } from 'librechat-data-provider';
 const TwoFactorScreen = React.memo(() => {
     const [searchParams] = useSearchParams();
     const tempTokenRaw = searchParams.get('tempToken');
@@ -27,11 +26,11 @@ const TwoFactorScreen = React.memo(() => {
         },
         onError: (error) => {
             setIsLoading(false);
-            const appError = normalizeError(error, { fallbackMessage: 'Error verifying 2FA' });
-            showToast({
-                message: getLocalizedErrorMessage(appError, localize),
-                status: 'error',
-            });
+            const err = error;
+            const errorMsg = typeof err.response?.data?.message === 'string'
+                ? err.response.data.message
+                : 'Error verifying 2FA';
+            showToast({ message: errorMsg, status: 'error' });
         },
     });
     const onSubmit = useCallback((data) => {

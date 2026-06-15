@@ -1,7 +1,7 @@
 import { useToastContext } from '@librechat/client';
 import { EToolResources } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, dataService, MutationKeys, defaultOrderQuery, isAssistantsEndpoint, normalizeError, isForbiddenError, getLocalizedErrorMessage, } from 'librechat-data-provider';
+import { QueryKeys, dataService, MutationKeys, defaultOrderQuery, isAssistantsEndpoint, } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 export const useUploadFileMutation = (_options, signal) => {
     const queryClient = useQueryClient();
@@ -114,14 +114,16 @@ export const useDeleteFilesMutation = (_options) => {
         mutationFn: (body) => dataService.deleteFiles(body),
         ...options,
         onError: (error, vars, context) => {
-            const appError = normalizeError(error);
-            if (isForbiddenError(appError)) {
-                showToast({
-                    message: getLocalizedErrorMessage(appError, localize),
-                    status: 'error',
-                });
+            if (error && typeof error === 'object' && 'response' in error) {
+                const errorWithResponse = error;
+                if (errorWithResponse.response?.status === 403) {
+                    showToast({
+                        message: localize('com_ui_delete_not_allowed'),
+                        status: 'error',
+                    });
+                }
             }
-            onError?.(appError, vars, context);
+            onError?.(error, vars, context);
         },
         onSuccess: (data, vars, context) => {
             queryClient.setQueryData([QueryKeys.files], (cachefiles) => {

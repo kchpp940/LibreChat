@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useFormContext } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
-import { Constants, QueryKeys, normalizeError, getErrorMessage } from 'librechat-data-provider';
+import { Constants, QueryKeys } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
 import { usePluginDialogHelpers, useMCPServerManager, useRemoveMCPTool, useLocalize, } from '~/hooks';
@@ -28,10 +28,9 @@ function MCPToolSelectDialog({ isOpen, agentId, setIsOpen, mcpServerNames, }) {
     const updateUserPlugins = useUpdateUserPluginsMutation();
     const handleInstallError = (error) => {
         setError(true);
-        const appError = normalizeError(error);
-        const msg = getErrorMessage(appError);
-        if (msg) {
-            setErrorMessage(msg);
+        const errorMessage = error.response?.data?.message ?? '';
+        if (errorMessage) {
+            setErrorMessage(errorMessage);
         }
         setTimeout(() => {
             setError(false);

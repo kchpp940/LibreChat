@@ -50,3 +50,21 @@ export const useGetStartupConfig = (
     },
   );
 };
+
+export const useGetCapabilities = (
+  config?: UseQueryOptions<t.TRuntimeCapabilities>,
+): QueryObserverResult<t.TRuntimeCapabilities> => {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  return useQuery<t.TRuntimeCapabilities>(
+    [QueryKeys.capabilities],
+    () => dataService.getCapabilities(),
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      ...config,
+      enabled: (config?.enabled ?? true) === true && queriesEnabled,
+    },
+  );
+};

@@ -2,7 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
 import { VisuallyHidden } from '@ariakit/react';
-import { Tools, normalizeError, isForbiddenError, getErrorMessage as _getLibreErrorMessage } from 'librechat-data-provider';
+import { Tools } from 'librechat-data-provider';
 import { X, Globe, Newspaper, Image, ChevronDown, File, Download } from 'lucide-react';
 import { OGDialog, AnimatedTabs, OGDialogClose, OGDialogTitle, OGDialogContent, OGDialogTrigger, useToastContext, } from '@librechat/client';
 import { FaviconImage, getCleanDomain } from '~/components/Web/SourceHovercard';
@@ -109,13 +109,14 @@ const FileItem = React.memo(function FileItem({ file, messageId: _messageId, con
         source: file.source,
     });
     // Extract error message logic to avoid duplication
-    const getDownloadErrorMsg = useCallback((error) => {
-        const appError = normalizeError(error);
-        const rawError = _getLibreErrorMessage(appError);
-        const isLocalFileError =
-            isForbiddenError(appError) ||
-            rawError.includes('local files') ||
-            appError.message?.includes('local files');
+    const getErrorMessage = useCallback((error) => {
+        const errorString = JSON.stringify(error);
+        const errorWithResponse = error;
+        const isLocalFileError = error?.message?.includes('local files') ||
+            errorWithResponse?.response?.data?.error?.includes('local files') ||
+            errorWithResponse?.response?.status === 403 ||
+            errorString.includes('local files') ||
+            errorString.includes('403');
         return isLocalFileError
             ? localize('com_sources_download_local_unavailable')
             : localize('com_sources_download_failed');
@@ -190,7 +191,7 @@ const FileItem = React.memo(function FileItem({ file, messageId: _messageId, con
               {(file.bytes / 1024).toFixed(1)} KB
             </span>)}
         </div>
-        {error && <div className="mt-1 text-xs text-red-500">{getDownloadErrorMsg(error)}</div>}
+        {error && <div className="mt-1 text-xs text-red-500">{getErrorMessage(error)}</div>}
       </button>);
     }
     return (<button onClick={isLocalFile ? undefined : handleDownload} disabled={isLoading} className={`flex h-full w-full flex-col rounded-lg bg-surface-primary-contrast px-3 py-2 text-sm transition-all duration-300 disabled:opacity-50 ${isLocalFile ? 'cursor-default' : 'hover:bg-surface-tertiary'}`} aria-label={isLocalFile ? localize('com_sources_download_local_unavailable') : downloadAriaLabel}>
@@ -210,7 +211,7 @@ const FileItem = React.memo(function FileItem({ file, messageId: _messageId, con
             {sortPagesByRelevance(file.pages, file.pageRelevance).join(', ')}
           </span>)}
       </div>
-      {error && <div className="mt-1 text-xs text-red-500">{getDownloadErrorMsg(error)}</div>}
+      {error && <div className="mt-1 text-xs text-red-500">{getErrorMessage(error)}</div>}
     </button>);
 });
 export function StackedFavicons({ sources, start = 0, end = 3, }) {

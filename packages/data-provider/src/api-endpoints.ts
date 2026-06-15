@@ -226,6 +226,8 @@ export const actionOAuthBind = (actionId: string) =>
 export const config = (context?: StartupConfigContext) =>
   `${BASE_URL}/api/config${buildQuery({ context })}`;
 
+export const capabilities = () => `${BASE_URL}/api/capabilities`;
+
 export const prompts = () => `${BASE_URL}/api/prompts`;
 
 export const addPromptToGroup = (groupId: string) =>

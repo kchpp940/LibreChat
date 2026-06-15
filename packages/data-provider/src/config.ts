@@ -1311,6 +1311,95 @@ export type TRumConfig = {
 
 export type StartupConfigContext = 'share';
 
+export type TCapabilityUseCreateShare = {
+  use: boolean;
+  create: boolean;
+  share: boolean;
+  public: boolean;
+};
+
+export type TCapabilityUseCreate = {
+  use: boolean;
+  create: boolean;
+};
+
+export type TCapabilityUse = {
+  use: boolean;
+};
+
+export type TModelCapabilities = {
+  endpoints: Record<string, boolean>;
+  models: Record<string, boolean>;
+};
+
+export type TFileCapabilities = {
+  upload: boolean;
+  download: boolean;
+  preview: boolean;
+  maxFileSize?: number;
+  allowedMimeTypes?: string[];
+};
+
+export type TRuntimeCapabilities = {
+  models: TModelCapabilities;
+  files: TFileCapabilities;
+  artifacts: {
+    enabled: boolean;
+    codeExecution: boolean;
+    bundlerURL?: string;
+    staticBundlerURL?: string;
+  };
+  sharedLinks: {
+    enabled: boolean;
+    publicEnabled: boolean;
+  };
+  webSearch: {
+    enabled: boolean;
+    searchProvider?: SearchProviders;
+    scraperProvider?: ScraperProviders;
+    rerankerType?: RerankerTypes;
+  };
+  export: {
+    conversation: boolean;
+    messages: boolean;
+  };
+  memory: {
+    enabled: boolean;
+    tokenLimit?: number;
+  };
+  prompts: TCapabilityUseCreateShare;
+  agents: TCapabilityUseCreateShare;
+  skills: TCapabilityUseCreateShare & { defaultActiveOnShare: boolean };
+  remoteAgents: TCapabilityUseCreateShare;
+  mcpServers: TCapabilityUseCreateShare & {
+    configureObo: boolean;
+    trustCheckbox?: {
+      label?: LocalizedString;
+      subLabel?: LocalizedString;
+    };
+  };
+  marketplace: TCapabilityUse;
+  interface: {
+    modelSelect: boolean;
+    parameters: boolean;
+    multiConvo: boolean;
+    bookmarks: boolean;
+    memories: boolean;
+    presets: boolean;
+    temporaryChat: boolean;
+    autoSubmitFromUrl: boolean;
+    runCode: boolean;
+    fileSearch: boolean;
+    fileCitations: boolean;
+    buildInfo: boolean;
+    peoplePicker: {
+      users: boolean;
+      groups: boolean;
+      roles: boolean;
+    };
+  };
+};
+
 export type TStartupConfig = {
   appTitle: string;
   socialLogins?: string[];
@@ -1400,6 +1489,7 @@ export type TStartupConfig = {
     branch?: string | null;
     buildDate?: string | null;
   };
+  capabilities?: TRuntimeCapabilities;
 };
 
 export enum OCRStrategy {

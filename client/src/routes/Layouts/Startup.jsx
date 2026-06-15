@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import AuthLayout from '~/components/Auth/AuthLayout';
+import { CapabilitiesProvider } from '~/Providers/CapabilitiesContext';
 import { REDIRECT_PARAM, SESSION_KEY } from '~/utils';
 const headerMap = {
     '/login': 'com_auth_welcome_back',
@@ -49,7 +50,9 @@ export default function StartupLayout({ isAuthenticated }) {
         startupConfig,
         isFetching,
     };
-    return (<AuthLayout header={headerText ? localize(headerText) : localize(headerMap[location.pathname])} isFetching={isFetching} startupConfig={startupConfig} startupConfigError={startupConfigError} pathname={location.pathname} error={error}>
-      <Outlet context={contextValue}/>
-    </AuthLayout>);
+    return (<CapabilitiesProvider capabilities={startupConfig?.capabilities}>
+      <AuthLayout header={headerText ? localize(headerText) : localize(headerMap[location.pathname])} isFetching={isFetching} startupConfig={startupConfig} startupConfigError={startupConfigError} pathname={location.pathname} error={error}>
+        <Outlet context={contextValue}/>
+      </AuthLayout>
+    </CapabilitiesProvider>);
 }

@@ -241,6 +241,10 @@ export const getStartupConfig = (
   return request.get(endpoints.config(options?.context));
 };
 
+export const getCapabilities = (): Promise<config.TRuntimeCapabilities> => {
+  return request.get(endpoints.capabilities());
+};
+
 export const getAIEndpoints = (): Promise<t.TEndpointsConfig> => {
   return request.get(endpoints.aiEndpoints());
 };

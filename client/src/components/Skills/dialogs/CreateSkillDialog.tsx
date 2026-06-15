@@ -11,8 +11,6 @@ import {
   SKILL_NAME_PATTERN,
   SKILL_NAME_MAX_LENGTH,
   SKILL_DESCRIPTION_MAX_LENGTH,
-  normalizeError,
-  getErrorMessage,
 } from 'librechat-data-provider';
 import { useCreateSkillMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
@@ -65,8 +63,9 @@ export default function CreateSkillDialog({
       navigate(`/skills/${skill._id}`);
     },
     onError: (error: unknown) => {
-      const appError = normalizeError(error);
-      const message = getErrorMessage(appError, localize('com_ui_skill_create_error'));
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        localize('com_ui_skill_create_error');
       showToast({ status: 'error', message });
     },
   });

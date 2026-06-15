@@ -12,6 +12,7 @@ import { ShareArtifactsContainer } from './ShareArtifacts';
 import { useLocalize, useDocumentTitle } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import { ShareContext } from '~/Providers';
+import { CapabilitiesProvider } from '~/Providers/CapabilitiesContext';
 import MessagesView from './MessagesView';
 import Footer from '../Chat/Footer';
 import { cn } from '~/utils';
@@ -88,13 +89,15 @@ function SharedView() {
       </div>
     </div>);
     const artifactsContainer = data && data.messages ? (<ShareArtifactsContainer messages={data.messages} conversationId={data.conversationId} mainContent={mainContent}/>) : (mainContent);
-    return (<ShareContext.Provider value={{ isSharedConvo: true }}>
-      <div className="relative flex h-screen w-full overflow-hidden dark:bg-surface-secondary">
-        <main className="relative flex w-full grow overflow-hidden dark:bg-surface-secondary">
-          {artifactsContainer}
-        </main>
-      </div>
-    </ShareContext.Provider>);
+    return (<CapabilitiesProvider capabilities={config?.capabilities}>
+      <ShareContext.Provider value={{ isSharedConvo: true }}>
+        <div className="relative flex h-screen w-full overflow-hidden dark:bg-surface-secondary">
+          <main className="relative flex w-full grow overflow-hidden dark:bg-surface-secondary">
+            {artifactsContainer}
+          </main>
+        </div>
+      </ShareContext.Provider>
+    </CapabilitiesProvider>);
 }
 function ShareHeader({ title, formattedDate, theme, langcode, settingsLabel, onThemeChange, onLangChange, }) {
     const [settingsOpen, setSettingsOpen] = useState(false);

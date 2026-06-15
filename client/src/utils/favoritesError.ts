@@ -1,35 +1,31 @@
 import type { TranslationKeys } from '~/hooks';
-import { normalizeError, getLocalizedErrorMessage, isAppError } from 'librechat-data-provider';
-import type { AppError, ErrorCode } from 'librechat-data-provider';
 
 type LocalizeFn = (key: TranslationKeys, options?: Record<string, string>) => string;
 
+interface ApiErrorShape {
+  response?: { data?: { code?: string; limit?: number } };
+}
+
+const isApiError = (error: unknown): error is ApiErrorShape =>
+  typeof error === 'object' && error !== null && 'response' in error;
+
 /**
- * Builds a localized error message from an favorites/skill-favorites mutation rejection.
- * Uses the unified error normalization system to recognize MAX_*_EXCEEDED codes.
+ * Builds a localized error message from an axios-shaped favorites/skill-favorites
+ * mutation rejection. Recognizes the `MAX_*_EXCEEDED` codes the backend emits and
+ * falls back to the generic error string otherwise.
  */
 export function getFavoritesErrorMessage(
   error: unknown,
   localize: LocalizeFn,
   defaultLimit: number,
 ): string {
-  const appError: AppError = isAppError(error)
-    ? error
-    : normalizeError(error, {
-        fallbackMessage: localize('com_ui_error'),
+  if (isApiError(error)) {
+    const { code, limit } = error.response?.data ?? {};
+    if (code === 'MAX_FAVORITES_EXCEEDED' || code === 'MAX_SKILL_FAVORITES_EXCEEDED') {
+      return localize('com_ui_max_favorites_reached', {
+        0: String(limit ?? defaultLimit),
       });
-
-  if (
-    appError.code === ('MAX_FAVORITES_EXCEEDED' as ErrorCode) ||
-    appError.code === ('MAX_SKILL_FAVORITES_EXCEEDED' as ErrorCode) ||
-    appError.details?.['code'] === 'MAX_FAVORITES_EXCEEDED' ||
-    appError.details?.['code'] === 'MAX_SKILL_FAVORITES_EXCEEDED'
-  ) {
-    const limit = (appError.details?.['limit'] as number) ?? defaultLimit;
-    return localize('com_ui_max_favorites_reached', {
-      0: String(limit),
-    });
+    }
   }
-
-  return getLocalizedErrorMessage(appError, localize as (key: string, options?: Record<string, unknown>) => string);
+  return localize('com_ui_error');
 }

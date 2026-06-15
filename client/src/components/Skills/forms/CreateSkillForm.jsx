@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller, FormProvider } from 'react-hook-form';
 import { Input, Button, TextareaAutosize, useToastContext } from '@librechat/client';
-import { InvocationMode, SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, normalizeError, getErrorMessage, } from 'librechat-data-provider';
+import { InvocationMode, SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, } from 'librechat-data-provider';
 import { useCreateSkillMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import SkillContentEditor from './SkillContentEditor';
@@ -54,8 +54,8 @@ export default function CreateSkillForm({ defaultValues, onCancel, onSuccess, })
             }
         },
         onError: (error) => {
-            const appError = normalizeError(error);
-            const message = getErrorMessage(appError, localize('com_ui_skill_create_error'));
+            const message = error?.response?.data?.message ??
+                localize('com_ui_skill_create_error');
             showToast({ status: 'error', message });
         },
     });

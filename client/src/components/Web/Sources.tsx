@@ -2,7 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
 import { VisuallyHidden } from '@ariakit/react';
-import { Tools, normalizeError, isForbiddenError, getErrorMessage as _getLibreErrorMessage } from 'librechat-data-provider';
+import { Tools } from 'librechat-data-provider';
 import { X, Globe, Newspaper, Image, ChevronDown, File, Download } from 'lucide-react';
 import {
   OGDialog,
@@ -217,14 +217,16 @@ const FileItem = React.memo(function FileItem({
   });
 
   // Extract error message logic to avoid duplication
-  const getDownloadErrorMsg = useCallback(
-    (error: unknown) => {
-      const appError = normalizeError(error);
-      const rawError = _getLibreErrorMessage(appError);
+  const getErrorMessage = useCallback(
+    (error: any) => {
+      const errorString = JSON.stringify(error);
+      const errorWithResponse = error as any;
       const isLocalFileError =
-        isForbiddenError(appError) ||
-        rawError.includes('local files') ||
-        appError.message?.includes('local files');
+        error?.message?.includes('local files') ||
+        errorWithResponse?.response?.data?.error?.includes('local files') ||
+        errorWithResponse?.response?.status === 403 ||
+        errorString.includes('local files') ||
+        errorString.includes('403');
 
       return isLocalFileError
         ? localize('com_sources_download_local_unavailable')
@@ -317,7 +319,7 @@ const FileItem = React.memo(function FileItem({
             </span>
           )}
         </div>
-        {error && <div className="mt-1 text-xs text-red-500">{getDownloadErrorMsg(error)}</div>}
+        {error && <div className="mt-1 text-xs text-red-500">{getErrorMessage(error)}</div>}
       </button>
     );
   }
@@ -351,7 +353,7 @@ const FileItem = React.memo(function FileItem({
           </span>
         )}
       </div>
-      {error && <div className="mt-1 text-xs text-red-500">{getDownloadErrorMsg(error)}</div>}
+      {error && <div className="mt-1 text-xs text-red-500">{getErrorMessage(error)}</div>}
     </button>
   );
 });

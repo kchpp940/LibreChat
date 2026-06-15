@@ -4,8 +4,8 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, SecretInput, Spinner, Button, isDark } from '@librechat/client';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
-import { loginPage, normalizeError, getErrorMessage } from 'librechat-data-provider';
-import type { TRegisterUser } from 'librechat-data-provider';
+import { loginPage } from 'librechat-data-provider';
+import type { TRegisterUser, TError } from 'librechat-data-provider';
 import type { TLoginLayoutContext } from '~/common';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { ErrorMessage } from './ErrorMessage';
@@ -65,10 +65,8 @@ const Registration: React.FC = () => {
     },
     onError: (error: unknown) => {
       setIsSubmitting(false);
-      const appError = normalizeError(error);
-      const message = getErrorMessage(appError);
-      if (message) {
-        setErrorMessage(message);
+      if ((error as TError).response?.data?.message) {
+        setErrorMessage((error as TError).response?.data?.message ?? '');
       }
     },
   });

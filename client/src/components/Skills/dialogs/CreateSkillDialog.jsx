@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { Button, OGDialog, OGDialogContent, TextareaAutosize, useToastContext, } from '@librechat/client';
-import { SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, normalizeError, getErrorMessage, } from 'librechat-data-provider';
+import { SKILL_NAME_PATTERN, SKILL_NAME_MAX_LENGTH, SKILL_DESCRIPTION_MAX_LENGTH, } from 'librechat-data-provider';
 import { useCreateSkillMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -25,8 +25,8 @@ export default function CreateSkillDialog({ isOpen, setIsOpen, defaultName = '',
             navigate(`/skills/${skill._id}`);
         },
         onError: (error) => {
-            const appError = normalizeError(error);
-            const message = getErrorMessage(appError, localize('com_ui_skill_create_error'));
+            const message = error?.response?.data?.message ??
+                localize('com_ui_skill_create_error');
             showToast({ status: 'error', message });
         },
     });

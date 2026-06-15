@@ -4,7 +4,7 @@ import * as Ariakit from '@ariakit/react';
 import { VisuallyHidden } from '@ariakit/react';
 import { GitFork, InfoIcon } from 'lucide-react';
 import { useToastContext } from '@librechat/client';
-import { ForkOptions, isRateLimitError as _isRateLimitError } from 'librechat-data-provider';
+import { ForkOptions } from 'librechat-data-provider';
 import { GitCommit, GitBranchPlus, ListTree } from 'lucide-react';
 import { TranslationKeys, useLocalize, useNavigateToConvo } from '~/hooks';
 import { useForkConvoMutation } from '~/data-provider';
@@ -249,11 +249,15 @@ export default function Fork({
         status: 'info',
       });
     },
-    onError: (error: unknown) => {
+    onError: (error) => {
       /** Rate limit error (429 status code) */
-      const rateLimited = _isRateLimitError(error);
+      const isRateLimitError =
+        (error as any)?.response?.status === 429 ||
+        (error as any)?.status === 429 ||
+        (error as any)?.statusCode === 429;
+
       showToast({
-        message: rateLimited
+        message: isRateLimitError
           ? localize('com_ui_fork_error_rate_limit')
           : localize('com_ui_fork_error'),
         status: 'error',

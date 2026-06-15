@@ -8,9 +8,6 @@ import {
   SKILL_NAME_PATTERN,
   SKILL_NAME_MAX_LENGTH,
   SKILL_DESCRIPTION_MAX_LENGTH,
-  normalizeError,
-  isConflictError,
-  getErrorMessage,
 } from 'librechat-data-provider';
 import type { TSkill, TSkillWarning, TUpdateSkillPayload } from 'librechat-data-provider';
 import { useGetSkillQuery, useUpdateSkillMutation } from '~/data-provider';
@@ -96,13 +93,15 @@ export default function SkillForm({ skillId }: SkillFormProps) {
       reset(toValues(updated));
     },
     onError: (error: unknown) => {
-      const appError = normalizeError(error);
-      if (isConflictError(appError)) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
         showToast({ status: 'warning', message: localize('com_ui_skill_update_conflict') });
         skillQuery.refetch();
         return;
       }
-      const message = getErrorMessage(appError, localize('com_ui_skill_update_error'));
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        localize('com_ui_skill_update_error');
       showToast({ status: 'error', message });
     },
   });

@@ -1,8 +1,6 @@
 import { Button } from '@librechat/client';
 import { useRouteError } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
-import { normalizeError, isAppError, getLocalizedErrorMessage } from '~/utils';
-import type { AppError } from '~/utils';
 import logger from '~/utils/logger';
 
 interface UserAgentData {
@@ -74,28 +72,20 @@ const getBrowserInfo = async () => {
 
 export default function RouteErrorBoundary() {
   const localize = useLocalize();
-  const rawError = useRouteError();
-
-  const appError: AppError = isAppError(rawError)
-    ? rawError
-    : normalizeError(rawError, {
-        fallbackMessage: 'An unexpected error occurred',
-      });
-
-  const displayMessage = getLocalizedErrorMessage(appError, localize as (key: string, options?: Record<string, unknown>) => string);
+  const typedError = useRouteError() as {
+    message?: string;
+    stack?: string;
+    status?: number;
+    statusText?: string;
+    data?: unknown;
+  };
 
   const errorDetails = {
-    message: appError.message,
-    displayMessage,
-    code: appError.code,
-    category: appError.category,
-    stack: (rawError as { stack?: string })?.stack,
-    status: appError.status,
-    details: appError.details,
-    endpoint: appError.endpoint,
-    method: appError.method,
-    requestId: appError.requestId,
-    retryable: appError.retryable,
+    message: typedError.message ?? 'An unexpected error occurred',
+    stack: typedError.stack,
+    status: typedError.status,
+    statusText: typedError.statusText,
+    data: typedError.data,
   };
 
   const handleDownloadLogs = async () => {
@@ -148,19 +138,18 @@ export default function RouteErrorBoundary() {
         <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-gray-600 dark:text-gray-200">
           <h3 className="mb-2 font-medium">{localize('com_ui_error_message_prefix')}</h3>
           <pre className="whitespace-pre-wrap text-sm font-light leading-relaxed text-text-primary">
-            {errorDetails.displayMessage}
+            {errorDetails.message}
           </pre>
         </div>
 
         {/* Status Information */}
         {(typeof errorDetails.status === 'number' ||
-          typeof errorDetails.code === 'string') && (
+          typeof errorDetails.statusText === 'string') && (
           <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-text-primary">
             <h3 className="mb-2 font-medium">{localize('com_ui_status_prefix')}:</h3>
             <p className="text-text-primary">
               {typeof errorDetails.status === 'number' && `${errorDetails.status} `}
-              {typeof errorDetails.code === 'string' && `(${errorDetails.code}) `}
-              {typeof errorDetails.category === 'string' && `[${errorDetails.category}]`}
+              {typeof errorDetails.statusText === 'string' && errorDetails.statusText}
             </p>
           </div>
         )}
@@ -198,26 +187,14 @@ export default function RouteErrorBoundary() {
         )}
 
         {/* Additional Error Data */}
-        {(errorDetails.details != null ||
-          errorDetails.endpoint != null ||
-          errorDetails.requestId != null) && (
+        {errorDetails.data != null && (
           <details className="group mb-4 rounded-xl border border-border-light p-4">
             <summary className="mb-2 flex cursor-pointer items-center justify-between text-sm font-medium text-text-primary">
               <span>{localize('com_ui_additional_details')}</span>
               <span className="transition-transform group-open:rotate-90">{'>'}</span>
             </summary>
             <pre className="whitespace-pre-wrap text-xs font-light leading-relaxed text-text-primary">
-              {JSON.stringify(
-                {
-                  details: errorDetails.details,
-                  endpoint: errorDetails.endpoint,
-                  method: errorDetails.method,
-                  requestId: errorDetails.requestId,
-                  retryable: errorDetails.retryable,
-                },
-                null,
-                2,
-              )}
+              {JSON.stringify(errorDetails.data, null, 2)}
             </pre>
           </details>
         )}

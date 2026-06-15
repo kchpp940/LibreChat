@@ -4,7 +4,7 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { ThemeContext, SecretInput, Spinner, Button, isDark } from '@librechat/client';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import { useRegisterUserMutation } from 'librechat-data-provider/react-query';
-import { loginPage, normalizeError, getErrorMessage } from 'librechat-data-provider';
+import { loginPage } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 import { ErrorMessage } from './ErrorMessage';
 const Registration = () => {
@@ -50,10 +50,8 @@ const Registration = () => {
         },
         onError: (error) => {
             setIsSubmitting(false);
-            const appError = normalizeError(error);
-            const msg = getErrorMessage(appError);
-            if (msg) {
-                setErrorMessage(msg);
+            if (error.response?.data?.message) {
+                setErrorMessage(error.response?.data?.message ?? '');
             }
         },
     });

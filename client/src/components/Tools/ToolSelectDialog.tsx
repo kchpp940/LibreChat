@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { useFormContext } from 'react-hook-form';
-import { isAgentsEndpoint, normalizeError, getErrorMessage } from 'librechat-data-provider';
+import { isAgentsEndpoint } from 'librechat-data-provider';
 import { Dialog, DialogPanel, DialogTitle, Description } from '@headlessui/react';
 import { useUpdateUserPluginsMutation } from 'librechat-data-provider/react-query';
 import type {
@@ -9,6 +9,7 @@ import type {
   EModelEndpoint,
   TPluginAction,
   TPlugin,
+  TError,
 } from 'librechat-data-provider';
 import type { AgentForm, ToolDialogProps } from '~/common';
 import { PluginPagination, PluginAuthForm } from '~/components/Plugins/Store';
@@ -53,12 +54,11 @@ function ToolSelectDialog({
   } = usePluginDialogHelpers();
 
   const updateUserPlugins = useUpdateUserPluginsMutation();
-  const handleInstallError = (error: unknown) => {
+  const handleInstallError = (error: TError) => {
     setError(true);
-    const appError = normalizeError(error);
-    const msg = getErrorMessage(appError);
-    if (msg) {
-      setErrorMessage(msg);
+    const errorMessage = error.response?.data?.message ?? '';
+    if (errorMessage) {
+      setErrorMessage(errorMessage);
     }
     setTimeout(() => {
       setError(false);
@@ -79,7 +79,7 @@ function ToolSelectDialog({
 
     updateUserPlugins.mutate(pluginAction, {
       onError: (error: unknown) => {
-        handleInstallError(error);
+        handleInstallError(error as TError);
       },
       onSuccess: addFunction,
     });
@@ -91,7 +91,7 @@ function ToolSelectDialog({
     updateUserPlugins.mutate(
       { pluginKey: toolId, action: 'uninstall', auth: {}, isEntityTool: true },
       {
-        onError: (error: unknown) => handleInstallError(error),
+        onError: (error: unknown) => handleInstallError(error as TError),
         onSuccess: () => {
           const remainingToolIds = getValues('tools')?.filter((id) => id !== toolId) || [];
           setValue('tools', remainingToolIds);

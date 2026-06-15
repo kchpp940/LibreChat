@@ -4,6 +4,7 @@ import type { TStartupConfig } from 'librechat-data-provider';
 import { TranslationKeys, useLocalize } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import AuthLayout from '~/components/Auth/AuthLayout';
+import { CapabilitiesProvider } from '~/Providers/CapabilitiesContext';
 import { REDIRECT_PARAM, SESSION_KEY } from '~/utils';
 
 const headerMap: Record<string, TranslationKeys> = {
@@ -63,15 +64,17 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
   };
 
   return (
-    <AuthLayout
-      header={headerText ? localize(headerText) : localize(headerMap[location.pathname])}
-      isFetching={isFetching}
-      startupConfig={startupConfig}
-      startupConfigError={startupConfigError}
-      pathname={location.pathname}
-      error={error}
-    >
-      <Outlet context={contextValue} />
-    </AuthLayout>
+    <CapabilitiesProvider capabilities={startupConfig?.capabilities}>
+      <AuthLayout
+        header={headerText ? localize(headerText) : localize(headerMap[location.pathname])}
+        isFetching={isFetching}
+        startupConfig={startupConfig}
+        startupConfigError={startupConfigError}
+        pathname={location.pathname}
+        error={error}
+      >
+        <Outlet context={contextValue} />
+      </AuthLayout>
+    </CapabilitiesProvider>
   );
 }
