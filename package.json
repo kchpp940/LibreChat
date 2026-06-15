@@ -77,6 +77,8 @@
     "e2e:report": "npx playwright show-report e2e/playwright-report",
     "lint:fix": "eslint --fix \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "lint": "eslint \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
+    "lint:error-boundary": "node scripts/check-error-boundary.mjs",
+    "lint:all": "npm run lint:error-boundary && npm run lint",
     "sort-imports": "node scripts/sort-imports.mts",
     "sort-imports:check": "node scripts/sort-imports.mts --check",
     "format": "npx prettier --write \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",

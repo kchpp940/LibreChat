@@ -1,3 +1,65 @@
+/**
+ * Unified Error Normalization Layer —— 统一错误标准化层
+ *
+ * ═══════════════════════════════════════════════════════════════
+ *  ARCHITECTURAL BOUNDARY (架构边界，违反会被 lint:error-boundary 拦截)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  ✅  本模块 (errors.ts) 与 request.ts —— 全项目仅有的两个允许读取原始
+ *       axios 错误结构 (error.response?.status, error.response?.data?.code,
+ *       .statusCode, 'response' in error 等) 的文件。
+ *
+ *  ✅  以下 facade 层文件仅做重新导出，不涉及任何底层字段访问：
+ *       • client/src/utils/errors.ts   (TS 版本)
+ *       • client/src/utils/errors.js   (JS 版本)
+ *
+ *  ✅  以下"特殊边界穿透"文件需要读取 headers.retry-after 等 axios 特有
+ *       字段，加入白名单需在 PR 中解释理由：
+ *       • client/src/hooks/SSE/useResumableSSE.ts/.js
+ *
+ *  ❌  所有其他业务组件、hooks、data-provider react-query hooks 一律只能
+ *       消费下列 API，禁止任何形式的 error.response.* 访问：
+ *
+ *       ┌────────────────────────────────────────────────────────┐
+ *       │  ① normalizeError(error, options?)  → AppError         │
+ *       │     (幂等：如果 error 已经是 AppError 则原样返回)        │
+ *       │                                                        │
+ *       │  ② 12 个语义化谓词：                                     │
+ *       │    isAppError         —— 类型收窄 (type guard)         │
+ *       │    isAbortedError     —— AbortError / 超时 / 取消       │
+ *       │    isNetworkError     —— 断网 / DNS / ERR_NETWORK       │
+ *       │    isUnauthorizedError — 401 / UNAUTHORIZED             │
+ *       │    isForbiddenError   — 403 / FORBIDDEN                 │
+ *       │    isNotFoundError    — 404 / CONVERSATION_NOT_FOUND…  │
+ *       │    isConflictError    — 409 / CONFLICT                  │
+ *       │    isValidationError  — 400 / validation_errors         │
+ *       │    isRateLimitError   — 429 / RATE_LIMITED              │
+ *       │    isServerError      — 5xx / SERVER_ERROR (含 503)     │
+ *       │    isServerNotReadyError — 503 + SERVER_NOT_READY code │
+ *       │    isFileError        — 文件上传/下载/权限错误           │
+ *       │    isRetryableError   — 语义化：是否值得重试             │
+ *       │                                                        │
+ *       │  ③ 访问器函数：                                         │
+ *       │    getErrorStatus     — 数字 HTTP 状态 (或 0)            │
+ *       │    getErrorMessage    — 给开发者的原始错误消息           │
+ *       │    getValidationIssues— 400 校验问题数组                │
+ *       │    getRateLimitInfo   — 429 的 limit / retryAfter       │
+ *       │                                                        │
+ *       │  ④ 本地化：getLocalizedErrorMessage(appError, localize)│
+ *       │     把 ErrorCode 映射成 20+ 条 i18n key                 │
+ *       │                                                        │
+ *       │  ⑤ 类型：                                               │
+ *       │    AppError (interface) — 稳定的错误契约                │
+ *       │    ErrorCode (enum, 27) — 如 MAX_FAVORITES_EXCEEDED     │
+ *       │    ErrorCategory (enum, 11) — 如 auth / business        │
+ *       └────────────────────────────────────────────────────────┘
+ *
+ *  本白名单同步维护在 scripts/check-error-boundary.mjs → WHITELIST Set。
+ *  修改本文件时若新增底层字段访问请同步更新那个常量。
+ *
+ * ════════════════════════════════════════════════════════════════
+ */
+
 import axios, { AxiosError } from 'axios';
 import type {
   AppError,

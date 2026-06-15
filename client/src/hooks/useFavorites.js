@@ -71,8 +71,8 @@ export default function useFavorites() {
                 (isAppError(error) && typeof error.details?.limit === 'number'
                     ? error.details.limit
                     : undefined) ??
-                (typeof (appError.originalError?.response?.data?.limit) === 'number'
-                    ? appError.originalError.response.data.limit
+                (typeof (appError.details?.limit) === 'number'
+                    ? appError.details.limit
                     : undefined) ??
                 MAX_FAVORITES;
             return localize('com_ui_max_favorites_reached', { 0: String(limit) });
