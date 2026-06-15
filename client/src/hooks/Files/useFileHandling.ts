@@ -213,8 +213,8 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
       formData.append('isTemporary', 'true');
     }
 
-    const width = extendedFile.width ?? 0;
-    const height = extendedFile.height ?? 0;
+    const width = getDisplayWidth(extendedFile) ?? 0;
+    const height = getDisplayHeight(extendedFile) ?? 0;
     if (width) {
       formData.append('width', width.toString());
     }
@@ -279,11 +279,14 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
   const loadImage = (extendedFile: ExtendedFile, preview: string) => {
     const img = new Image();
     img.onload = async () => {
-      extendedFile.width = img.width;
-      extendedFile.height = img.height;
       extendedFile = {
         ...extendedFile,
         progress: 0.6,
+        display: {
+          ...extendedFile.display,
+          width: img.width,
+          height: img.height,
+        },
       };
       replaceFile(extendedFile);
 

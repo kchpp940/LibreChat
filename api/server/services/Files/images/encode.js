@@ -12,6 +12,9 @@ const {
   isIndexed,
   isImageFile,
   serializeFileMetadata,
+  hasDisplayDimensions,
+  getDisplayHeight,
+  getDisplayWidth,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 
@@ -121,7 +124,7 @@ async function encodeAndFormat(req, files, params, mode) {
     /** @type {FileSources} */
     const source = file.source ?? FileSources.local;
 
-    if (!file.height) {
+    if (!hasDisplayDimensions(file)) {
       promises.push([file, null]);
       continue;
     }
@@ -181,7 +184,7 @@ async function encodeAndFormat(req, files, params, mode) {
       filepath: file.filepath,
       filename: file.filename,
       metadata: file.metadata,
-      ...(file.height && file.width ? { height: file.height, width: file.width } : {}),
+      ...(hasDisplayDimensions(file) ? { height: getDisplayHeight(file), width: getDisplayWidth(file) } : {}),
     });
 
     if (!imageContent) {
@@ -190,7 +193,7 @@ async function encodeAndFormat(req, files, params, mode) {
     }
 
     /** Validate image buffer against size limits */
-    if (file.height && file.width) {
+    if (hasDisplayDimensions(file)) {
       const imageBuffer = imageContent.startsWith('http')
         ? null
         : Buffer.from(imageContent, 'base64');

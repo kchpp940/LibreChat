@@ -1,6 +1,6 @@
 import { isAfter } from 'date-fns';
 import React, { useMemo } from 'react';
-import { isImageFile } from 'librechat-data-provider';
+import { isImageFile, getDisplayWidth, getDisplayHeight, getDisplayText } from 'librechat-data-provider';
 import type { TFile, TAttachment, TAttachmentMetadata } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 import {
@@ -94,10 +94,10 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       }
       const artType = artifactTypeForAttachment(attachment);
       if (artType === TOOL_ARTIFACT_TYPES.MERMAID) {
-        if (fileData.text) {
+        if (getDisplayText(fileData)) {
           mermaidAtts.push({
             attachment,
-            text: fileData.text,
+            text: getDisplayText(fileData),
           });
         }
         return;
@@ -227,7 +227,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
                 </div>
               )}
               <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-text-primary">
-                {file.text}
+                {getDisplayText(file as TFile)}
               </pre>
             </div>
           ))}
@@ -235,8 +235,8 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       )}
       {imageAttachments?.map((attachment, index) => (
         <Image
-          width={attachment.width}
-          height={attachment.height}
+          width={getDisplayWidth(attachment as TFile)}
+          height={getDisplayHeight(attachment as TFile)}
           key={renderAttachmentKey('image', attachment, index)}
           altText={attachment.filename}
           imagePath={attachment.filepath}

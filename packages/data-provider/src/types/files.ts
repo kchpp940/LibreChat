@@ -1,1 +1,32 @@
-export * from '../file-metadata';
+export {
+  FileSources,
+  FileContext,
+  FilePurpose,
+  IndexingStatus,
+  FileVisibility,
+} from '../file-metadata/types';
+
+export type {
+  FileDisplayMetadata,
+  TFile,
+  TFileUpload,
+  TFilePreview,
+  AvatarUploadResponse,
+  FileDownloadURLResponse,
+  SpeechToTextResponse,
+  VoiceResponse,
+  UploadMutationOptions,
+  UploadAvatarOptions,
+  SpeechToTextOptions,
+  TextToSpeechOptions,
+  VoiceOptions,
+  DeleteFilesResponse,
+  BatchFile,
+  EndpointFileConfig,
+  FileConfig,
+  FileConfigInput,
+  DeleteFilesBody,
+  DeleteMutationOptions,
+  UnifiedFileLike,
+  SerializeFileOptions,
+} from '../file-metadata';

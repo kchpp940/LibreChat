@@ -1,6 +1,6 @@
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, AlertCircle, Download, ChevronDown, Files as FilesIcon } from 'lucide-react';
-import { Tools } from 'librechat-data-provider';
+import { Tools, getDisplayText } from 'librechat-data-provider';
 import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
 import type { ToolArtifactType } from '~/utils/artifacts';
 import {
@@ -334,7 +334,7 @@ const TextAttachment = memo(
       source: file.source,
     });
     const extension = attachment.filename?.split('.').pop();
-    const text = file.text ?? '';
+    const text = getDisplayText(file as TFile) ?? '';
     const visibleFilename = displayFilename(attachment.filename);
 
     useEffect(() => {
@@ -485,10 +485,10 @@ PanelArtifact.displayName = 'PanelArtifact';
 
 const MermaidArtifact = memo(({ attachment }: { attachment: TAttachment }) => {
   const file = attachment as TFile & TAttachmentMetadata;
-  if (!file.text) {
+  if (!getDisplayText(file)) {
     return null;
   }
-  return <ToolMermaidArtifact attachment={attachment} text={file.text} />;
+  return <ToolMermaidArtifact attachment={attachment} text={getDisplayText(file)!} />;
 });
 MermaidArtifact.displayName = 'MermaidArtifact';
 

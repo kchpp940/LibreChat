@@ -6,6 +6,8 @@ import {
   EToolResources,
   LocalStorageKeys,
   defaultAgentFormValues,
+  getDisplayWidth,
+  getDisplayHeight,
 } from 'librechat-data-provider';
 import type { Agent, TFile } from 'librechat-data-provider';
 import type { DropdownValueSetter, TAgentOption, ExtendedFile } from '~/common';
@@ -113,8 +115,8 @@ export const processAgentOption = ({
           type: file.type,
           filepath: file.filepath,
           filename: file.filename,
-          width: file.width,
-          height: file.height,
+          width: getDisplayWidth(file),
+          height: getDisplayHeight(file),
           size: file.bytes,
           preview: file.filepath,
           metadata: file.metadata,

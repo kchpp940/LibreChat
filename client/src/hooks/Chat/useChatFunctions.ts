@@ -14,6 +14,8 @@ import {
   replaceSpecialVars,
   isAssistantsEndpoint,
   getDefaultParamsEndpoint,
+  getDisplayWidth,
+  getDisplayHeight,
 } from 'librechat-data-provider';
 import type {
   TMessage,
@@ -426,8 +428,8 @@ export default function useChatFunctions({
         file_id: file.file_id,
         filepath: file.filepath,
         type: file.type ?? '', // Ensure type is not undefined
-        height: file.height,
-        width: file.width,
+        height: getDisplayHeight(file),
+        width: getDisplayWidth(file),
       }));
       setFiles(new Map());
       setFilesToDelete({});

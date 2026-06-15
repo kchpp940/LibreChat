@@ -30,6 +30,8 @@ import {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   fileConfig as defaultFileConfig,
+  getDisplayWidth,
+  getDisplayHeight,
 } from 'librechat-data-provider';
 import type { TFile } from 'librechat-data-provider';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
@@ -191,8 +193,8 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
         filepath: fileData.filepath,
         preview: fileData.filepath,
         type: fileData.type,
-        height: fileData.height,
-        width: fileData.width,
+        height: getDisplayHeight(fileData),
+        width: getDisplayWidth(fileData),
         filename: fileData.filename,
         source: fileData.source,
         size: fileData.bytes,

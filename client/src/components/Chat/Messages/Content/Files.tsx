@@ -1,4 +1,9 @@
 import { useMemo, useState, useCallback, memo } from 'react';
+import {
+  isImageFile,
+  getDisplayWidth,
+  getDisplayHeight,
+} from 'librechat-data-provider';
 import type { TFile, TMessage } from 'librechat-data-provider';
 import FileContainer from '~/components/Chat/Input/Files/FileContainer';
 import FilePreviewDialog from './FilePreviewDialog';
@@ -6,11 +11,11 @@ import Image from './Image';
 
 const Files = ({ message }: { message?: TMessage }) => {
   const imageFiles = useMemo(() => {
-    return message?.files?.filter((file) => file.type?.startsWith('image/')) || [];
+    return message?.files?.filter((file) => isImageFile(file)) || [];
   }, [message?.files]);
 
   const otherFiles = useMemo(() => {
-    return message?.files?.filter((file) => !file.type?.startsWith('image/')) || [];
+    return message?.files?.filter((file) => !isImageFile(file)) || [];
   }, [message?.files]);
 
   const [selectedFile, setSelectedFile] = useState<Partial<TFile> | null>(null);
@@ -36,8 +41,8 @@ const Files = ({ message }: { message?: TMessage }) => {
           <Image
             key={file.file_id}
             imagePath={file.preview ?? file.filepath ?? ''}
-            height={file.height ?? 1920}
-            width={file.width ?? 1080}
+            height={getDisplayHeight(file as TFile) ?? 1920}
+            width={getDisplayWidth(file as TFile) ?? 1080}
             altText={file.filename ?? 'Uploaded Image'}
           />
         ))}

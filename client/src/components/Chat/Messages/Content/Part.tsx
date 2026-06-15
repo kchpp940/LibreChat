@@ -6,6 +6,8 @@ import {
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
+  getDisplayWidth,
+  getDisplayHeight,
 } from 'librechat-data-provider';
 import type { TMessageContentParts, TAttachment } from 'librechat-data-provider';
 import {
@@ -363,8 +365,8 @@ const Part = memo(function Part({
       <Image
         imagePath={cached ?? imageFile.filepath}
         altText={imageFile.filename ?? 'Uploaded Image'}
-        width={imageFile.width}
-        height={imageFile.height}
+        width={getDisplayWidth(imageFile)}
+        height={getDisplayHeight(imageFile)}
       />
     );
   }
