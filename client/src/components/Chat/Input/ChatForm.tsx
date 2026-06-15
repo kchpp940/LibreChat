@@ -426,11 +426,7 @@ function ChatFormWrapper({ index = 0, placeholder }: { index?: number; placehold
     setFilesLoading,
     newConversation,
     handleStopGenerating,
-    chatStream,
   } = useChatContext();
-
-  const isRunning = chatStream?.selectors?.isRunning ?? isSubmitting;
-  const showStopFromStream = chatStream?.selectors?.showStopButton ?? false;
 
   /**
    * Stabilize conversation reference: only update when rendering-relevant fields change,

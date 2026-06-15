@@ -343,7 +343,6 @@ export default function useEventHandlers({
     (data: string | undefined, submission: EventSubmission) => {
       const { messages, userMessage, initialResponse, isRegenerate = false } = submission;
       const text = data ?? '';
-      setIsSubmitting(true);
 
       const currentTime = Date.now();
       if (currentTime - lastAnnouncementTimeRef.current > MESSAGE_UPDATE_INTERVAL) {
@@ -370,7 +369,7 @@ export default function useEventHandlers({
         ]);
       }
     },
-    [setMessages, announcePolite, setIsSubmitting],
+    [setMessages, announcePolite],
   );
 
   const cancelHandler = useCallback(
@@ -404,10 +403,8 @@ export default function useEventHandlers({
           return update;
         });
       }
-
-      setIsSubmitting(false);
     },
-    [setMessages, setConversation, isAddedRequest, queryClient, setIsSubmitting],
+    [setMessages, setConversation, isAddedRequest, queryClient],
   );
 
   const syncHandler = useCallback(
@@ -477,10 +474,8 @@ export default function useEventHandlers({
           return update;
         });
       }
-
-      setShowStopButton(true);
     },
-    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, setShowStopButton, chatStreamDispatch],
+    [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, chatStreamDispatch],
   );
 
   const createdHandler = useCallback(
@@ -641,8 +636,6 @@ export default function useEventHandlers({
         if ((data as Record<string, unknown>).earlyAbort) {
           console.log('[finalHandler] Early abort detected - no response message saved');
           chatStreamDispatch({ type: 'STREAM_ABORTED' });
-          setShowStopButton(false);
-          setIsSubmitting(false);
 
           const currentConvoId = submissionConvo.conversationId;
           const isInitialNewConvo = isInitialNewConversationSubmission(submission);
@@ -850,8 +843,6 @@ export default function useEventHandlers({
           }
         }
       } finally {
-        setShowStopButton(false);
-        setIsSubmitting(false);
       }
     },
     [
@@ -863,8 +854,6 @@ export default function useEventHandlers({
       isAddedRequest,
       announcePolite,
       setConversation,
-      setIsSubmitting,
-      setShowStopButton,
       location.pathname,
       applyAgentTemplate,
       attachmentHandler,
@@ -933,7 +922,6 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
-        setIsSubmitting(false);
         return;
       }
 
@@ -948,12 +936,10 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
-        setIsSubmitting(false);
         return;
       } else if (!receivedConvoId) {
         const errorResponse = parseErrorResponse(data);
         setErrorMessages(conversationId, errorResponse);
-        setIsSubmitting(false);
         return;
       }
 
@@ -971,7 +957,6 @@ export default function useEventHandlers({
         });
       }
 
-      setIsSubmitting(false);
       return;
     },
     [
@@ -979,7 +964,6 @@ export default function useEventHandlers({
       setMessages,
       paramId,
       newConversation,
-      setIsSubmitting,
       getMessages,
       queryClient,
       chatStreamDispatch,
@@ -1026,8 +1010,6 @@ export default function useEventHandlers({
           );
         } catch (error) {
           console.error('Error in finalHandler during abort:', error);
-          setShowStopButton(false);
-          setIsSubmitting(false);
         }
         return;
       } else if (!isAssistantsEndpoint(endpoint)) {
@@ -1039,7 +1021,6 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
-        setIsSubmitting(false);
         return;
       }
 
@@ -1061,7 +1042,6 @@ export default function useEventHandlers({
         if (contentType != null && contentType.includes('application/json')) {
           const data = await response.json();
           if (response.status === 404) {
-            setIsSubmitting(false);
             return;
           }
           if (data.final === true) {
@@ -1070,7 +1050,6 @@ export default function useEventHandlers({
             cancelHandler(data, submission);
           }
         } else if (response.status === 204 || response.status === 200) {
-          setIsSubmitting(false);
         } else {
           throw new Error(
             'Unexpected response from server; Status: ' +
@@ -1092,7 +1071,6 @@ export default function useEventHandlers({
             preset: tPresetSchema.parse(submission.conversation),
           });
         }
-        setIsSubmitting(false);
       }
     },
     [
@@ -1102,8 +1080,6 @@ export default function useEventHandlers({
       finalHandler,
       cancelHandler,
       newConversation,
-      setIsSubmitting,
-      setShowStopButton,
     ],
   );
 

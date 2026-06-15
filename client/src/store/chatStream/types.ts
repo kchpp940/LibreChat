@@ -37,7 +37,7 @@ export interface ChatStreamState {
 }
 
 export type ChatStreamAction =
-  | { type: 'SUBMIT_START'; payload: { submission: TSubmission; conversation: Partial<TConversation> | null; userMessage?: TMessage | null; responseMessage?: TMessage | null } }
+  | { type: 'SUBMIT_START'; payload: { submission: TSubmission | null; conversation: Partial<TConversation> | null; userMessage?: TMessage | null; responseMessage?: TMessage | null } }
   | { type: 'STREAM_CREATED'; payload: { runId: string; userMessage: TMessage; responseMessage: TMessage } }
   | { type: 'STREAM_OPEN' }
   | { type: 'STREAM_RECONNECT'; payload: { attempt: number } }

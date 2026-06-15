@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { v4 } from 'uuid';
 import { SSE } from 'sse.js';
-import { useSetRecoilState } from 'recoil';
 import { request, createPayload, removeNullishValues } from 'librechat-data-provider';
 import type { TMessage, TPayload, TSubmission, EventSubmission } from 'librechat-data-provider';
 import type { EventHandlerParams } from './useEventHandlers';
@@ -10,7 +8,7 @@ import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useEventHandlers from './useEventHandlers';
 import { clearAllDrafts } from '~/utils';
-import store, { useChatStreamDispatch } from '~/store';
+import { useChatStreamDispatch } from '~/store';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -23,13 +21,10 @@ export default function useSSE(
   isAddedRequest = false,
   runIndex = 0,
 ) {
-  const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
   const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const { token, isAuthenticated } = useAuthContext();
   const [completed, setCompleted] = useState(new Set());
-  const setAbortScroll = useSetRecoilState(store.abortScrollFamily(runIndex));
-  const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(runIndex));
 
   const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation } =
     chatHelpers;
@@ -54,7 +49,7 @@ export default function useSSE(
     setConversation,
     setIsSubmitting,
     newConversation,
-    setShowStopButton,
+    setShowStopButton: () => {},
     runIndex,
   });
 
@@ -110,15 +105,11 @@ export default function useSSE(
           finalHandler(data, submission as EventSubmission);
         } catch (error) {
           console.error('Error in finalHandler:', error);
-          setIsSubmitting(false);
-          setShowStopButton(false);
         }
         (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
         console.log('final', data);
         return;
       } else if (data.created != null) {
-        const runId = v4();
-        setActiveRunId(runId);
         userMessage = {
           ...userMessage,
           ...data.message,
@@ -131,8 +122,6 @@ export default function useSSE(
       } else if (data.event != null) {
         stepHandler(data, { ...submission, userMessage } as EventSubmission);
       } else if (data.sync != null) {
-        const runId = v4();
-        setActiveRunId(runId);
         /* synchronize messages to Assistants API as well as with real DB ID's */
         syncHandler(data, { ...submission, userMessage } as EventSubmission);
       } else if (data.type != null) {
@@ -159,14 +148,12 @@ export default function useSSE(
 
     sse.addEventListener('open', () => {
       chatStreamDispatch({ type: 'STREAM_OPEN' });
-      setAbortScroll(false);
       console.log('connection is opened');
     });
 
     sse.addEventListener('cancel', async () => {
       const streamKey = (submission as TSubmission | null)?.['initialResponse']?.messageId;
       if (completed.has(streamKey)) {
-        setIsSubmitting(false);
         setCompleted((prev) => {
           prev.delete(streamKey);
           return new Set(prev);
@@ -190,8 +177,6 @@ export default function useSSE(
         );
       } catch (error) {
         console.error('Error during abort:', error);
-        setIsSubmitting(false);
-        setShowStopButton(false);
       }
     });
 
@@ -228,13 +213,11 @@ export default function useSSE(
       } catch (error) {
         console.error(error);
         console.log(e);
-        setIsSubmitting(false);
       }
 
       errorHandler({ data, submission: { ...submission, userMessage } as EventSubmission });
     });
 
-    setIsSubmitting(true);
     sse.stream();
 
     return () => {

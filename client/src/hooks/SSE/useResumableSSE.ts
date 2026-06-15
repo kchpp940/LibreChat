@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { v4 } from 'uuid';
 import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
@@ -370,7 +369,6 @@ export default function useResumableSSE(
   runIndex = 0,
 ) {
   const queryClient = useQueryClient();
-  const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
   const chatStreamDispatch = useChatStreamDispatch(runIndex);
 
   const { token, isAuthenticated } = useAuthContext();
@@ -436,9 +434,7 @@ export default function useResumableSSE(
   );
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);
-  const setAbortScroll = useSetRecoilState(store.abortScrollFamily(runIndex));
   const setSubmission = useSetRecoilState(store.submissionByIndex(runIndex));
-  const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(runIndex));
 
   const sseRef = useRef<SSE | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -446,6 +442,8 @@ export default function useResumableSSE(
   const submissionRef = useRef<TSubmission | null>(null);
   const optimisticStreamIdsRef = useRef(new Set<string>());
   const createdStreamIdsRef = useRef(new Set<string>());
+
+  const setShowStopButton = () => {};
 
   const {
     stepHandler,
@@ -510,10 +508,6 @@ export default function useResumableSSE(
       sse.addEventListener('open', () => {
         console.log('[ResumableSSE] Stream connected');
         chatStreamDispatch({ type: 'STREAM_OPEN' });
-        setAbortScroll(false);
-        // Restore UI state on successful connection (including reconnection)
-        setIsSubmitting(true);
-        setShowStopButton(true);
         reconnectAttemptRef.current = 0;
       });
 
@@ -535,8 +529,6 @@ export default function useResumableSSE(
               finalHandler(data, currentSubmission as EventSubmission);
             } catch (error) {
               console.error('[ResumableSSE] Error in finalHandler:', error);
-              setIsSubmitting(false);
-              setShowStopButton(false);
             }
             // Clear handler maps on stream completion to prevent memory leaks
             clearStepMaps();
@@ -556,8 +548,6 @@ export default function useResumableSSE(
               conversationId: data.message?.conversationId,
             });
             createdStreamIdsRef.current.add(currentStreamId);
-            const runId = v4();
-            setActiveRunId(runId);
             userMessage = {
               ...userMessage,
               ...data.message,
@@ -612,8 +602,6 @@ export default function useResumableSSE(
               pendingEvents: data.pendingEvents?.length ?? 0,
             });
 
-            const runId = v4();
-            setActiveRunId(runId);
             const resumeSubmission = buildResumeEventSubmission(
               currentSubmission,
               userMessage,
@@ -722,8 +710,6 @@ export default function useResumableSSE(
               }
             }
 
-            setIsSubmitting(true);
-            setShowStopButton(true);
             return;
           }
 
@@ -785,8 +771,6 @@ export default function useResumableSSE(
           ) {
             removeConvoFromAllQueries(queryClient, currentStreamId);
           }
-          setIsSubmitting(false);
-          setShowStopButton(false);
           setStreamId(null);
           optimisticStreamIdsRef.current.delete(currentStreamId);
           createdStreamIdsRef.current.delete(currentStreamId);
@@ -866,8 +850,6 @@ export default function useResumableSSE(
             });
           }
 
-          setIsSubmitting(false);
-          setShowStopButton(false);
           setStreamId(null);
           optimisticStreamIdsRef.current.delete(currentStreamId);
           createdStreamIdsRef.current.delete(currentStreamId);
@@ -903,11 +885,6 @@ export default function useResumableSSE(
               subscribeToStream(currentStreamId, submissionRef.current, true);
             }
           }, delay);
-
-          // Keep UI in "submitting" state during reconnection attempts
-          // so user knows we're still trying (abort handler may have reset these)
-          setIsSubmitting(true);
-          setShowStopButton(true);
         } else {
           console.error('[ResumableSSE] Max reconnect attempts reached');
           sse.close();
@@ -920,8 +897,6 @@ export default function useResumableSSE(
           ) {
             removeConvoFromAllQueries(queryClient, currentStreamId);
           }
-          setIsSubmitting(false);
-          setShowStopButton(false);
           setStreamId(null);
           optimisticStreamIdsRef.current.delete(currentStreamId);
           createdStreamIdsRef.current.delete(currentStreamId);
@@ -947,9 +922,6 @@ export default function useResumableSSE(
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
-        // Reset UI state - useResumeOnLoad will restore if user returns to this conversation
-        setIsSubmitting(false);
-        setShowStopButton(false);
         setStreamId(null);
       });
 
@@ -981,9 +953,6 @@ export default function useResumableSSE(
     },
     [
       token,
-      setAbortScroll,
-      setActiveRunId,
-      setShowStopButton,
       finalHandler,
       createdHandler,
       attachmentHandler,
@@ -995,7 +964,6 @@ export default function useResumableSSE(
       clearStepMaps,
       messageHandler,
       errorHandler,
-      setIsSubmitting,
       getMessages,
       setMessages,
       startupConfig?.balance?.enabled,
@@ -1089,12 +1057,10 @@ export default function useResumableSSE(
         data: getStreamStartFailureData(errorData),
         submission: currentSubmission as EventSubmission,
       });
-      setShowStopButton(false);
-      setIsSubmitting(false);
       setSubmission(null);
       return null;
     },
-    [clearStepMaps, errorHandler, setIsSubmitting, setShowStopButton, setSubmission],
+    [clearStepMaps, errorHandler, setSubmission],
   );
 
   useEffect(() => {
@@ -1142,8 +1108,6 @@ export default function useResumableSSE(
           responseMessage: submission.initialResponse,
         },
       });
-      setIsSubmitting(true);
-      setShowStopButton(true);
 
       if (resumeStreamId) {
         if (signal.aborted) {
@@ -1208,9 +1172,6 @@ export default function useResumableSSE(
       }
       // Clear handler maps to prevent memory leaks and stale state
       clearStepMaps();
-      // Reset UI state on cleanup - useResumeOnLoad will restore if needed
-      setIsSubmitting(false);
-      setShowStopButton(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submission]);

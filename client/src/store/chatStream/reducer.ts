@@ -44,10 +44,10 @@ export function chatStreamReducer(
       return markUpdated({
         ...state,
         status: 'submitting',
-        submission,
+        submission: submission ?? state.submission,
         conversation: (conversation as TConversation) ?? state.conversation,
-        userMessage: userMessage ?? submission.userMessage ?? state.userMessage,
-        responseMessage: responseMessage ?? submission.initialResponse ?? state.responseMessage,
+        userMessage: userMessage ?? submission?.userMessage ?? state.userMessage,
+        responseMessage: responseMessage ?? submission?.initialResponse ?? state.responseMessage,
         error: null,
         showStopButton: true,
         abortScroll: false,
