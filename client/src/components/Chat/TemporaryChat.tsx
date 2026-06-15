@@ -1,17 +1,16 @@
 import React from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useRecoilState, useRecoilCallback } from 'recoil';
 import { TooltipAnchor } from '@librechat/client';
 import { MessageCircleDashed } from 'lucide-react';
-import { useRecoilState, useRecoilCallback } from 'recoil';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
-import store from '~/store';
+import store, { useChatStream } from '~/store';
 
 export function TemporaryChat() {
   const localize = useLocalize();
   const [isTemporary, setIsTemporary] = useRecoilState(store.isTemporary);
   const conversation = useRecoilValue(store.conversationByIndex(0));
-  const isSubmitting = useRecoilValue(store.isSubmittingFamily(0));
+  const { isRunning: isSubmitting } = useChatStream(0);
 
   const handleBadgeToggle = useRecoilCallback(
     () => () => {

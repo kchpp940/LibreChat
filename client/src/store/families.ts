@@ -193,6 +193,7 @@ const textByIndex = atomFamily<string, string | number>({
   default: '',
 });
 
+/** @deprecated Use `useChatStream(index).selectors.shouldShowStop` instead */
 const showStopButtonByIndex = selectorFamily<boolean, string | number>({
   key: 'showStopButtonByIndex',
   get:
@@ -214,6 +215,7 @@ const showStopButtonByIndex = selectorFamily<boolean, string | number>({
     },
 });
 
+/** @deprecated Use `useChatStream(index).abortScroll` instead */
 const abortScrollFamily = selectorFamily<boolean, string | number>({
   key: 'abortScrollByIndex',
   get:
@@ -235,6 +237,7 @@ const abortScrollFamily = selectorFamily<boolean, string | number>({
     },
 });
 
+/** @deprecated Use `useChatStream(index).isRunning` instead */
 const isSubmittingFamily = selectorFamily<boolean, string | number>({
   key: 'isSubmittingByIndex',
   get:
@@ -342,6 +345,7 @@ const globalAudioPlayingFamily = atomFamily<boolean, string | number | null>({
   default: false,
 });
 
+/** @deprecated Use `useChatStream(index).activeRunId` instead */
 const activeRunFamily = selectorFamily<string | null, string | number | null>({
   key: 'activeRunByIndex',
   get:

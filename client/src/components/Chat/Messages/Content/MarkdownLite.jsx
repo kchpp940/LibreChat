@@ -1,0 +1,47 @@
+import { memo } from 'react';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import supersub from 'remark-supersub';
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import { code, codeNoExecution, a, p, img, table } from './MarkdownComponents';
+import { CodeBlockProvider, ArtifactProvider } from '~/Providers';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import { langSubset } from '~/utils';
+const MarkdownLite = memo(({ content = '', codeExecution = true }) => {
+    const rehypePlugins = [
+        [rehypeKatex],
+        [
+            rehypeHighlight,
+            {
+                detect: true,
+                ignoreMissing: true,
+                subset: langSubset,
+            },
+        ],
+    ];
+    return (<MarkdownErrorBoundary content={content} codeExecution={codeExecution}>
+        <ArtifactProvider>
+          <CodeBlockProvider>
+            <ReactMarkdown remarkPlugins={[
+            /** @ts-ignore */
+            supersub,
+            remarkGfm,
+            [remarkMath, { singleDollarTextMath: false }],
+        ]} 
+    /** @ts-ignore */
+    rehypePlugins={rehypePlugins} components={{
+            code: codeExecution ? code : codeNoExecution,
+            a,
+            p,
+            img,
+            table,
+        }}>
+              {content}
+            </ReactMarkdown>
+          </CodeBlockProvider>
+        </ArtifactProvider>
+      </MarkdownErrorBoundary>);
+});
+export default MarkdownLite;

@@ -1,0 +1,643 @@
+import { renderHook, act } from '@testing-library/react';
+import { Constants } from 'librechat-data-provider';
+/** Mock dependencies */
+jest.mock('~/Providers', () => ({
+    useArtifactsContext: jest.fn(),
+}));
+jest.mock('~/utils', () => ({
+    logger: {
+        log: jest.fn(),
+    },
+}));
+/** Mock store before importing */
+jest.mock('~/store', () => ({
+    __esModule: true,
+    default: {
+        artifactsState: { key: 'artifactsState' },
+        currentArtifactId: { key: 'currentArtifactId' },
+        artifactsVisibility: { key: 'artifactsVisibility' },
+    },
+}));
+jest.mock('recoil', () => {
+    const actualRecoil = jest.requireActual('recoil');
+    return {
+        ...actualRecoil,
+        useRecoilValue: jest.fn(),
+        useRecoilState: jest.fn(),
+        useResetRecoilState: jest.fn(),
+    };
+});
+/** Import mocked functions after mocking */
+import { useArtifactsContext } from '~/Providers';
+import { useRecoilValue, useRecoilState, useResetRecoilState } from 'recoil';
+import { logger } from '~/utils';
+import useArtifacts from '../useArtifacts';
+describe('useArtifacts', () => {
+    const mockResetArtifacts = jest.fn();
+    const mockResetCurrentArtifactId = jest.fn();
+    const mockSetCurrentArtifactId = jest.fn();
+    const createArtifact = (partial) => ({
+        id: 'artifact-1',
+        title: 'Test Artifact',
+        type: 'application/vnd.react',
+        content: 'const App = () => <div>Test</div>',
+        messageId: 'msg-1',
+        lastUpdateTime: Date.now(),
+        ...partial,
+    });
+    const defaultContext = {
+        isSubmitting: false,
+        latestMessageId: 'msg-1',
+        latestMessageText: '',
+        conversationId: 'conv-1',
+    };
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.useFakeTimers();
+        useArtifactsContext.mockReturnValue(defaultContext);
+        useRecoilValue.mockReturnValue({});
+        useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+        useResetRecoilState.mockImplementation((atom) => {
+            if (atom?.key === 'artifactsState') {
+                return mockResetArtifacts;
+            }
+            if (atom?.key === 'currentArtifactId') {
+                return mockResetCurrentArtifactId;
+            }
+            return jest.fn();
+        });
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+    describe('initial state', () => {
+        it('should initialize with preview tab active', () => {
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should return null currentArtifact when no artifacts exist', () => {
+            useRecoilValue.mockReturnValue({});
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.currentArtifact).toBeNull();
+        });
+        it('should return empty orderedArtifactIds when no artifacts exist', () => {
+            useRecoilValue.mockReturnValue({});
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.orderedArtifactIds).toEqual([]);
+        });
+    });
+    describe('artifact ordering', () => {
+        it('should order artifacts by lastUpdateTime', () => {
+            const artifacts = {
+                'artifact-3': createArtifact({ id: 'artifact-3', lastUpdateTime: 3000 }),
+                'artifact-1': createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 }),
+                'artifact-2': createArtifact({ id: 'artifact-2', lastUpdateTime: 2000 }),
+            };
+            useRecoilValue.mockReturnValue(artifacts);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.orderedArtifactIds).toEqual(['artifact-1', 'artifact-2', 'artifact-3']);
+        });
+        it('should automatically select latest artifact', () => {
+            const artifacts = {
+                'artifact-1': createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 }),
+                'artifact-2': createArtifact({ id: 'artifact-2', lastUpdateTime: 2000 }),
+            };
+            useRecoilValue.mockReturnValue(artifacts);
+            renderHook(() => useArtifacts());
+            expect(mockSetCurrentArtifactId).toHaveBeenCalledWith('artifact-2');
+        });
+        it('should automatically select the latest non-code artifact when a code file is newest', () => {
+            const artifacts = {
+                'artifact-1': createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 }),
+                'artifact-2': createArtifact({
+                    id: 'artifact-2',
+                    type: 'application/vnd.code',
+                    title: 'helper.py',
+                    lastUpdateTime: 2000,
+                }),
+            };
+            useRecoilValue.mockReturnValue(artifacts);
+            renderHook(() => useArtifacts());
+            expect(mockSetCurrentArtifactId).toHaveBeenCalledWith('artifact-1');
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalledWith('artifact-2');
+        });
+    });
+    describe('tab switching - enclosed artifacts', () => {
+        it('should switch to preview when enclosed artifact is detected during generation', () => {
+            useRecoilValue.mockReturnValue({});
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: false,
+                latestMessageText: '',
+            });
+            const { result, rerender } = renderHook(() => useArtifacts());
+            /** Generation starts with enclosed artifact */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}\nconst App = () => <div>Test</div>\n:::',
+            });
+            rerender();
+            /** Should switch to preview when enclosed detected */
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should not switch to preview if artifact is not enclosed', () => {
+            const artifact = createArtifact({
+                content: 'const App = () => <div>Test</div>',
+            });
+            useRecoilValue.mockReturnValue({});
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            const { result, rerender } = renderHook(() => useArtifacts());
+            /** Update with non-enclosed artifact */
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}\nconst App = () => <div>Test</div>',
+            });
+            rerender();
+            /** Should switch to code since artifact content is in message and not enclosed */
+            expect(result.current.activeTab).toBe('code');
+            expect(logger.log).not.toHaveBeenCalledWith('artifacts', expect.stringContaining('Enclosed artifact'));
+        });
+        it('should only switch to preview once per artifact', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            const { rerender } = renderHook(() => useArtifacts());
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}\ncode\n:::',
+            });
+            rerender();
+            const firstCallCount = logger.log.mock.calls.filter((call) => call[1]?.includes('Enclosed artifact')).length;
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}\ncode\n:::\nMore text',
+            });
+            rerender();
+            const secondCallCount = logger.log.mock.calls.filter((call) => call[1]?.includes('Enclosed artifact')).length;
+            expect(secondCallCount).toBe(firstCallCount);
+        });
+    });
+    describe('tab switching - non-enclosed artifacts', () => {
+        it('should switch to code when non-enclosed artifact content appears', () => {
+            const artifact = createArtifact({
+                content: 'const App = () => <div>Test Component</div>',
+            });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: 'Here is the code: const App = () => <div>Test Component</div>',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('code');
+        });
+        it('should not switch to code if artifact content is not in message text', () => {
+            const artifact = createArtifact({
+                content: 'const App = () => <div>Test</div>',
+            });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: 'Some other text here',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('conversation changes', () => {
+        it('should reset artifacts when conversation changes', () => {
+            useRecoilValue.mockReturnValue({});
+            const { rerender } = renderHook(() => useArtifacts());
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                conversationId: 'conv-2',
+            });
+            rerender();
+            expect(mockResetArtifacts).toHaveBeenCalled();
+            expect(mockResetCurrentArtifactId).toHaveBeenCalled();
+        });
+        it('should reset artifacts when navigating to new conversation from another conversation', () => {
+            useRecoilValue.mockReturnValue({});
+            /** Start with existing conversation (NOT Constants.NEW_CONVO) */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                conversationId: 'existing-conv',
+            });
+            const { rerender } = renderHook(() => useArtifacts());
+            jest.clearAllMocks();
+            /** Navigate to NEW_CONVO - this should trigger the else if branch */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                conversationId: Constants.NEW_CONVO,
+            });
+            rerender();
+            expect(mockResetArtifacts).toHaveBeenCalled();
+            expect(mockResetCurrentArtifactId).toHaveBeenCalled();
+        });
+        it('should not reset artifacts on initial render', () => {
+            useRecoilValue.mockReturnValue({});
+            renderHook(() => useArtifacts());
+            expect(mockResetArtifacts).not.toHaveBeenCalled();
+            expect(mockResetCurrentArtifactId).not.toHaveBeenCalled();
+        });
+        it('should reset when transitioning from null to NEW_CONVO', () => {
+            useRecoilValue.mockReturnValue({});
+            /** Start with null conversationId */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                conversationId: null,
+            });
+            const { rerender } = renderHook(() => useArtifacts());
+            jest.clearAllMocks();
+            /** Transition to NEW_CONVO - triggers the else if branch (line 44) */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                conversationId: Constants.NEW_CONVO,
+            });
+            rerender();
+            /** Should reset because we're now on NEW_CONVO */
+            expect(mockResetArtifacts).toHaveBeenCalled();
+            expect(mockResetCurrentArtifactId).toHaveBeenCalled();
+        });
+        it('should reset state flags when message ID changes', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\ncode\n:::',
+                latestMessageId: 'msg-1',
+            });
+            const { result, rerender } = renderHook(() => useArtifacts());
+            // First artifact becomes enclosed
+            expect(result.current.activeTab).toBe('preview');
+            // New message starts
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: 'New message',
+                latestMessageId: 'msg-2',
+            });
+            rerender();
+            // Should allow switching again for the new message
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\nnew code\n:::',
+                latestMessageId: 'msg-2',
+            });
+            rerender();
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('artifact selection preservation', () => {
+        it('should preserve selection when a new artifact is added', () => {
+            const artifact1 = createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact1 });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            const { rerender } = renderHook(() => useArtifacts());
+            mockSetCurrentArtifactId.mockClear();
+            /** Append a second artifact; mock still returns 'artifact-1' as current */
+            const artifact2 = createArtifact({ id: 'artifact-2', lastUpdateTime: 2000 });
+            useRecoilValue.mockReturnValue({
+                'artifact-1': artifact1,
+                'artifact-2': artifact2,
+            });
+            rerender();
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalled();
+        });
+        it('should advance to new artifact during streaming', () => {
+            const artifact1 = createArtifact({ id: 'artifact-1', lastUpdateTime: 1000, content: 'c1' });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact1 });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageId: 'msg-1',
+            });
+            const { rerender } = renderHook(() => useArtifacts());
+            mockSetCurrentArtifactId.mockClear();
+            const artifact2 = createArtifact({ id: 'artifact-2', lastUpdateTime: 2000, content: 'c2' });
+            useRecoilValue.mockReturnValue({
+                'artifact-1': artifact1,
+                'artifact-2': artifact2,
+            });
+            rerender();
+            expect(mockSetCurrentArtifactId).toHaveBeenCalledWith('artifact-2');
+        });
+        it('should not advance to a new CODE artifact during streaming', () => {
+            const artifact1 = createArtifact({ id: 'artifact-1', lastUpdateTime: 1000, content: 'c1' });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact1 });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageId: 'msg-1',
+            });
+            const { rerender } = renderHook(() => useArtifacts());
+            mockSetCurrentArtifactId.mockClear();
+            const artifact2 = createArtifact({
+                id: 'artifact-2',
+                type: 'application/vnd.code',
+                title: 'helper.py',
+                lastUpdateTime: 2000,
+                content: 'print("hi")',
+            });
+            useRecoilValue.mockReturnValue({
+                'artifact-1': artifact1,
+                'artifact-2': artifact2,
+            });
+            rerender();
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalledWith('artifact-2');
+        });
+        it('should keep a manually selected CODE artifact selected', () => {
+            const artifact = createArtifact({
+                id: 'artifact-1',
+                type: 'application/vnd.code',
+                title: 'helper.py',
+            });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.currentArtifact).toBe(artifact);
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalledWith('artifact-1');
+        });
+        it('should keep selection null after an explicit reset', () => {
+            const artifact1 = createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 });
+            /** First render: valid selection */
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact1 });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            const { rerender } = renderHook(() => useArtifacts());
+            mockSetCurrentArtifactId.mockClear();
+            /** Rerender: currentArtifactId transitions to null (user closed the panel) */
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            rerender();
+            /** Should NOT bounce back to 'artifact-1' */
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalled();
+        });
+    });
+    describe('cleanup on unmount', () => {
+        it('should reset artifacts when unmounting', () => {
+            useRecoilValue.mockReturnValue({});
+            const { unmount } = renderHook(() => useArtifacts());
+            unmount();
+            expect(mockResetArtifacts).toHaveBeenCalled();
+            expect(mockResetCurrentArtifactId).toHaveBeenCalled();
+            expect(logger.log).toHaveBeenCalledWith('artifacts_visibility', 'Unmounting artifacts');
+        });
+    });
+    describe('manual tab switching', () => {
+        it('should allow manually switching tabs', () => {
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+            act(() => {
+                result.current.setActiveTab('code');
+            });
+            expect(result.current.activeTab).toBe('code');
+        });
+        it('should allow switching back to preview after manual switch to code', () => {
+            const { result } = renderHook(() => useArtifacts());
+            act(() => {
+                result.current.setActiveTab('code');
+            });
+            expect(result.current.activeTab).toBe('code');
+            act(() => {
+                result.current.setActiveTab('preview');
+            });
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('currentIndex calculation', () => {
+        it('should return correct index for current artifact', () => {
+            const artifacts = {
+                'artifact-1': createArtifact({ id: 'artifact-1', lastUpdateTime: 1000 }),
+                'artifact-2': createArtifact({ id: 'artifact-2', lastUpdateTime: 2000 }),
+                'artifact-3': createArtifact({ id: 'artifact-3', lastUpdateTime: 3000 }),
+            };
+            useRecoilValue.mockReturnValue(artifacts);
+            useRecoilState.mockReturnValue(['artifact-2', mockSetCurrentArtifactId]);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.currentIndex).toBe(1);
+        });
+        it('should return -1 for non-existent artifact', () => {
+            const artifacts = {
+                'artifact-1': createArtifact({ id: 'artifact-1' }),
+            };
+            useRecoilValue.mockReturnValue(artifacts);
+            useRecoilState.mockReturnValue(['non-existent', mockSetCurrentArtifactId]);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.currentIndex).toBe(-1);
+        });
+    });
+    describe('complex scenarios', () => {
+        it('should detect and handle enclosed artifacts during generation', async () => {
+            /** Start fresh with enclosed artifact already present */
+            useRecoilValue.mockReturnValue({});
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Component"}\nconst App = () => <div>Test</div>\n:::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            /** Should detect enclosed pattern and be on preview */
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should handle multiple artifacts in sequence', () => {
+            const artifact1 = createArtifact({ id: 'artifact-1', messageId: 'msg-1' });
+            const artifact2 = createArtifact({ id: 'artifact-2', messageId: 'msg-2' });
+            /** First artifact */
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact1 });
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\ncode1\n:::',
+                latestMessageId: 'msg-1',
+            });
+            const { result, rerender } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+            /** Second artifact starts (new message) */
+            useRecoilValue.mockReturnValue({
+                'artifact-1': artifact1,
+                'artifact-2': artifact2,
+            });
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: 'Here is another one',
+                latestMessageId: 'msg-2',
+            });
+            rerender();
+            /** Second artifact becomes enclosed */
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\ncode2\n:::',
+                latestMessageId: 'msg-2',
+            });
+            rerender();
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('edge cases', () => {
+        it('should handle null artifacts gracefully', () => {
+            useRecoilValue.mockReturnValue(null);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.orderedArtifactIds).toEqual([]);
+            expect(result.current.currentArtifact).toBeNull();
+        });
+        it('should handle undefined artifacts gracefully', () => {
+            useRecoilValue.mockReturnValue(undefined);
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.orderedArtifactIds).toEqual([]);
+            expect(result.current.currentArtifact).toBeNull();
+        });
+        it('should handle empty latestMessageText', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: '',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should handle malformed artifact syntax', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact\ncode but no closing',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should handle artifact with only opening tag', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('artifact content comparison', () => {
+        it('should not switch tabs when artifact content does not change', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: 'Some text',
+            });
+            const { result, rerender } = renderHook(() => useArtifacts());
+            const initialTab = result.current.activeTab;
+            /** Same content, just rerender */
+            rerender();
+            expect(result.current.activeTab).toBe(initialTab);
+        });
+    });
+    describe('isSubmitting state handling', () => {
+        it('should process when isSubmitting is true', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue(['artifact-1', mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\ncode\n:::',
+            });
+            renderHook(() => useArtifacts());
+            expect(mockSetCurrentArtifactId).toHaveBeenCalled();
+        });
+        it('should still select latest artifact even when idle (via orderedArtifactIds effect)', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: false,
+                latestMessageText: 'Some text',
+            });
+            renderHook(() => useArtifacts());
+            /** The orderedArtifactIds effect always runs when artifacts change */
+            expect(mockSetCurrentArtifactId).toHaveBeenCalledWith('artifact-1');
+        });
+        it('should not auto-select an idle CODE artifact', () => {
+            const artifact = createArtifact({
+                id: 'artifact-1',
+                type: 'application/vnd.code',
+                title: 'helper.py',
+            });
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: false,
+                latestMessageText: 'Some text',
+            });
+            renderHook(() => useArtifacts());
+            expect(mockSetCurrentArtifactId).not.toHaveBeenCalled();
+        });
+        it('should not process when latestMessageId is null', () => {
+            const artifact = createArtifact({});
+            useRecoilValue.mockReturnValue({ 'artifact-1': artifact });
+            useRecoilState.mockReturnValue([null, mockSetCurrentArtifactId]);
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageId: null,
+                latestMessageText: ':::artifact{}\ncode\n:::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            /** Main effect should exit early and not switch tabs */
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+    describe('regex pattern matching', () => {
+        it('should match artifact with title attribute', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="My Component"}\ncode\n:::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should match artifact with multiple attributes', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test" type="react" identifier="comp-1"}\ncode\n:::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should match artifact with code blocks inside', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{}\n```typescript\nconst x = 1;\n```\n:::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+        it('should match artifact with whitespace variations', () => {
+            useArtifactsContext.mockReturnValue({
+                ...defaultContext,
+                isSubmitting: true,
+                latestMessageText: ':::artifact{title="Test"}  \n\n  code here  \n\n  :::',
+            });
+            const { result } = renderHook(() => useArtifacts());
+            expect(result.current.activeTab).toBe('preview');
+        });
+    });
+});

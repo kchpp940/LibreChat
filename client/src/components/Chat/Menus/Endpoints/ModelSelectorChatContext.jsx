@@ -1,0 +1,37 @@
+import React, { createContext, useCallback, useContext, useMemo, useRef } from 'react';
+import { useRecoilValue } from 'recoil';
+import { useGetConversation, useNewConvo } from '~/hooks';
+import store from '~/store';
+const ModelSelectorChatContext = createContext(undefined);
+export function ModelSelectorChatProvider({ children }) {
+    const getConversation = useGetConversation(0);
+    const { newConversation: nextNewConversation } = useNewConvo();
+    const spec = useRecoilValue(store.conversationSpecByIndex(0));
+    const model = useRecoilValue(store.conversationModelByIndex(0));
+    const agent_id = useRecoilValue(store.conversationAgentIdByIndex(0));
+    const endpoint = useRecoilValue(store.conversationEndpointByIndex(0));
+    const assistant_id = useRecoilValue(store.conversationAssistantIdByIndex(0));
+    const newConversationRef = useRef(nextNewConversation);
+    newConversationRef.current = nextNewConversation;
+    const newConversation = useCallback((params) => newConversationRef.current(params), []);
+    /** Context value only created when relevant conversation properties change */
+    const contextValue = useMemo(() => ({
+        model,
+        spec,
+        agent_id,
+        endpoint,
+        assistant_id,
+        getConversation,
+        newConversation,
+    }), [endpoint, model, spec, agent_id, assistant_id, getConversation, newConversation]);
+    return (<ModelSelectorChatContext.Provider value={contextValue}>
+      {children}
+    </ModelSelectorChatContext.Provider>);
+}
+export function useModelSelectorChatContext() {
+    const context = useContext(ModelSelectorChatContext);
+    if (!context) {
+        throw new Error('useModelSelectorChatContext must be used within ModelSelectorChatProvider');
+    }
+    return context;
+}

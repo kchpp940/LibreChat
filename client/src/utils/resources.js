@@ -1,0 +1,68 @@
+import { AccessRoleIds, ResourceType } from 'librechat-data-provider';
+export const RESOURCE_CONFIGS = {
+    [ResourceType.AGENT]: {
+        resourceType: ResourceType.AGENT,
+        defaultViewerRoleId: AccessRoleIds.AGENT_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.AGENT_EDITOR,
+        defaultOwnerRoleId: AccessRoleIds.AGENT_OWNER,
+        getResourceUrl: (agentId) => `${window.location.origin}/c/new?agent_id=${agentId}`,
+        getResourceName: (name) => (name && name !== '' ? name : 'agent'),
+        getShareMessage: (name) => (name && name !== '' ? name : 'agent'),
+        getManageMessage: (name) => `Manage permissions for ${name && name !== '' ? name : 'agent'}`,
+        getCopyUrlMessage: () => 'Agent URL copied',
+    },
+    [ResourceType.PROMPTGROUP]: {
+        resourceType: ResourceType.PROMPTGROUP,
+        defaultViewerRoleId: AccessRoleIds.PROMPTGROUP_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.PROMPTGROUP_EDITOR,
+        defaultOwnerRoleId: AccessRoleIds.PROMPTGROUP_OWNER,
+        getResourceName: (name) => (name && name !== '' ? name : 'prompt'),
+        getShareMessage: (name) => (name && name !== '' ? name : 'prompt'),
+        getManageMessage: (name) => `Manage permissions for ${name && name !== '' ? name : 'prompt'}`,
+        getCopyUrlMessage: () => 'Prompt URL copied',
+    },
+    [ResourceType.MCPSERVER]: {
+        resourceType: ResourceType.MCPSERVER,
+        defaultViewerRoleId: AccessRoleIds.MCPSERVER_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.MCPSERVER_EDITOR,
+        defaultOwnerRoleId: AccessRoleIds.MCPSERVER_OWNER,
+        getResourceName: (name) => (name && name !== '' ? name : 'MCP server'),
+        getShareMessage: (name) => (name && name !== '' ? name : 'MCP server'),
+        getManageMessage: (name) => `Manage permissions for ${name && name !== '' ? name : 'MCP server'}`,
+        getCopyUrlMessage: () => 'MCP Server URL copied',
+    },
+    [ResourceType.REMOTE_AGENT]: {
+        resourceType: ResourceType.REMOTE_AGENT,
+        defaultViewerRoleId: AccessRoleIds.REMOTE_AGENT_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.REMOTE_AGENT_EDITOR,
+        defaultOwnerRoleId: AccessRoleIds.REMOTE_AGENT_OWNER,
+        getResourceUrl: () => `${window.location.origin}/api/v1/responses`,
+        getResourceName: (name) => (name && name !== '' ? `"${name}"` : 'remote agent'),
+        getShareMessage: (name) => name && name !== '' ? `"${name}" (API Access)` : 'remote agent access',
+        getManageMessage: (name) => `Manage API access for ${name && name !== '' ? `"${name}"` : 'agent'}`,
+        getCopyUrlMessage: () => 'API endpoint copied',
+    },
+    [ResourceType.SKILL]: {
+        resourceType: ResourceType.SKILL,
+        defaultViewerRoleId: AccessRoleIds.SKILL_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.SKILL_EDITOR,
+        defaultOwnerRoleId: AccessRoleIds.SKILL_OWNER,
+        getResourceName: (name) => (name && name !== '' ? name : 'skill'),
+        getShareMessage: (name) => (name && name !== '' ? name : 'skill'),
+        getManageMessage: (name) => `Manage permissions for ${name && name !== '' ? name : 'skill'}`,
+        getCopyUrlMessage: () => 'Skill URL copied',
+    },
+    [ResourceType.SHARED_LINK]: {
+        resourceType: ResourceType.SHARED_LINK,
+        defaultViewerRoleId: AccessRoleIds.SHARED_LINK_VIEWER,
+        defaultEditorRoleId: AccessRoleIds.SHARED_LINK_VIEWER,
+        defaultOwnerRoleId: AccessRoleIds.SHARED_LINK_OWNER,
+        getResourceName: (name) => name || 'shared link',
+        getShareMessage: (name) => name || 'shared link',
+        getManageMessage: (name) => `Manage access for ${name || 'shared link'}`,
+        getCopyUrlMessage: () => 'Share link copied',
+    },
+};
+export const getResourceConfig = (resourceType) => {
+    return RESOURCE_CONFIGS[resourceType];
+};

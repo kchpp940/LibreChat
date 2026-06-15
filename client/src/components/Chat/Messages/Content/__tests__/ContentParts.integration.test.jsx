@@ -1,0 +1,248 @@
+import React from 'react';
+import { RecoilRoot } from 'recoil';
+import { ContentTypes } from 'librechat-data-provider';
+import { fireEvent, render, screen } from '@testing-library/react';
+import ContentParts from '../ContentParts';
+jest.mock('~/hooks', () => ({
+    useLocalize: () => (key, values) => {
+        if (key === 'com_ui_used_n_tools') {
+            return `Used ${values?.[0]} tools`;
+        }
+        return key;
+    },
+    useExpandCollapse: (isExpanded) => ({
+        style: { display: 'grid', gridTemplateRows: isExpanded ? '1fr' : '0fr' },
+        ref: { current: null },
+    }),
+    useProgress: (initial) => (initial >= 1 ? 1 : initial),
+    scheduleMessageContentLayoutReconcile: jest.fn(() => jest.fn()),
+}));
+jest.mock('~/hooks/MCP', () => ({
+    useMCPIconMap: () => new Map(),
+}));
+jest.mock('../ToolOutput', () => ({
+    StackedToolIcons: () => <span data-testid="stacked-icons"/>,
+    getMCPServerName: () => '',
+    ToolIcon: () => <span data-testid="tool-icon"/>,
+    getToolIconType: () => 'mcp',
+    isError: () => false,
+}));
+jest.mock('../ToolCallInfo', () => ({
+    __esModule: true,
+    default: () => <div data-testid="tool-call-info"/>,
+}));
+jest.mock('../ProgressText', () => ({
+    __esModule: true,
+    default: ({ onClick, finishedText }) => (<div data-testid="progress-text" onClick={onClick}>
+      {finishedText}
+    </div>),
+}));
+jest.mock('lucide-react', () => ({
+    ChevronDown: () => <span>{'chevron'}</span>,
+    TriangleAlert: () => <span>{'alert'}</span>,
+    Users: () => <span>{'users'}</span>,
+}));
+jest.mock('@librechat/client', () => ({
+    Button: ({ children }) => <button>{children}</button>,
+}));
+jest.mock('../Parts', () => ({
+    AttachmentGroup: ({ attachments }) => (<div data-testid="attachment-group" data-count={attachments?.length ?? 0}/>),
+    ExecuteCode: () => <div data-testid="execute-code"/>,
+    ImageGen: () => <div data-testid="image-gen"/>,
+    AgentUpdate: () => <div data-testid="agent-update"/>,
+    EmptyText: () => <div data-testid="empty-text"/>,
+    Reasoning: () => <div data-testid="reasoning"/>,
+    Summary: () => <div data-testid="summary"/>,
+    Text: ({ text }) => <div data-testid="text">{text}</div>,
+    EditTextPart: () => <div data-testid="edit-text"/>,
+}));
+jest.mock('../MemoryArtifacts', () => ({
+    __esModule: true,
+    default: () => <div data-testid="memory-artifacts"/>,
+}));
+jest.mock('../WebSearch', () => ({
+    __esModule: true,
+    default: () => <div data-testid="web-search"/>,
+}));
+jest.mock('../RetrievalCall', () => ({
+    __esModule: true,
+    default: () => <div data-testid="retrieval-call"/>,
+}));
+jest.mock('../AgentHandoff', () => ({
+    __esModule: true,
+    default: () => <div data-testid="agent-handoff"/>,
+}));
+jest.mock('../CodeAnalyze', () => ({
+    __esModule: true,
+    default: () => <div data-testid="code-analyze"/>,
+}));
+jest.mock('../Image', () => ({
+    __esModule: true,
+    default: () => <div data-testid="image"/>,
+}));
+jest.mock('../Container', () => ({
+    __esModule: true,
+    default: ({ children }) => <div>{children}</div>,
+}));
+jest.mock('~/utils', () => {
+    const actual = jest.requireActual('~/utils');
+    return {
+        ...actual,
+        cn: (...classes) => classes.filter(Boolean).join(' '),
+        logger: { error: jest.fn() },
+    };
+});
+const MCP_DELIMITER = '_mcp_';
+const makeMcpToolCall = (id, hasOutput = true) => ({
+    type: ContentTypes.TOOL_CALL,
+    [ContentTypes.TOOL_CALL]: {
+        id,
+        name: `getTinyImage${MCP_DELIMITER}Everything`,
+        args: '{}',
+        output: hasOutput ? 'image_returned' : '',
+    },
+});
+const makeMcpToolCallWithoutId = (name, hasOutput = true) => ({
+    type: ContentTypes.TOOL_CALL,
+    [ContentTypes.TOOL_CALL]: {
+        name: `${name}${MCP_DELIMITER}Everything`,
+        args: '{}',
+        output: hasOutput ? 'image_returned' : '',
+    },
+});
+const makeTextPart = (text) => ({ type: ContentTypes.TEXT, text });
+const imageAttachment = (toolCallId, name = 'tiny.png') => ({
+    filename: name,
+    filepath: `/files/${name}`,
+    width: 16,
+    height: 16,
+    messageId: 'm1',
+    toolCallId,
+    conversationId: 'c1',
+});
+const renderContentParts = (props) => render(<RecoilRoot>
+      <ContentParts {...props}/>
+    </RecoilRoot>);
+describe('ContentParts integration: MCP image hoist and grouping', () => {
+    const baseProps = {
+        messageId: 'msg1',
+        isCreatedByUser: false,
+        isLast: true,
+        isSubmitting: false,
+        isLatestMessage: true,
+    };
+    it('groups 2+ MCP tool calls and hoists their attachments outside the collapsible', () => {
+        const content = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        const attachments = [imageAttachment('t1', 'a.png'), imageAttachment('t2', 'b.png')];
+        renderContentParts({
+            ...baseProps,
+            content,
+            attachments,
+        });
+        const groups = screen.getAllByTestId('attachment-group');
+        // One AttachmentGroup hoisted at the group level — inner ToolCalls skip rendering theirs.
+        expect(groups).toHaveLength(1);
+        expect(groups[0].getAttribute('data-count')).toBe('2');
+    });
+    it('does not group a single tool call — image renders inline (no hoist)', () => {
+        const content = [makeMcpToolCall('t1')];
+        const attachments = [imageAttachment('t1', 'a.png')];
+        renderContentParts({
+            ...baseProps,
+            content,
+            attachments,
+        });
+        // Single tool call: AttachmentGroup is rendered by ToolCall, not hoisted.
+        const groups = screen.queryAllByTestId('attachment-group');
+        expect(groups).toHaveLength(1);
+        expect(groups[0].getAttribute('data-count')).toBe('1');
+        // No tool group label.
+        expect(screen.queryByText(/Used .* tools/)).not.toBeInTheDocument();
+    });
+    it('hoists attachments from all parts in the group, even mixed image and non-image', () => {
+        const fileAtt = {
+            filename: 'doc.pdf',
+            filepath: '/files/doc.pdf',
+            messageId: 'm1',
+            toolCallId: 't2',
+            conversationId: 'c1',
+        };
+        const content = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        const attachments = [imageAttachment('t1', 'a.png'), fileAtt];
+        renderContentParts({
+            ...baseProps,
+            content,
+            attachments,
+        });
+        const groups = screen.getAllByTestId('attachment-group');
+        expect(groups).toHaveLength(1);
+        // Both image and file are in the hoisted group.
+        expect(groups[0].getAttribute('data-count')).toBe('2');
+    });
+    it('renders no AttachmentGroup when grouped tool calls have no attachments', () => {
+        const content = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        renderContentParts({
+            ...baseProps,
+            content,
+            attachments: [],
+        });
+        expect(screen.queryByTestId('attachment-group')).not.toBeInTheDocument();
+    });
+    it('keeps a manually expanded completed tool group open when its content index shifts', () => {
+        const content = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        const nextContent = [makeTextPart('streamed preface'), ...content];
+        const { rerender } = render(<RecoilRoot>
+        <ContentParts {...baseProps} content={content}/>
+      </RecoilRoot>);
+        const toggle = screen.getByRole('button', { name: 'Used 2 tools' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        rerender(<RecoilRoot>
+        <ContentParts {...baseProps} content={nextContent}/>
+      </RecoilRoot>);
+        expect(screen.getByRole('button', { name: 'Used 2 tools' })).toHaveAttribute('aria-expanded', 'true');
+    });
+    it('keeps a running tool group open when an individual tool is expanded before completion', () => {
+        const runningContent = [makeMcpToolCall('t1', false), makeMcpToolCall('t2', false)];
+        const completedContent = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        const { rerender } = render(<RecoilRoot>
+        <ContentParts {...baseProps} isSubmitting isLatestMessage content={runningContent}/>
+      </RecoilRoot>);
+        const toggle = screen.getByRole('button', { name: 'Used 2 tools' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(screen.getAllByTestId('progress-text')[0]);
+        rerender(<RecoilRoot>
+        <ContentParts {...baseProps} isSubmitting={false} isLatestMessage content={completedContent}/>
+      </RecoilRoot>);
+        expect(screen.getByRole('button', { name: 'Used 2 tools' })).toHaveAttribute('aria-expanded', 'true');
+    });
+    it('does not reuse fallback-index expansion state across message ids', () => {
+        const content = [makeMcpToolCallWithoutId('first'), makeMcpToolCallWithoutId('second')];
+        const { rerender } = render(<RecoilRoot>
+        <ContentParts {...baseProps} messageId="msg1" content={content}/>
+      </RecoilRoot>);
+        const toggle = screen.getByRole('button', { name: 'Used 2 tools' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        rerender(<RecoilRoot>
+        <ContentParts {...baseProps} messageId="msg2" content={content}/>
+      </RecoilRoot>);
+        expect(screen.getByRole('button', { name: 'Used 2 tools' })).toHaveAttribute('aria-expanded', 'false');
+    });
+    it('keeps id-backed expansion state across transient message id changes', () => {
+        const content = [makeMcpToolCall('t1'), makeMcpToolCall('t2')];
+        const { rerender } = render(<RecoilRoot>
+        <ContentParts {...baseProps} messageId="placeholder-msg" content={content}/>
+      </RecoilRoot>);
+        const toggle = screen.getByRole('button', { name: 'Used 2 tools' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        rerender(<RecoilRoot>
+        <ContentParts {...baseProps} messageId="server-msg" content={content}/>
+      </RecoilRoot>);
+        expect(screen.getByRole('button', { name: 'Used 2 tools' })).toHaveAttribute('aria-expanded', 'true');
+    });
+});

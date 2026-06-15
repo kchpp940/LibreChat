@@ -32,20 +32,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   const queryParam = paramId === 'new' ? paramId : (paramId ?? conversationId ?? '');
 
   const isSubmitting = chatStream.isRunning;
-  const setIsSubmitting = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      const resolved = typeof value === 'function' ? value(chatStream.isRunning) : value;
-      if (resolved) {
-        chatStreamDispatch({
-          type: 'SUBMIT_START',
-          payload: { submission: null, conversation },
-        });
-      } else {
-        chatStreamDispatch({ type: 'STREAM_COMPLETED' });
-      }
-    },
-    [chatStream.isRunning, chatStreamDispatch, conversation],
-  );
   const latestMessage = useLatestMessage(index, queryParam);
 
   const latestMessageId = useLatestMessageId(index, queryParam) ?? undefined;
@@ -214,13 +200,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
   const [preset, setPreset] = useRecoilState(store.presetByIndex(index));
   const [showPopover, setShowPopover] = useRecoilState(store.showPopoverFamily(index));
   const abortScroll = chatStream.abortScroll;
-  const setAbortScroll = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      const resolved = typeof value === 'function' ? value(chatStream.abortScroll) : value;
-      chatStreamDispatch({ type: 'SET_ABORT_SCROLL', payload: resolved });
-    },
-    [chatStream.abortScroll, chatStreamDispatch],
-  );
   const [optionSettings, setOptionSettings] = useRecoilState(store.optionSettingsFamily(index));
 
   return useMemo(
@@ -229,7 +208,6 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       conversation,
       setConversation,
       isSubmitting,
-      setIsSubmitting,
       getMessages,
       setMessages,
       setSiblingIdx,
@@ -245,7 +223,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       showPopover,
       setShowPopover,
       abortScroll,
-      setAbortScroll,
+      setAbortScroll: chatStream.actions.setAbortScroll,
       preset,
       setPreset,
       optionSettings,
@@ -255,13 +233,13 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       filesLoading,
       setFilesLoading,
       chatStream,
+      chatStreamActions: chatStream.actions,
     }),
     [
       newConversation,
       conversation,
       setConversation,
       isSubmitting,
-      setIsSubmitting,
       getMessages,
       setMessages,
       setSiblingIdx,
@@ -277,7 +255,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       showPopover,
       setShowPopover,
       abortScroll,
-      setAbortScroll,
+      chatStream.actions.setAbortScroll,
       preset,
       setPreset,
       optionSettings,
@@ -287,6 +265,7 @@ export default function useChatHelpers(index = 0, paramId?: string) {
       filesLoading,
       setFilesLoading,
       chatStream,
+      chatStream.actions,
     ],
   );
 }

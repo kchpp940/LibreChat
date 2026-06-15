@@ -1,0 +1,7 @@
+import { useRecoilValue } from 'recoil';
+import ToggleSwitch from '../../ToggleSwitch';
+import store from '~/store';
+export default function CloudBrowserVoicesSwitch({ onCheckedChange, }) {
+    const textToSpeech = useRecoilValue(store.textToSpeech);
+    return (<ToggleSwitch stateAtom={store.cloudBrowserVoices} localizationKey={'com_nav_enable_cloud_browser_voice'} switchId="CloudBrowserVoices" onCheckedChange={onCheckedChange} disabled={!textToSpeech}/>);
+}

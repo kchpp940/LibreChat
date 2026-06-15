@@ -24,7 +24,7 @@ import Landing from './Landing';
 import Header from './Header';
 import Footer from './Footer';
 import { cn } from '~/utils';
-import store from '~/store';
+import store, { useChatStream } from '~/store';
 
 function LoadingSpinner() {
   return (
@@ -40,7 +40,7 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
   const { conversationId } = useParams();
   const localize = useLocalize();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
-  const isSubmitting = useRecoilValue(store.isSubmittingFamily(index));
+  const { isRunning: isSubmitting } = useChatStream(index);
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
 
   const methods = useForm<ChatFormValues>({
