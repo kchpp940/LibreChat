@@ -765,17 +765,7 @@ export function forkConversation(payload: t.TForkConvoRequest): Promise<t.TForkC
   return request.post(endpoints.forkConversation(), payload);
 }
 
-export interface TExportConversationResponse {
-  conversationId: string;
-  endpoint?: string;
-  title?: string;
-  createdAt?: Date | number;
-  updatedAt?: Date | number;
-  exportAt: string;
-  messages: t.PublicMessage[];
-}
-
-export function exportConversation(conversationId: string): Promise<TExportConversationResponse> {
+export function exportConversation(conversationId: string): Promise<t.TExportConversationResponse> {
   return request.get(endpoints.exportConversation(conversationId));
 }
 

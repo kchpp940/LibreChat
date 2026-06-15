@@ -354,6 +354,16 @@ export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
   messages: PublicMessage[];
 };
 
+export interface TExportConversationResponse {
+  conversationId: string;
+  endpoint?: string;
+  title?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+  exportAt: string;
+  messages: PublicMessage[];
+}
+
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;
 
 export type TUpdateShareLinkRequest = Pick<TSharedLink, 'shareId' | 'targetMessageId'>;

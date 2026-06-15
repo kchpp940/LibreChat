@@ -1,72 +1,22 @@
 import type { IMessage } from './message';
 import type { TAttachment, TMessageContentParts } from 'librechat-data-provider';
+/* Re-export public types from librechat-data-provider as the single source of truth.
+ * This ensures frontend and backend share the exact same type definitions
+ * and prevents drift between the two codebases. */
+export {
+  PublicMessageContext,
+  PublicMessageBase,
+  PublicFile,
+  PublicToolCall,
+  PublicArtifactReference,
+  PublicMessage,
+} from 'librechat-data-provider';
+import type {
+  PublicMessageBase as DataProviderPublicMessageBase,
+  PublicFile as DataProviderPublicFile,
+} from 'librechat-data-provider';
 
-export enum PublicMessageContext {
-  SHARE = 'share',
-  SEARCH = 'search',
-  EXPORT = 'export',
-  DISPLAY = 'display',
-}
-
-export interface PublicMessageBase {
-  messageId: string;
-  parentMessageId: string | null;
-  conversationId: string;
-  sender?: string;
-  text?: string;
-  content?: Array<Record<string, unknown>>;
-  iconURL?: string;
-  isCreatedByUser: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
-  tokenCount?: number;
-  unfinished?: boolean;
-  error?: boolean;
-  finish_reason?: string;
-  manualSkills?: string[];
-  alwaysAppliedSkills?: string[];
-  model?: string;
-}
-
-export interface PublicFile {
-  file_id?: string;
-  filename?: string;
-  filepath?: string;
-  type?: string;
-  width?: number;
-  height?: number;
-  bytes?: number;
-  expiresAt?: Date | number;
-  messageId?: string;
-  conversationId?: string;
-  toolCallId?: string;
-  [key: string]: unknown;
-}
-
-export interface PublicToolCall {
-  id?: string;
-  type?: string;
-  name?: string;
-  args?: string;
-  output?: string;
-  outputTruncated?: boolean;
-  attachments?: PublicFile[];
-}
-
-export interface PublicArtifactReference {
-  artifactId?: string;
-  title?: string;
-  type?: string;
-  language?: string;
-}
-
-export interface PublicMessage extends PublicMessageBase {
-  files?: PublicFile[];
-  attachments?: PublicFile[];
-  toolCalls?: PublicToolCall[];
-  artifacts?: PublicArtifactReference[];
-}
-
+/* Internal serializer-only types, not needed by frontend consumers */
 export interface ContentPartCleanOptions {
   maxToolOutputLength?: number;
   keepThinkContent?: boolean;
@@ -80,7 +30,7 @@ export interface FileSummaryOptions {
 }
 
 export interface SerializeOptions {
-  context: PublicMessageContext;
+  context: import('librechat-data-provider').PublicMessageContext;
   anonymizeIds?: boolean;
   idMap?: Map<string, string>;
   contentPartOptions?: ContentPartCleanOptions;
@@ -89,11 +39,11 @@ export interface SerializeOptions {
 }
 
 export interface SerializeMessageResult {
-  message: PublicMessage;
+  message: import('librechat-data-provider').PublicMessage;
   idMap: Map<string, string>;
 }
 
-export const PUBLIC_MESSAGE_FIELDS: ReadonlyArray<keyof PublicMessageBase> = [
+export const PUBLIC_MESSAGE_FIELDS: ReadonlyArray<keyof DataProviderPublicMessageBase> = [
   'messageId',
   'parentMessageId',
   'conversationId',

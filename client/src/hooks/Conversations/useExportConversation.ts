@@ -2,10 +2,8 @@ import download from 'downloadjs';
 import { useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import exportFromJSON from 'export-from-json';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   buildTree,
-  QueryKeys,
   ContentTypes,
   ToolCallTypes,
   imageGenTools,
@@ -17,6 +15,7 @@ import type {
   TConversation,
   PublicMessage,
   TPreset,
+  TExportConversationResponse,
 } from 'librechat-data-provider';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { useScreenshot } from '~/hooks/ScreenshotContext';
@@ -44,20 +43,32 @@ export default function useExportConversation({
   exportBranches: boolean | 'indeterminate';
   recursive: boolean | 'indeterminate';
 }) {
-  const queryClient = useQueryClient();
   const { captureScreenshot } = useScreenshot();
   const buildMessageTree = useBuildMessageTree();
   const localize = useLocalize();
 
   const { conversationId: paramId } = useParams();
 
-  const getMessageTree = useCallback(() => {
+  /**
+   * Unified export data fetcher — all export formats must go through this
+   * to guarantee the serializeForExport policy (not serializeForDisplay).
+   * This prevents export/disaply口径 mixups where exports accidentally
+   * consume whatever happens to be cached for the UI.
+   */
+  const fetchExportData = useCallback(async (): Promise<TExportConversationResponse | null> => {
     const queryParam =
       paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
-    const messages = queryClient.getQueryData<PublicMessage[]>([QueryKeys.messages, queryParam]) ?? [];
-    const dataTree = buildTree({ messages });
-    return dataTree?.length === 0 ? null : (dataTree ?? null);
-  }, [paramId, conversation?.conversationId, queryClient]);
+    if (!queryParam || queryParam === 'new') {
+      console.error('Cannot export: no valid conversationId');
+      return null;
+    }
+    try {
+      return await dataService.exportConversation(queryParam);
+    } catch (error) {
+      console.error('Failed to fetch export data:', error);
+      return null;
+    }
+  }, [paramId, conversation?.conversationId]);
 
   const getMessageText = (message: Partial<PublicMessage> | undefined, format = 'text') => {
     if (!message) {
@@ -171,12 +182,17 @@ export default function useExportConversation({
   };
 
   const exportCSV = async () => {
+    const exportData = await fetchExportData();
+    if (!exportData) {
+      return;
+    }
+
     const data: Partial<PublicMessage>[] = [];
 
     const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
+      messageId: exportData.conversationId,
       message: null,
-      messages: getMessageTree(),
+      messages: buildTree({ messages: exportData.messages }),
       branches: Boolean(exportBranches),
       recursive: false,
     });
@@ -235,12 +251,17 @@ export default function useExportConversation({
   };
 
   const exportMarkdown = async () => {
+    const exportData = await fetchExportData();
+    if (!exportData) {
+      return;
+    }
+
     let data =
       '# Conversation\n' +
-      `- conversationId: ${conversation?.conversationId}\n` +
-      `- endpoint: ${conversation?.endpoint}\n` +
-      `- title: ${conversation?.title}\n` +
-      `- exportAt: ${new Date().toTimeString()}\n`;
+      `- conversationId: ${exportData.conversationId}\n` +
+      `- endpoint: ${exportData.endpoint ?? ''}\n` +
+      `- title: ${exportData.title ?? ''}\n` +
+      `- exportAt: ${exportData.exportAt}\n`;
 
     if (includeOptions === true) {
       data += '\n## Options\n';
@@ -252,9 +273,9 @@ export default function useExportConversation({
     }
 
     const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
+      messageId: exportData.conversationId,
       message: null,
-      messages: getMessageTree(),
+      messages: buildTree({ messages: exportData.messages }),
       branches: false,
       recursive: false,
     });
@@ -290,13 +311,18 @@ export default function useExportConversation({
   };
 
   const exportText = async () => {
+    const exportData = await fetchExportData();
+    if (!exportData) {
+      return;
+    }
+
     let data =
       'Conversation\n' +
       '########################\n' +
-      `conversationId: ${conversation?.conversationId}\n` +
-      `endpoint: ${conversation?.endpoint}\n` +
-      `title: ${conversation?.title}\n` +
-      `exportAt: ${new Date().toTimeString()}\n`;
+      `conversationId: ${exportData.conversationId}\n` +
+      `endpoint: ${exportData.endpoint ?? ''}\n` +
+      `title: ${exportData.title ?? ''}\n` +
+      `exportAt: ${exportData.exportAt}\n`;
 
     if (includeOptions === true) {
       data += '\nOptions\n########################\n';
@@ -308,9 +334,9 @@ export default function useExportConversation({
     }
 
     const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
+      messageId: exportData.conversationId,
       message: null,
-      messages: getMessageTree(),
+      messages: buildTree({ messages: exportData.messages }),
       branches: false,
       recursive: false,
     });
@@ -346,52 +372,43 @@ export default function useExportConversation({
   };
 
   const exportJSON = async () => {
-    const queryParam =
-      paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
-
-    if (!queryParam || queryParam === 'new') {
-      console.error('Cannot export: no valid conversationId');
+    const exportData = await fetchExportData();
+    if (!exportData) {
       return;
     }
 
-    try {
-      const exportData = await dataService.exportConversation(queryParam);
+    const data: Record<string, unknown> = {
+      conversationId: exportData.conversationId,
+      endpoint: exportData.endpoint,
+      title: exportData.title,
+      exportAt: exportData.exportAt,
+    };
 
-      const data: Record<string, unknown> = {
-        conversationId: exportData.conversationId,
-        endpoint: exportData.endpoint,
-        title: exportData.title,
-        exportAt: exportData.exportAt,
-      };
-
-      if (includeOptions === true) {
-        data['options'] = cleanupPreset({ preset: conversation as TPreset });
-      }
-
-      if (Boolean(exportBranches) || Boolean(recursive)) {
-        const messagesTree = await buildMessageTree({
-          messageId: queryParam,
-          message: null,
-          messages: exportData.messages,
-          branches: Boolean(exportBranches),
-          recursive: Boolean(recursive),
-        });
-        if (Boolean(recursive) && !Array.isArray(messagesTree)) {
-          data['messagesTree'] = (messagesTree as { children?: PublicMessage[] }).children;
-        } else {
-          data['messages'] = messagesTree;
-        }
-      } else {
-        data['messages'] = exportData.messages;
-      }
-
-      /** Use JSON.stringify without indentation to minimize file size for deeply nested recursive exports */
-      const jsonString = JSON.stringify(data);
-      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-      download(blob, `${filename}.json`, 'application/json');
-    } catch (error) {
-      console.error('Failed to export conversation:', error);
+    if (includeOptions === true) {
+      data['options'] = cleanupPreset({ preset: conversation as TPreset });
     }
+
+    if (Boolean(exportBranches) || Boolean(recursive)) {
+      const messagesTree = await buildMessageTree({
+        messageId: exportData.conversationId,
+        message: null,
+        messages: exportData.messages,
+        branches: Boolean(exportBranches),
+        recursive: Boolean(recursive),
+      });
+      if (Boolean(recursive) && !Array.isArray(messagesTree)) {
+        data['messagesTree'] = (messagesTree as { children?: PublicMessage[] }).children;
+      } else {
+        data['messages'] = messagesTree;
+      }
+    } else {
+      data['messages'] = exportData.messages;
+    }
+
+    /** Use JSON.stringify without indentation to minimize file size for deeply nested recursive exports */
+    const jsonString = JSON.stringify(data);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    download(blob, `${filename}.json`, 'application/json');
   };
 
   const exportConversation = () => {

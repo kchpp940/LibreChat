@@ -381,12 +381,13 @@ function serializeSingleMessage(
   };
 
   for (const field of PUBLIC_MESSAGE_FIELDS) {
-    if (field === 'messageId' || field === 'parentMessageId' || field === 'conversationId' || field === 'isCreatedByUser') {
+    const fieldName = field as string;
+    if (fieldName === 'messageId' || fieldName === 'parentMessageId' || fieldName === 'conversationId' || fieldName === 'isCreatedByUser') {
       continue;
     }
     const value = message[field];
     if (value !== undefined && value !== null) {
-      (publicMessage as unknown as Record<string, unknown>)[field] = value;
+      (publicMessage as unknown as Record<string, unknown>)[fieldName] = value;
     }
   }
 
