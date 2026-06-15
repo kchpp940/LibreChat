@@ -2,9 +2,10 @@ import { useRecoilValue } from 'recoil';
 import { Constants } from 'librechat-data-provider';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { TMessage } from 'librechat-data-provider';
-import { useMessagesConversation, useMessagesSubmission } from '~/Providers';
+import { useMessagesConversation, useMessagesSubmission, useMessagesViewContext } from '~/Providers';
 import useScrollToRef from '~/hooks/useScrollToRef';
 import { reconcileMessageContentLayout } from './messageLayout';
+import { useChatStream } from '~/store';
 import store from '~/store';
 
 const threshold = 0.85;
@@ -21,7 +22,9 @@ export default function useMessageScrolling(messagesTree?: TMessage[] | null) {
   const suppressNextResizeFollowRef = useRef(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const { conversation, conversationId } = useMessagesConversation();
-  const { setAbortScroll, isSubmitting, abortScroll } = useMessagesSubmission();
+  const { isSubmitting, abortScroll } = useMessagesSubmission();
+  const index = useMessagesViewContext().index;
+  const setAbortScroll = useChatStream(index).actions.setAbortScroll;
 
   const timeoutIdRef = useRef<NodeJS.Timeout>();
 

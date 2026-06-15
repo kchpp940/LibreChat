@@ -12,7 +12,6 @@ export function ShareMessagesProvider({ messages, children }) {
     const contextValue = useMemo(() => ({
         conversation: null,
         conversationId: undefined,
-        // These are required by the context but not used in share view
         ask: () => { },
         regenerate: () => { },
         handleContinue: () => { },
@@ -20,7 +19,6 @@ export function ShareMessagesProvider({ messages, children }) {
         latestMessageDepth: messages[messages.length - 1]?.depth,
         isSubmitting: false,
         abortScroll: false,
-        setAbortScroll: () => { },
         index: 0,
         getMessages: () => messages,
         setMessages: () => { },

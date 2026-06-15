@@ -1,9 +1,11 @@
 import throttle from 'lodash/throttle';
 import { useEffect, useRef, useMemo } from 'react';
 import { useMessagesViewContext } from '~/Providers';
+import { useChatStream } from '~/store';
 import { logger } from '~/utils';
 export default function useMessageProcess({ message: _message }) {
-    const { conversation, setAbortScroll, isSubmitting } = useMessagesViewContext();
+    const { conversation, isSubmitting, index } = useMessagesViewContext();
+    const setAbortScroll = useChatStream(index).actions.setAbortScroll;
     /** Use ref for isSubmitting to stabilize handleScroll across isSubmitting changes */
     const isSubmittingRef = useRef(isSubmitting);
     isSubmittingRef.current = isSubmitting;
