@@ -57,28 +57,35 @@ export const removeUnavailableTools = (
   preset: TPreset,
   _availableTools: Record<string, TPlugin | undefined>,
   toolAvailabilityMap?: Record<string, ToolAvailability>,
-) => {
+): TPreset => {
   const newPreset = { ...preset };
 
-  if (newPreset.tools && newPreset.tools.length > 0 && toolAvailabilityMap) {
-    newPreset.tools = newPreset.tools
-      .filter((tool) => {
-        let pluginKey: string;
-        if (typeof tool === 'string') {
-          pluginKey = tool;
-        } else {
-          ({ pluginKey } = tool);
-        }
-
-        return toolAvailabilityMap[pluginKey]?.isAvailable === true;
-      })
-      .map((tool) => {
-        if (typeof tool === 'string') {
-          return tool;
-        }
-        return tool.pluginKey;
-      });
+  if (!newPreset.tools || newPreset.tools.length === 0) {
+    return newPreset;
   }
+
+  if (!toolAvailabilityMap) {
+    newPreset.tools = [];
+    return newPreset;
+  }
+
+  newPreset.tools = newPreset.tools
+    .filter((tool) => {
+      let pluginKey: string;
+      if (typeof tool === 'string') {
+        pluginKey = tool;
+      } else {
+        ({ pluginKey } = tool);
+      }
+
+      return toolAvailabilityMap[pluginKey]?.isAvailable === true;
+    })
+    .map((tool) => {
+      if (typeof tool === 'string') {
+        return tool;
+      }
+      return tool.pluginKey;
+    });
 
   return newPreset;
 };

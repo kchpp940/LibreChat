@@ -12,7 +12,7 @@ import {
   useDeletePresetMutation,
   useGetPresetsQuery,
 } from '~/data-provider';
-import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic } from '~/utils';
+import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic, logger } from '~/utils';
 import useGetConversation from '~/hooks/Conversations/useGetConversation';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -189,7 +189,12 @@ export default function usePresets(index = 0) {
         });
         toolAvailabilityMap = result.tools;
       } catch (e) {
+        logger.error('presets', 'Failed to resolve tool availability for preset', e);
         toolAvailabilityMap = undefined;
+        showToast({
+          message: 'Tool availability check failed. Tools have been disabled for safety.',
+          severity: NotificationSeverity.ERROR,
+        });
       }
     }
 

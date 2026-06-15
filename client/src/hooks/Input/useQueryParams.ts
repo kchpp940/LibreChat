@@ -20,9 +20,11 @@ import {
   getConvoSwitchLogic,
   logger,
 } from '~/utils';
-import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage } from '~/hooks';
+import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage, useLocalize } from '~/hooks';
 import { startupConfigKey, useGetAgentByIdQuery } from '~/data-provider';
 import { useChatContext, useChatFormContext } from '~/Providers';
+import { useToastContext } from '@librechat/client';
+import { NotificationSeverity } from '~/common';
 import store from '~/store';
 
 const PROJECT_ID_SEARCH_PARAM = 'projectId';
@@ -65,6 +67,8 @@ export default function useQueryParams({
 
   const methods = useChatFormContext();
   const [searchParams, setSearchParams] = useSearchParams();
+  const localize = useLocalize();
+  const { showToast } = useToastContext();
   const getDefaultConversation = useDefaultConvo();
   const modularChat = useRecoilValue(store.modularChat);
   const availableTools = useRecoilValue(store.availableTools);
@@ -116,7 +120,12 @@ export default function useQueryParams({
           });
           toolAvailabilityMap = result.tools;
         } catch (e) {
+          logger.error('queryParams', 'Failed to resolve tool availability for query params preset', e);
           toolAvailabilityMap = undefined;
+          showToast({
+            message: 'Tool availability check failed. Tools have been disabled for safety.',
+            severity: NotificationSeverity.ERROR,
+          });
         }
       }
 

@@ -1,6 +1,12 @@
-import { EModelEndpoint } from 'librechat-data-provider';
+import {
+  EModelEndpoint,
+  ToolType,
+  ToolPermissionStatus,
+  TPreset,
+  TPlugin,
+  ToolAvailability,
+} from 'librechat-data-provider';
 import { getPresetTitle, removeUnavailableTools } from '../presets';
-import type { TPreset, TPlugin } from 'librechat-data-provider';
 
 describe('presets utils', () => {
   describe('getPresetTitle', () => {
@@ -270,13 +276,35 @@ describe('presets utils', () => {
       plugin3: { pluginKey: 'plugin3', name: 'Plugin 3' } as TPlugin,
     };
 
+    const buildAvailability = (
+      entries: Array<[string, boolean]>,
+    ): Record<string, ToolAvailability> => {
+      const map: Record<string, ToolAvailability> = {};
+      for (const [key, isAvailable] of entries) {
+        map[key] = {
+          toolKey: key,
+          toolType: ToolType.builtin,
+          isAvailable,
+          permissionStatus: isAvailable
+            ? ToolPermissionStatus.allowed
+            : ToolPermissionStatus.denied,
+        };
+      }
+      return map;
+    };
+
     it('should remove unavailable tools from string array', () => {
       const preset = {
         ...basePreset,
         tools: ['plugin1', 'unavailable-plugin', 'plugin2'] as string[],
       };
+      const toolAvailabilityMap = buildAvailability([
+        ['plugin1', true],
+        ['plugin2', true],
+        ['unavailable-plugin', false],
+      ]);
 
-      const result = removeUnavailableTools(preset, availableTools);
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result.tools).toEqual(['plugin1', 'plugin2']);
     });
@@ -290,16 +318,22 @@ describe('presets utils', () => {
           { pluginKey: 'plugin2', name: 'Plugin 2' } as TPlugin,
         ] as TPlugin[],
       };
+      const toolAvailabilityMap = buildAvailability([
+        ['plugin1', true],
+        ['plugin2', true],
+        ['unavailable-plugin', false],
+      ]);
 
-      const result = removeUnavailableTools(preset, availableTools);
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result.tools).toEqual(['plugin1', 'plugin2']);
     });
 
     it('should handle preset without tools', () => {
       const preset = { ...basePreset };
+      const toolAvailabilityMap = buildAvailability([['plugin1', true]]);
 
-      const result = removeUnavailableTools(preset, availableTools);
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result).toEqual(preset);
     });
@@ -309,8 +343,9 @@ describe('presets utils', () => {
         ...basePreset,
         tools: [] as string[],
       };
+      const toolAvailabilityMap = buildAvailability([['plugin1', true]]);
 
-      const result = removeUnavailableTools(preset, availableTools);
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result.tools).toEqual([]);
     });
@@ -320,8 +355,12 @@ describe('presets utils', () => {
         ...basePreset,
         tools: ['unavailable1', 'unavailable2'] as string[],
       };
+      const toolAvailabilityMap = buildAvailability([
+        ['unavailable1', false],
+        ['unavailable2', false],
+      ]);
 
-      const result = removeUnavailableTools(preset, {});
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result.tools).toEqual([]);
     });
@@ -334,8 +373,9 @@ describe('presets utils', () => {
         temperature: 0.8,
         promptPrefix: 'Test prompt',
       };
+      const toolAvailabilityMap = buildAvailability([['plugin1', true]]);
 
-      const result = removeUnavailableTools(preset, availableTools);
+      const result = removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(result.presetId).toBe(preset.presetId);
       expect(result.title).toBe(preset.title);
@@ -353,10 +393,61 @@ describe('presets utils', () => {
         tools: ['plugin1', 'unavailable-plugin'] as string[],
       };
       const originalTools = [...preset.tools];
+      const toolAvailabilityMap = buildAvailability([
+        ['plugin1', true],
+        ['unavailable-plugin', false],
+      ]);
 
-      removeUnavailableTools(preset, availableTools);
+      removeUnavailableTools(preset, availableTools, toolAvailabilityMap);
 
       expect(preset.tools).toEqual(originalTools);
+    });
+
+    describe('fail-closed when toolAvailabilityMap is missing', () => {
+      it('should clear all tools when toolAvailabilityMap is undefined (fail-closed)', () => {
+        const preset = {
+          ...basePreset,
+          tools: ['plugin1', 'plugin2', 'plugin3'] as string[],
+        };
+
+        const result = removeUnavailableTools(preset, availableTools, undefined);
+
+        expect(result.tools).toEqual([]);
+      });
+
+      it('should clear all object tools when toolAvailabilityMap is undefined', () => {
+        const preset = {
+          ...basePreset,
+          tools: [
+            { pluginKey: 'plugin1', name: 'Plugin 1' } as TPlugin,
+            { pluginKey: 'plugin2', name: 'Plugin 2' } as TPlugin,
+          ] as TPlugin[],
+        };
+
+        const result = removeUnavailableTools(preset, availableTools, undefined);
+
+        expect(result.tools).toEqual([]);
+      });
+
+      it('should leave preset unchanged when no tools exist and toolAvailabilityMap is undefined', () => {
+        const preset = { ...basePreset };
+
+        const result = removeUnavailableTools(preset, availableTools, undefined);
+
+        expect(result).toEqual(preset);
+        expect(result.tools).toBeUndefined();
+      });
+
+      it('should keep empty tools array when toolAvailabilityMap is undefined', () => {
+        const preset = {
+          ...basePreset,
+          tools: [] as string[],
+        };
+
+        const result = removeUnavailableTools(preset, availableTools, undefined);
+
+        expect(result.tools).toEqual([]);
+      });
     });
   });
 });

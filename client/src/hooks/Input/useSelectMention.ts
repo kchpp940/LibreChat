@@ -17,6 +17,7 @@ import type {
   ToolAvailability,
 } from 'librechat-data-provider';
 import type { MentionOption, ConvoGenerator } from '~/common';
+import { NotificationSeverity } from '~/common';
 import {
   clearModelForNonEphemeralAgent,
   removeUnavailableTools,
@@ -24,7 +25,8 @@ import {
   getConvoSwitchLogic,
   logger,
 } from '~/utils';
-import { useDefaultConvo } from '~/hooks';
+import { useDefaultConvo, useLocalize } from '~/hooks';
+import { useToastContext } from '@librechat/client';
 import store from '~/store';
 
 export default function useSelectMention({
@@ -45,6 +47,8 @@ export default function useSelectMention({
   getConversation: () => TConversation | null;
 }) {
   const getDefaultConversation = useDefaultConvo();
+  const localize = useLocalize();
+  const { showToast } = useToastContext();
   const modularChat = useRecoilValue(store.modularChat);
   const availableTools = useRecoilValue(store.availableTools);
   const [searchParams] = useSearchParams();
@@ -269,7 +273,12 @@ export default function useSelectMention({
           });
           toolAvailabilityMap = result.tools;
         } catch (e) {
+          logger.error('mention', 'Failed to resolve tool availability for mention preset', e);
           toolAvailabilityMap = undefined;
+          showToast({
+            message: 'Tool availability check failed. Tools have been disabled for safety.',
+            severity: NotificationSeverity.ERROR,
+          });
         }
       }
 
