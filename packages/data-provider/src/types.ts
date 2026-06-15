@@ -475,9 +475,41 @@ export type TSearchMessage = object;
 export type TSearchMessageTreeNode = object;
 
 /**
- * Public message types - consumed by frontend.
- * These mirror the serialized output from @librechat/data-schemas publicMessageSerializer
- * and ensure frontend only works with sanitized, non-sensitive data.
+ * ================================================================
+ * PUBLIC MESSAGE TYPES — SINGLE SOURCE OF TRUTH
+ * ================================================================
+ *
+ * These types define the sanitized, public-facing shape of messages
+ * that cross the trust boundary between backend and frontend.
+ *
+ * ARCHITECTURAL BOUNDARY:
+ *   - Defined HERE in librechat-data-provider (public contract layer)
+ *   - Produced by @librechat/data-schemas publicMessageSerializer
+ *   - Consumed by frontend (client) and any public API response
+ *   - Backend MUST NOT expose raw IMessage / TFile / ToolCall types
+ *     through public APIs — only serialize through the serializer.
+ *   - Frontend MUST NOT assume existence of raw DB fields like
+ *     _id, __v, user, tenantId, endpoint, metadata, files, etc.
+ *
+ * DEPENDENCY DIRECTION (unidirectional, no cycles):
+ *   librechat-data-provider (types + API client)
+ *            ↑
+ *            | peerDep
+ *            |
+ *   @librechat/data-schemas (DB + serializer impl)
+ *
+ * FOUR PUBLIC CONTEXTS (see PublicMessageContext enum):
+ *   SHARE    — anonymized IDs, strict sanitization, shortest outputs
+ *   SEARCH   — truncated text, minimal fields, search snippets only
+ *   EXPORT   — detailed metadata, longer tool outputs, archival quality
+ *   DISPLAY  — full render data, normal-length outputs, UI consumption
+ *
+ * If you add a new field to PublicMessage, you MUST also:
+ *   1. Add it to PUBLIC_MESSAGE_FIELDS whitelist in data-schemas
+ *   2. Verify it's not in SENSITIVE_MESSAGE_FIELDS
+ *   3. Add it to the serializer's copy loop
+ *   4. Add runtime assertion in assertIsPublicMessage()
+ * ================================================================
  */
 export enum PublicMessageContext {
   SHARE = 'share',

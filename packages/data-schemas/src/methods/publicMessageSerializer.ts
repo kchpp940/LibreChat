@@ -1,3 +1,64 @@
+/**
+ * ================================================================
+ * PUBLIC MESSAGE SERIALIZER — TRUST BOUNDARY
+ * ================================================================
+ *
+ * This module is the single production path for converting raw DB
+ * messages (IMessage, IMongoFile, ToolCall, Artifact, etc.) into
+ * the sanitized PublicMessage shape that crosses the trust boundary
+ * to frontend consumers and public APIs.
+ *
+ * == BOUNDARY RULES (enforced by design) ==
+ *
+ * 1. NO raw DB types may leak through public APIs.
+ *    All public endpoints MUST route through one of these serializers.
+ *    You should NOT see raw IMessage / IMongoFile / ToolCall types
+ *    in any API response type definition.
+ *
+ * 2. FOUR PUBLIC CONTEXTS — each with its own sanitization policy:
+ *
+ *    Context     | Function             | Entry Route
+ *    ------------|----------------------|----------------------------
+ *    SHARE       | serializeForShare    | /api/share/:shareId
+ *    SEARCH      | serializeForSearch   | /api/messages?search=
+ *    EXPORT      | serializeForExport   | /api/convos/export/:id
+ *    DISPLAY     | serializeForDisplay  | /api/messages/:conversationId
+ *
+ *    Context     | ID Anon | Tool Out | Files | Error | Think
+ *    ------------|---------|----------|-------|-------|------
+ *    SHARE       | yes     | 1000ch   | 50    | clean | strip
+ *    SEARCH      | no      | 500ch    | 5     | clean | strip
+ *    EXPORT      | no      | 10000ch  | ∞     | full  | strip
+ *    DISPLAY     | no      | 2000ch   | ∞     | full  | strip
+ *
+ * 3. Sensitive fields are defined in SENSITIVE_MESSAGE_FIELDS and
+ *    SENSITIVE_FILE_FIELDS sets — never bypass them with direct
+ *    property access on raw messages in public response code.
+ *
+ * 4. Type-safety layers:
+ *    - Compile-time: PublicMessage type (no index signature for
+ *      known-sensitive fields)
+ *    - Run-time:     assertIsPublicMessage() / isPublicMessage()
+ *      (verifies no sensitive keys are present on the output)
+ *
+ * 5. DEPENDENCY DIRECTION (type source lives in data-provider):
+ *
+ *    librechat-data-provider  ←  single source of truth for types
+ *            ↑
+ *            | re-exported from  ~/types/publicMessage
+ *            |
+ *    @librechat/data-schemas   ←  serialization implementation
+ *
+ *    Never add public-facing type definitions ONLY here — they
+ *    belong in data-provider so both sides stay in sync.
+ *
+ * IF YOU MODIFY THIS FILE:
+ *   - Update the comparison table above if context policies change
+ *   - Add a runtime check in assertIsPublicMessage for new fields
+ *   - Verify all four entry routes still exercise the serializer
+ * ================================================================
+ */
+
 import { nanoid } from 'nanoid';
 import { Constants } from 'librechat-data-provider';
 import logger from '~/config/winston';
