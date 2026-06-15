@@ -85,11 +85,6 @@ import type {
 } from './skillSync';
 /* Tier 5 — Agent */
 import { createAgentMethods, type AgentMethods, type AgentDeps } from './agent';
-/* Public Message Serializer */
-import {
-  createPublicMessageSerializer,
-  type PublicMessageSerializer,
-} from './publicMessageSerializer';
 /* Config */
 import { createConfigMethods, type ConfigMethods } from './config';
 
@@ -106,16 +101,6 @@ export {
   deriveStructuredFrontmatterFields,
   inferSkillFileCategory,
 };
-export {
-  serializeMessage,
-  serializeMessages,
-  serializeForShare,
-  serializeForSearch,
-  serializeForExport,
-  serializeForDisplay,
-  assertIsPublicMessage,
-  isPublicMessage,
-} from './publicMessageSerializer';
 
 export type AllMethods = UserMethods &
   SessionMethods &
@@ -150,8 +135,7 @@ export type AllMethods = UserMethods &
   SkillMethods &
   SkillSyncMethods &
   AgentMethods &
-  ConfigMethods &
-  PublicMessageSerializer;
+  ConfigMethods;
 
 /** Dependencies injected from the api layer into createMethods */
 export interface CreateMethodsDeps {
@@ -283,8 +267,6 @@ export function createMethods(
     ...agentMethods,
     /* Config */
     ...createConfigMethods(mongoose),
-    /* Public Message Serializer */
-    ...createPublicMessageSerializer(),
   };
 }
 
@@ -335,5 +317,4 @@ export type {
   SkillSyncMethods,
   AgentMethods,
   ConfigMethods,
-  PublicMessageSerializer,
 };

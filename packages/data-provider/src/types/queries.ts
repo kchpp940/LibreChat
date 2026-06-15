@@ -86,14 +86,14 @@ export type MessagesListParams = {
 };
 
 export type MessagesListResponse = {
-  messages: t.PublicMessage[];
+  messages: s.TMessage[];
   nextCursor: string | null;
   searchHits?: Record<string, SearchHit[]>;
 };
 
 /* Shared Links */
 export type SharedMessagesResponse = Omit<s.TSharedLink, 'messages'> & {
-  messages: t.PublicMessage[];
+  messages: s.TMessage[];
 };
 
 export interface SharedLinksListParams {

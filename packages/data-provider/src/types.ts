@@ -351,18 +351,8 @@ export type TArchiveConversationRequest = {
 export type TArchiveConversationResponse = TConversation;
 
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
-  messages: PublicMessage[];
+  messages: TMessage[];
 };
-
-export interface TExportConversationResponse {
-  conversationId: string;
-  endpoint?: string;
-  title?: string;
-  createdAt?: Date | number;
-  updatedAt?: Date | number;
-  exportAt: string;
-  messages: PublicMessage[];
-}
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;
 
@@ -473,109 +463,6 @@ export type TMessageTreeNode = object;
 export type TSearchMessage = object;
 
 export type TSearchMessageTreeNode = object;
-
-/**
- * ================================================================
- * PUBLIC MESSAGE TYPES — SINGLE SOURCE OF TRUTH
- * ================================================================
- *
- * These types define the sanitized, public-facing shape of messages
- * that cross the trust boundary between backend and frontend.
- *
- * ARCHITECTURAL BOUNDARY:
- *   - Defined HERE in librechat-data-provider (public contract layer)
- *   - Produced by @librechat/data-schemas publicMessageSerializer
- *   - Consumed by frontend (client) and any public API response
- *   - Backend MUST NOT expose raw IMessage / TFile / ToolCall types
- *     through public APIs — only serialize through the serializer.
- *   - Frontend MUST NOT assume existence of raw DB fields like
- *     _id, __v, user, tenantId, endpoint, metadata, files, etc.
- *
- * DEPENDENCY DIRECTION (unidirectional, no cycles):
- *   librechat-data-provider (types + API client)
- *            ↑
- *            | peerDep
- *            |
- *   @librechat/data-schemas (DB + serializer impl)
- *
- * FOUR PUBLIC CONTEXTS (see PublicMessageContext enum):
- *   SHARE    — anonymized IDs, strict sanitization, shortest outputs
- *   SEARCH   — truncated text, minimal fields, search snippets only
- *   EXPORT   — detailed metadata, longer tool outputs, archival quality
- *   DISPLAY  — full render data, normal-length outputs, UI consumption
- *
- * If you add a new field to PublicMessage, you MUST also:
- *   1. Add it to PUBLIC_MESSAGE_FIELDS whitelist in data-schemas
- *   2. Verify it's not in SENSITIVE_MESSAGE_FIELDS
- *   3. Add it to the serializer's copy loop
- *   4. Add runtime assertion in assertIsPublicMessage()
- * ================================================================
- */
-export enum PublicMessageContext {
-  SHARE = 'share',
-  SEARCH = 'search',
-  EXPORT = 'export',
-  DISPLAY = 'display',
-}
-
-export interface PublicFile {
-  file_id?: string;
-  filename?: string;
-  filepath?: string;
-  type?: string;
-  width?: number;
-  height?: number;
-  bytes?: number;
-  expiresAt?: Date | number;
-  messageId?: string;
-  conversationId?: string;
-  toolCallId?: string;
-  [key: string]: unknown;
-}
-
-export interface PublicToolCall {
-  id?: string;
-  type?: string;
-  name?: string;
-  args?: string;
-  output?: string;
-  outputTruncated?: boolean;
-  attachments?: PublicFile[];
-}
-
-export interface PublicArtifactReference {
-  artifactId?: string;
-  title?: string;
-  type?: string;
-  language?: string;
-}
-
-export interface PublicMessageBase {
-  messageId: string;
-  parentMessageId: string | null;
-  conversationId: string;
-  sender?: string;
-  text?: string;
-  content?: Array<Record<string, unknown>>;
-  iconURL?: string;
-  isCreatedByUser: boolean;
-  createdAt?: Date | number;
-  updatedAt?: Date | number;
-  tokenCount?: number;
-  unfinished?: boolean;
-  error?: boolean;
-  finish_reason?: string;
-  manualSkills?: string[];
-  alwaysAppliedSkills?: string[];
-  model?: string;
-}
-
-export interface PublicMessage extends PublicMessageBase {
-  files?: PublicFile[];
-  attachments?: PublicFile[];
-  toolCalls?: PublicToolCall[];
-  artifacts?: PublicArtifactReference[];
-}
 
 export type TRegisterUserResponse = {
   message: string;

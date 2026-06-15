@@ -8,7 +8,7 @@ const {
   deleteAllSharedLinksWithCleanup,
   deleteConvoSharedLinksWithCleanup,
 } = require('@librechat/api');
-const { logger, serializeForExport } = require('@librechat/data-schemas');
+const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
 const {
   createImportLimiters,
@@ -341,44 +341,6 @@ router.post('/duplicate', forkIpLimiter, forkUserLimiter, async (req, res) => {
   } catch (error) {
     logger.error('Error duplicating conversation:', error);
     res.status(500).send('Error duplicating conversation');
-  }
-});
-
-/**
- * Export conversation with serialized messages using serializeForExport.
- * This route is explicitly for export scenarios and uses a different serializer
- * than the display route to ensure export and display have separate data policies.
- * @route GET /export/:conversationId
- * @returns {object} conversation metadata and serialized messages for export
- */
-router.get('/export/:conversationId', validateConvoAccess, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const convo = await db.getConvo(req.user.id, conversationId);
-
-    if (!convo) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    const messages = await db.getMessages(
-      { conversationId, user: req.user.id },
-      '-_id -__v -user',
-    );
-
-    const serialized = serializeForExport(messages);
-
-    res.status(200).json({
-      conversationId: convo.conversationId,
-      endpoint: convo.endpoint,
-      title: convo.title,
-      createdAt: convo.createdAt,
-      updatedAt: convo.updatedAt,
-      exportAt: new Date().toISOString(),
-      messages: serialized.messages,
-    });
-  } catch (error) {
-    logger.error('Error exporting conversation:', error);
-    res.status(500).json({ error: 'Error exporting conversation' });
   }
 });
 
