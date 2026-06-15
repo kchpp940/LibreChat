@@ -12,8 +12,13 @@ import {
   isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAssistantsVersion,
+  getDisplayWidth,
+  getDisplayHeight,
+  isIndexed,
+  getFilePurpose,
+  getIndexingStatus,
 } from 'librechat-data-provider';
-import type { EModelEndpoint, TEndpointsConfig, TError } from 'librechat-data-provider';
+import type { EModelEndpoint, TEndpointsConfig, TError, TFile } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { ExtendedFile, FileSetter } from '~/common';
 import { logger, validateFiles, cachePreview, getCachedPreview, removePreviewEntry } from '~/utils';
@@ -139,6 +144,7 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             cachePreview(data.file_id, cachedBlob);
             removePreviewEntry(data.temp_file_id);
           }
+          const file = data as TFile;
           updateFileById(
             data.temp_file_id,
             {
@@ -147,13 +153,13 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
               temp_file_id: data.temp_file_id,
               filepath: data.filepath,
               type: data.type,
-              height: data.height,
-              width: data.width,
+              height: getDisplayHeight(file),
+              width: getDisplayWidth(file),
               filename: data.filename,
               source: data.source,
-              embedded: data.embedded,
-              indexingStatus: data.indexingStatus,
-              purpose: data.purpose,
+              embedded: isIndexed(file),
+              indexingStatus: getIndexingStatus(file),
+              purpose: getFilePurpose(file),
               display: data.display,
             },
             assistant_id ? true : false,

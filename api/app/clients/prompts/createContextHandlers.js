@@ -1,14 +1,7 @@
 const axios = require('axios');
 const { logger } = require('@librechat/data-schemas');
 const { isEnabled, generateShortLivedToken } = require('@librechat/api');
-const { IndexingStatus } = require('librechat-data-provider');
-
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return !!file.embedded;
-}
+const { isIndexed } = require('librechat-data-provider');
 
 const footer = `Use the context as your learned knowledge to better answer the user.
 

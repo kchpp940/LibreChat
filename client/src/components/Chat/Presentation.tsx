@@ -3,7 +3,7 @@ import { useRecoilValue } from 'recoil';
 import {
   FileSources,
   LocalStorageKeys,
-  IndexingStatus,
+  isIndexed,
 } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import useResetArtifactsOnConversationChange from '~/hooks/Artifacts/useResetArtifactsOnConversationChange';
@@ -14,13 +14,6 @@ import Artifacts from '~/components/Artifacts/Artifacts';
 import { SidePanelGroup } from '~/components/SidePanel';
 import { useSetFilesToDelete } from '~/hooks';
 import store from '~/store';
-
-function isIndexed(file: { embedded?: boolean; indexingStatus?: IndexingStatus }): boolean {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return !!(file.embedded ?? false);
-}
 
 export default function Presentation({ children }: { children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);

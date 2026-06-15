@@ -18,6 +18,7 @@ const {
   EModelEndpoint,
   retrievalMimeTypes,
   AssistantStreamEvents,
+  isImageFile,
 } = require('librechat-data-provider');
 const {
   initThread,
@@ -232,7 +233,7 @@ const chatV2 = async (req, res) => {
         let attachmentIndex = 0;
         for (const file of files) {
           file_ids.push(file.file_id);
-          if (file.type.startsWith('image')) {
+          if (isImageFile(file)) {
             userMessage.content.push({
               type: ContentTypes.IMAGE_FILE,
               [ContentTypes.IMAGE_FILE]: { file_id: file.file_id },
@@ -248,7 +249,7 @@ const chatV2 = async (req, res) => {
             tools: [{ type: ToolCallTypes.CODE_INTERPRETER }],
           });
 
-          if (file.type.startsWith('image')) {
+          if (isImageFile(file)) {
             continue;
           }
 

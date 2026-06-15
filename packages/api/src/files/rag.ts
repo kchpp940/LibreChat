@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { logger } from '@librechat/data-schemas';
-import { IndexingStatus, embeddedFromIndexingStatus } from 'librechat-data-provider';
+import { isIndexed } from 'librechat-data-provider';
 import { generateShortLivedToken } from '~/crypto/jwt';
 
 interface DeleteRagFileParams {
@@ -11,15 +11,8 @@ interface DeleteRagFileParams {
     file_id: string;
     /** @deprecated Use `indexingStatus` instead. */
     embedded?: boolean;
-    indexingStatus?: IndexingStatus;
+    indexingStatus?: import('librechat-data-provider').IndexingStatus;
   };
-}
-
-function isIndexed(file: DeleteRagFileParams['file']): boolean {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return embeddedFromIndexingStatus(file.indexingStatus) || file.embedded === true;
 }
 
 /**

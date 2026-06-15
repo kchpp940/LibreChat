@@ -18,6 +18,9 @@ const {
   getEndpointFileConfig,
   documentParserMimeTypes,
   IndexingStatus,
+  isIndexed,
+  isCodeEnvFile,
+  serializeFileMetadata,
 } = require('librechat-data-provider');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
@@ -28,13 +31,6 @@ const {
   sweepExpiredFiles: sweepExpiredFilesWithDeps,
   startExpiredFileSweep: startExpiredFileSweepWithDeps,
 } = require('@librechat/api');
-
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return file.embedded === true;
-}
 const {
   convertImage,
   resizeAndConvert,
@@ -49,35 +45,21 @@ const { LB_QueueAsyncCall } = require('~/server/utils/queue');
 const { getRetentionExpiry, getAgentFileRetentionExpiry } = require('./retention');
 const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
-const { STTService } = require('./Audio/STTService');
+const STTService = require('./Audio/STTService');
 const db = require('~/models');
 
-/**
- * Creates a modular file upload wrapper that ensures filename sanitization
- * across all storage strategies. This prevents storage-specific implementations
- * from having to handle sanitization individually.
- *
- * @param {Function} uploadFunction - The storage strategy's upload function
- * @returns {Function} - Wrapped upload function with sanitization
- */
 const createSanitizedUploadWrapper = (uploadFunction) => {
   return async (params) => {
     const { req, file, file_id, ...restParams } = params;
-
-    // Create a modified file object with sanitized original name
-    // This ensures consistent filename handling across all storage strategies
     const sanitizedFile = {
       ...file,
       originalname: sanitizeFilename(file.originalname),
     };
-
     return uploadFunction({ req, file: sanitizedFile, file_id, ...restParams });
   };
 };
 
-const hasCodeEnvRef = (file) => file?.metadata?.codeEnvRef != null;
-
-const isMissingStorageError = (err) => {
+const isMissingStorageError = (err) => {{
   const code = err?.code ?? err?.status ?? err?.statusCode ?? err?.response?.status;
   if ([404, '404', 'ENOENT', 'NoSuchKey', 'NotFound', 'ResourceNotFound'].includes(code)) {
     return true;
@@ -176,7 +158,7 @@ const createDeleteFileWithSecondaryStorage = ({ source, deleteFile, deletionMeth
         getDeleteMethod({ source: FileSources.vectordb, deletionMethods }),
       );
     }
-    if (hasCodeEnvRef(file) && source !== FileSources.execute_code) {
+    if (isCodeEnvFile(file) && source !== FileSources.execute_code) {
       secondaryDeleteMethods.push(
         getDeleteMethod({ source: FileSources.execute_code, deletionMethods }),
       );
@@ -494,7 +476,10 @@ const processImageFile = async ({ req, res, metadata, returnFile = false }) => {
   if (returnFile) {
     return result;
   }
-  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
+  res.status(200).json({
+    message: 'File uploaded and processed successfully',
+    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
+  });
 };
 
 /**
@@ -658,7 +643,10 @@ const processFileUpload = async ({ req, res, metadata }) => {
     },
     true,
   );
-  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
+  res.status(200).json({
+    message: 'File uploaded and processed successfully',
+    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
+  });
 };
 
 /**
@@ -798,7 +786,10 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       const result = await db.createFile(fileInfo, true);
       return res
         .status(200)
-        .json({ message: 'Agent file uploaded and processed successfully', ...result });
+        .json({
+          message: 'Agent file uploaded and processed successfully',
+          ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
+        });
     };
 
     const fileConfig = mergeFileConfig(appConfig.fileConfig);
@@ -998,7 +989,10 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
 
   const result = await db.createFile(fileInfo, true);
 
-  res.status(200).json({ message: 'Agent file uploaded and processed successfully', ...result });
+  res.status(200).json({
+    message: 'Agent file uploaded and processed successfully',
+    ...serializeFileMetadata(result, { stripText: true, stripInternal: true }),
+  });
 };
 
 /**

@@ -15,7 +15,7 @@ import {
   isEphemeralAgentId,
   isAssistantsEndpoint,
   getDefaultParamsEndpoint,
-  IndexingStatus,
+  isIndexed,
 } from 'librechat-data-provider';
 import type {
   TPreset,
@@ -43,12 +43,6 @@ import { usePauseGlobalAudio } from './Audio';
 import { useHasAccess } from '~/hooks';
 import store from '~/store';
 
-function isIndexed(file: { embedded?: boolean; indexingStatus?: IndexingStatus }): boolean {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return !!(file.embedded ?? false);
-}
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();

@@ -9,16 +9,12 @@ const {
   EModelEndpoint,
   mergeFileConfig,
   getEndpointFileConfig,
-  IndexingStatus,
+  isIndexed,
+  isImageFile,
+  serializeFileMetadata,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return !!file.embedded;
-}
 
 /**
  * Converts a readable stream to a base64 encoded string.
@@ -179,20 +175,14 @@ async function encodeAndFormat(req, files, params, mode) {
   }
 
   for (const [file, imageContent] of formattedImages) {
-    const fileMetadata = {
+    const fileMetadata = serializeFileMetadata({
       type: file.type,
       file_id: file.file_id,
       filepath: file.filepath,
       filename: file.filename,
-      embedded: isIndexed(file),
-      indexingStatus: file.indexingStatus ?? (isIndexed(file) ? IndexingStatus.completed : IndexingStatus.not_required),
       metadata: file.metadata,
-    };
-
-    if (file.height && file.width) {
-      fileMetadata.height = file.height;
-      fileMetadata.width = file.width;
-    }
+      ...(file.height && file.width ? { height: file.height, width: file.width } : {}),
+    });
 
     if (!imageContent) {
       result.files.push(fileMetadata);

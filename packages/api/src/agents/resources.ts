@@ -4,18 +4,17 @@ import {
   EToolResources,
   AgentCapabilities,
   IndexingStatus,
+  isIndexed,
+  isImageFile,
+  hasDisplayDimensions,
+  getDisplayWidth,
+  getDisplayHeight,
+  isCodeEnvFile,
 } from 'librechat-data-provider';
 import type { AgentToolResources, TFile, AgentBaseResource } from 'librechat-data-provider';
 import type { IMongoFile, AppConfig, IUser } from '@librechat/data-schemas';
 import type { FilterQuery, QueryOptions, ProjectionType } from 'mongoose';
 import type { Request as ServerRequest } from 'express';
-
-function isIndexed(file: TFile): boolean {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return file.embedded === true;
-}
 
 /**
  * Function type for retrieving files from the database
@@ -112,7 +111,7 @@ const categorizeFileForToolResources = ({
   requestFileSet: Set<string>;
   processedResourceFiles: Set<string>;
 }): void => {
-  if (file.metadata?.codeEnvRef) {
+  if (isCodeEnvFile(file)) {
     addFileToResource({
       file,
       resourceType: EToolResources.execute_code,
@@ -134,9 +133,8 @@ const categorizeFileForToolResources = ({
 
   if (
     requestFileSet.has(file.file_id) &&
-    file.type.startsWith('image') &&
-    file.height &&
-    file.width
+    isImageFile(file) &&
+    hasDisplayDimensions(file)
   ) {
     addFileToResource({
       file,

@@ -24,18 +24,16 @@ const {
   supportsBalanceCheck,
   isBedrockDocumentType,
   getEndpointFileConfig,
-  IndexingStatus,
+  isIndexed,
+  isCodeEnvFile,
+  isImageFile,
+  isPdfFile,
+  isVideoFile,
+  isAudioFile,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { logViolation } = require('~/cache');
 const TextStream = require('./TextStream');
-
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return file.embedded === true;
-}
 const db = require('~/models');
 
 class BaseClient {
@@ -1244,25 +1242,24 @@ class BaseClient {
       }
       if (
         isIndexed(file) ||
-        file.metadata?.codeEnvRef != null ||
-        file.metadata?.fileIdentifier != null
+        isCodeEnvFile(file)
       ) {
         allFiles.push(file);
         continue;
       }
 
-      if (file.type.startsWith('image/')) {
+      if (isImageFile(file)) {
         categorizedAttachments.images.push(file);
-      } else if (file.type === 'application/pdf') {
+      } else if (isPdfFile(file)) {
         categorizedAttachments.documents.push(file);
         allFiles.push(file);
       } else if (isBedrock && isBedrockDocumentType(file.type)) {
         categorizedAttachments.documents.push(file);
         allFiles.push(file);
-      } else if (file.type.startsWith('video/')) {
+      } else if (isVideoFile(file)) {
         categorizedAttachments.videos.push(file);
         allFiles.push(file);
-      } else if (file.type.startsWith('audio/')) {
+      } else if (isAudioFile(file)) {
         categorizedAttachments.audios.push(file);
         allFiles.push(file);
       } else if (

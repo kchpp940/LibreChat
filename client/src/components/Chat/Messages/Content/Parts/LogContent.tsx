@@ -1,6 +1,6 @@
 import { isAfter } from 'date-fns';
 import React, { useMemo } from 'react';
-import { imageExtRegex } from 'librechat-data-provider';
+import { isImageFile } from 'librechat-data-provider';
 import type { TFile, TAttachment, TAttachmentMetadata } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 import {
@@ -74,7 +74,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       const { filepath = null } = fileData;
       // LogContent uses a looser image check than Attachment.tsx (no
       // width/height requirement) to keep parity with the legacy log surface.
-      const isImage = imageExtRegex.test(attachment.filename ?? '') && filepath != null;
+      const isImage = isImageFile(fileData) && filepath != null;
       if (isImage) {
         imageAtts.push(attachment as ImageAttachment);
         return;

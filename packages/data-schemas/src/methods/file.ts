@@ -4,9 +4,11 @@ import {
   FilePurpose,
   IndexingStatus,
   FileVisibility,
-  indexingStatusFromEmbedded,
-  embeddedFromIndexingStatus,
-  purposeFromContext,
+  isIndexed,
+  getFilePurpose,
+  getIndexingStatus,
+  getFileVisibility,
+  normalizeFileMetadata as normalizeFileMetadataProvider,
 } from 'librechat-data-provider';
 import type { FilterQuery, SortOrder, Model } from 'mongoose';
 import type { IMongoFile } from '~/types/file';
@@ -14,52 +16,22 @@ import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import logger from '../config/winston';
 
 function normalizeFileData(data: Partial<IMongoFile>): Partial<IMongoFile> {
-  const normalized = { ...data };
-
-  if (normalized.indexingStatus === undefined && normalized.embedded !== undefined) {
-    normalized.indexingStatus = indexingStatusFromEmbedded(normalized.embedded);
-  }
-  if (normalized.embedded === undefined && normalized.indexingStatus !== undefined) {
-    normalized.embedded = embeddedFromIndexingStatus(normalized.indexingStatus);
-  }
-
-  if (normalized.purpose === undefined && normalized.context !== undefined) {
-    normalized.purpose = purposeFromContext(normalized.context as FileContext);
-  }
-
-  if (normalized.visibility === undefined) {
-    normalized.visibility = normalized.conversationId
-      ? FileVisibility.conversation
-      : FileVisibility.private;
-  }
-
-  if (normalized.display === undefined) {
-    normalized.display = {};
-  }
-
-  const display = normalized.display || {};
-  if (display.width === undefined && normalized.width !== undefined) {
-    display.width = normalized.width;
-  }
-  if (display.height === undefined && normalized.height !== undefined) {
-    display.height = normalized.height;
-  }
-  if (display.text === undefined && normalized.text !== undefined) {
-    display.text = normalized.text;
-  }
-  if (display.textFormat === undefined && normalized.textFormat !== undefined) {
-    display.textFormat = normalized.textFormat;
-  }
-  normalized.display = display;
+  const normalized = normalizeFileMetadataProvider({ ...data }) as Partial<IMongoFile>;
 
   if (normalized.purpose === undefined) {
-    normalized.purpose = FilePurpose.unknown;
+    normalized.purpose = getFilePurpose(normalized);
   }
   if (normalized.indexingStatus === undefined) {
-    normalized.indexingStatus = IndexingStatus.not_required;
+    normalized.indexingStatus = getIndexingStatus(normalized);
+  }
+  if (normalized.visibility === undefined) {
+    normalized.visibility = getFileVisibility(normalized);
   }
   if (normalized.embedded === undefined) {
-    normalized.embedded = false;
+    normalized.embedded = isIndexed(normalized);
+  }
+  if (normalized.display === undefined) {
+    normalized.display = {};
   }
 
   return normalized;
@@ -189,9 +161,7 @@ export function createFileMethods(mongoose: typeof import('mongoose')): {
         orConditions.push({ text: { $exists: true, $ne: null }, context: FileContext.agents });
       }
       if (toolResourceSet.has(EToolResources.file_search)) {
-        orConditions.push({
-          $or: [{ embedded: true }, { indexingStatus: IndexingStatus.completed }],
-        });
+        orConditions.push({ indexingStatus: IndexingStatus.completed });
       }
 
       // If no conditions to match, return empty

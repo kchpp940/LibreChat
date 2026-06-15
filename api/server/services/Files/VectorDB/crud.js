@@ -2,15 +2,8 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const { logger } = require('@librechat/data-schemas');
-const { FileSources, IndexingStatus } = require('librechat-data-provider');
+const { FileSources, isIndexed } = require('librechat-data-provider');
 const { logAxiosError, generateShortLivedToken } = require('@librechat/api');
-
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return file.embedded === true;
-}
 
 /**
  * Deletes a file from the vector database. This function takes a file object, constructs the full path, and

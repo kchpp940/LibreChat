@@ -5,15 +5,9 @@ const {
   isActionTool,
   EModelEndpoint,
   AgentCapabilities,
-  IndexingStatus,
+  isIndexed,
 } = require('librechat-data-provider');
 
-function isIndexed(file) {
-  if (file.indexingStatus !== undefined) {
-    return file.indexingStatus === IndexingStatus.completed;
-  }
-  return file.embedded === true;
-}
 const {
   createMCPPermissionContext,
   resolveConfigServers,

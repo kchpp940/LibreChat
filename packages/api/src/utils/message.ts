@@ -1,4 +1,4 @@
-import { Constants } from 'librechat-data-provider';
+import { Constants, serializeFileMetadata } from 'librechat-data-provider';
 import type { TFile, TMessage } from 'librechat-data-provider';
 
 /** Minimal shape for request file entries (from `req.body.files`) */
@@ -9,21 +9,14 @@ type GetMessagesByParentId = (
   select: '_id',
 ) => Promise<unknown[]>;
 
-/** Fields to strip from files before client transmission */
-const FILE_STRIP_FIELDS = ['text', '_id', '__v'] as const;
-
-/** Fields to strip from messages before client transmission */
-const MESSAGE_STRIP_FIELDS = ['fileContext'] as const;
-
 /**
  * Strips large/unnecessary fields from a file object before transmitting to client.
- * Use this within existing loops when building file arrays to avoid extra iterations.
+ * Normalizes metadata to the unified FileMetadata shape (purpose/indexingStatus/visibility/display).
  *
  * @param file - The file object to sanitize
- * @returns A new file object without the stripped fields
+ * @returns A new file object normalized to unified FileMetadata shape without stripped fields
  *
  * @example
- * // Use in existing file processing loop:
  * for (const attachment of client.options.attachments) {
  *   if (messageFiles.has(attachment.file_id)) {
  *     userMessage.files.push(sanitizeFileForTransmit(attachment));
@@ -32,24 +25,18 @@ const MESSAGE_STRIP_FIELDS = ['fileContext'] as const;
  */
 export function sanitizeFileForTransmit<T extends Partial<TFile>>(
   file: T,
-): Omit<T, (typeof FILE_STRIP_FIELDS)[number]> {
-  const sanitized = { ...file };
-  for (const field of FILE_STRIP_FIELDS) {
-    delete sanitized[field as keyof typeof sanitized];
-  }
-  // Also strip large text from display metadata while preserving other display fields
-  if (sanitized.display && typeof sanitized.display === 'object') {
-    sanitized.display = { ...sanitized.display };
-    delete (sanitized.display as Record<string, unknown>).text;
-  }
-  return sanitized;
+) {
+  return serializeFileMetadata(file, { stripText: true, stripInternal: true });
 }
+
+/** Fields to strip from messages before client transmission */
+const MESSAGE_STRIP_FIELDS = ['fileContext'] as const;
 
 /** Filters attachments to those whose `file_id` appears in `requestFiles`, then sanitizes each. */
 export function buildMessageFiles<T extends Partial<TFile>>(
   requestFiles: RequestFile[],
   attachments: T[],
-): Omit<T, (typeof FILE_STRIP_FIELDS)[number]>[] {
+) {
   const requestFileIds = new Set<string>();
   for (const f of requestFiles) {
     if (f.file_id) {
@@ -57,7 +44,7 @@ export function buildMessageFiles<T extends Partial<TFile>>(
     }
   }
 
-  const files: Omit<T, (typeof FILE_STRIP_FIELDS)[number]>[] = [];
+  const files = [];
   for (const attachment of attachments) {
     if (attachment.file_id != null && requestFileIds.has(attachment.file_id)) {
       files.push(sanitizeFileForTransmit(attachment));

@@ -1,5 +1,6 @@
 import { EToolResources } from './assistants';
 import type { CodeEnvRef } from '../codeEnvRef';
+import { imageExtRegex, audioMimeTypes, videoMimeTypes } from '../file-config';
 
 export enum FileSources {
   local = 'local',
@@ -399,6 +400,179 @@ export function createFileDefaults(): Partial<TFile> {
     display: {},
     embedded: false,
   };
+}
+
+export type UnifiedFileLike = Partial<TFile> | {
+  embedded?: boolean;
+  indexingStatus?: IndexingStatus;
+  purpose?: FilePurpose;
+  visibility?: FileVisibility;
+  display?: FileDisplayMetadata;
+  type?: string;
+  filename?: string;
+  context?: FileContext;
+  source?: FileSources;
+  width?: number;
+  height?: number;
+  text?: string;
+  textFormat?: 'html' | 'text' | null;
+  metadata?: {
+    fileIdentifier?: string;
+    codeEnvRef?: CodeEnvRef;
+    indexingError?: string;
+    [key: string]: unknown;
+  };
+};
+
+export function isIndexed(file: UnifiedFileLike): boolean {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus === IndexingStatus.completed;
+  }
+  return file.embedded === true;
+}
+
+export function isImageFile(file: UnifiedFileLike): boolean {
+  const filename = file.filename ?? '';
+  const type = file.type ?? '';
+  if (type.startsWith('image/')) {
+    return true;
+  }
+  return imageExtRegex.test(filename);
+}
+
+export function isTextFile(file: UnifiedFileLike): boolean {
+  const type = file.type ?? '';
+  return type.startsWith('text/') || type === 'application/json';
+}
+
+export function isPdfFile(file: UnifiedFileLike): boolean {
+  return file.type === 'application/pdf';
+}
+
+export function isVideoFile(file: UnifiedFileLike): boolean {
+  return typeof file.type === 'string' && videoMimeTypes.test(file.type);
+}
+
+export function isAudioFile(file: UnifiedFileLike): boolean {
+  return typeof file.type === 'string' && audioMimeTypes.test(file.type);
+}
+
+export function isCodeEnvFile(file: UnifiedFileLike): boolean {
+  return !!(file.metadata?.codeEnvRef ?? file.metadata?.fileIdentifier);
+}
+
+export function hasDisplayDimensions(file: UnifiedFileLike): boolean {
+  const display = file.display ?? {};
+  const width = display.width ?? file.width;
+  const height = display.height ?? file.height;
+  return width != null && height != null;
+}
+
+export function getDisplayWidth(file: UnifiedFileLike): number | undefined {
+  return file.display?.width ?? file.width;
+}
+
+export function getDisplayHeight(file: UnifiedFileLike): number | undefined {
+  return file.display?.height ?? file.height;
+}
+
+export function getDisplayText(file: UnifiedFileLike): string | undefined {
+  return file.display?.text ?? file.text;
+}
+
+export function getDisplayTextFormat(file: UnifiedFileLike): 'html' | 'text' | null | undefined {
+  return file.display?.textFormat ?? file.textFormat;
+}
+
+export function getFilePurpose(file: UnifiedFileLike): FilePurpose {
+  if (file.purpose !== undefined) {
+    return file.purpose;
+  }
+  if (file.context !== undefined) {
+    return purposeFromContext(file.context);
+  }
+  return FilePurpose.unknown;
+}
+
+export function getIndexingStatus(file: UnifiedFileLike): IndexingStatus {
+  if (file.indexingStatus !== undefined) {
+    return file.indexingStatus;
+  }
+  return indexingStatusFromEmbedded(file.embedded);
+}
+
+export function getFileVisibility(file: UnifiedFileLike): FileVisibility {
+  if (file.visibility !== undefined) {
+    return file.visibility;
+  }
+  return (file as { conversationId?: string }).conversationId
+    ? FileVisibility.conversation
+    : FileVisibility.private;
+}
+
+export type SerializeFileOptions = {
+  stripText?: boolean;
+  stripInternal?: boolean;
+};
+
+export function serializeFileMetadata<T extends UnifiedFileLike>(
+  file: T,
+  options: SerializeFileOptions = {},
+): T & {
+  purpose: FilePurpose;
+  indexingStatus: IndexingStatus;
+  visibility: FileVisibility;
+  display: FileDisplayMetadata;
+  embedded: boolean;
+} {
+  const normalized = normalizeFileMetadata({ ...file } as Partial<TFile>) as unknown as T & Partial<TFile>;
+
+  const display: FileDisplayMetadata = { ...(normalized.display ?? {}) };
+  if (display.width === undefined && normalized.width !== undefined) {
+    display.width = normalized.width;
+  }
+  if (display.height === undefined && normalized.height !== undefined) {
+    display.height = normalized.height;
+  }
+  if (options.stripText === true) {
+    delete display.text;
+  } else if (display.text === undefined && normalized.text !== undefined) {
+    display.text = normalized.text;
+  }
+  if (display.textFormat === undefined && normalized.textFormat !== undefined) {
+    display.textFormat = normalized.textFormat;
+  }
+
+  const purpose = normalized.purpose ?? getFilePurpose(normalized);
+  const indexingStatus = normalized.indexingStatus ?? getIndexingStatus(normalized);
+  const visibility = normalized.visibility ?? getFileVisibility(normalized);
+  const embedded = embeddedFromIndexingStatus(indexingStatus);
+
+  const out = {
+    ...normalized,
+    purpose,
+    indexingStatus,
+    visibility,
+    display,
+    embedded,
+  } as T & {
+    purpose: FilePurpose;
+    indexingStatus: IndexingStatus;
+    visibility: FileVisibility;
+    display: FileDisplayMetadata;
+    embedded: boolean;
+  };
+
+  if (options.stripInternal === true) {
+    delete (out as Record<string, unknown>)._id;
+    delete (out as Record<string, unknown>).__v;
+    delete (out as Record<string, unknown>).text;
+    delete (out as Record<string, unknown>).width;
+    delete (out as Record<string, unknown>).height;
+    delete (out as Record<string, unknown>).textFormat;
+  }
+
+  return out;
 }
 
 export type DeleteFilesBody = {
