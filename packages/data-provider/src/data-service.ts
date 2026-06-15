@@ -765,6 +765,20 @@ export function forkConversation(payload: t.TForkConvoRequest): Promise<t.TForkC
   return request.post(endpoints.forkConversation(), payload);
 }
 
+export interface TExportConversationResponse {
+  conversationId: string;
+  endpoint?: string;
+  title?: string;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+  exportAt: string;
+  messages: t.PublicMessage[];
+}
+
+export function exportConversation(conversationId: string): Promise<TExportConversationResponse> {
+  return request.get(endpoints.exportConversation(conversationId));
+}
+
 export function deleteConversation(payload: t.TDeleteConversationRequest) {
   return request.deleteWithOptions(endpoints.deleteConversation(), { data: { arg: payload } });
 }
@@ -866,7 +880,7 @@ export const branchMessage = async (
   return request.post(endpoints.messagesBranch(), payload);
 };
 
-export function getMessagesByConvoId(conversationId: string): Promise<s.TMessage[]> {
+export function getMessagesByConvoId(conversationId: string): Promise<t.PublicMessage[]> {
   if (
     conversationId === config.Constants.NEW_CONVO ||
     conversationId === config.Constants.PENDING_CONVO

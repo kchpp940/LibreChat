@@ -351,7 +351,7 @@ export type TArchiveConversationRequest = {
 export type TArchiveConversationResponse = TConversation;
 
 export type TSharedMessagesResponse = Omit<TSharedLink, 'messages'> & {
-  messages: TMessage[];
+  messages: PublicMessage[];
 };
 
 export type TCreateShareLinkRequest = Pick<TConversation, 'conversationId'>;
@@ -463,6 +463,77 @@ export type TMessageTreeNode = object;
 export type TSearchMessage = object;
 
 export type TSearchMessageTreeNode = object;
+
+/**
+ * Public message types - consumed by frontend.
+ * These mirror the serialized output from @librechat/data-schemas publicMessageSerializer
+ * and ensure frontend only works with sanitized, non-sensitive data.
+ */
+export enum PublicMessageContext {
+  SHARE = 'share',
+  SEARCH = 'search',
+  EXPORT = 'export',
+  DISPLAY = 'display',
+}
+
+export interface PublicFile {
+  file_id?: string;
+  filename?: string;
+  filepath?: string;
+  type?: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  expiresAt?: Date | number;
+  messageId?: string;
+  conversationId?: string;
+  toolCallId?: string;
+  [key: string]: unknown;
+}
+
+export interface PublicToolCall {
+  id?: string;
+  type?: string;
+  name?: string;
+  args?: string;
+  output?: string;
+  outputTruncated?: boolean;
+  attachments?: PublicFile[];
+}
+
+export interface PublicArtifactReference {
+  artifactId?: string;
+  title?: string;
+  type?: string;
+  language?: string;
+}
+
+export interface PublicMessageBase {
+  messageId: string;
+  parentMessageId: string | null;
+  conversationId: string;
+  sender?: string;
+  text?: string;
+  content?: Array<Record<string, unknown>>;
+  iconURL?: string;
+  isCreatedByUser: boolean;
+  createdAt?: Date | number;
+  updatedAt?: Date | number;
+  tokenCount?: number;
+  unfinished?: boolean;
+  error?: boolean;
+  finish_reason?: string;
+  manualSkills?: string[];
+  alwaysAppliedSkills?: string[];
+  model?: string;
+}
+
+export interface PublicMessage extends PublicMessageBase {
+  files?: PublicFile[];
+  attachments?: PublicFile[];
+  toolCalls?: PublicToolCall[];
+  artifacts?: PublicArtifactReference[];
+}
 
 export type TRegisterUserResponse = {
   message: string;

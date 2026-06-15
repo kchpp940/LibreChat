@@ -10,11 +10,12 @@ import {
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
+  dataService,
 } from 'librechat-data-provider';
 import type {
   TMessageContentParts,
   TConversation,
-  TMessage,
+  PublicMessage,
   TPreset,
 } from 'librechat-data-provider';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
@@ -53,12 +54,12 @@ export default function useExportConversation({
   const getMessageTree = useCallback(() => {
     const queryParam =
       paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
-    const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, queryParam]) ?? [];
+    const messages = queryClient.getQueryData<PublicMessage[]>([QueryKeys.messages, queryParam]) ?? [];
     const dataTree = buildTree({ messages });
     return dataTree?.length === 0 ? null : (dataTree ?? null);
   }, [paramId, conversation?.conversationId, queryClient]);
 
-  const getMessageText = (message: Partial<TMessage> | undefined, format = 'text') => {
+  const getMessageText = (message: Partial<PublicMessage> | undefined, format = 'text') => {
     if (!message) {
       return '';
     }
@@ -170,7 +171,7 @@ export default function useExportConversation({
   };
 
   const exportCSV = async () => {
-    const data: Partial<TMessage>[] = [];
+    const data: Partial<PublicMessage>[] = [];
 
     const messages = await buildMessageTree({
       messageId: conversation?.conversationId,
@@ -345,37 +346,52 @@ export default function useExportConversation({
   };
 
   const exportJSON = async () => {
-    const data = {
-      conversationId: conversation?.conversationId,
-      endpoint: conversation?.endpoint,
-      title: conversation?.title,
-      exportAt: new Date().toTimeString(),
-      branches: exportBranches,
-      recursive: recursive,
-    };
+    const queryParam =
+      paramId === 'new' ? paramId : (conversation?.conversationId ?? paramId ?? '');
 
-    if (includeOptions === true) {
-      data['options'] = cleanupPreset({ preset: conversation as TPreset });
+    if (!queryParam || queryParam === 'new') {
+      console.error('Cannot export: no valid conversationId');
+      return;
     }
 
-    const messages = await buildMessageTree({
-      messageId: conversation?.conversationId,
-      message: null,
-      messages: getMessageTree(),
-      branches: Boolean(exportBranches),
-      recursive: Boolean(recursive),
-    });
+    try {
+      const exportData = await dataService.exportConversation(queryParam);
 
-    if (recursive === true && !Array.isArray(messages)) {
-      data['messagesTree'] = messages.children;
-    } else {
-      data['messages'] = messages;
+      const data: Record<string, unknown> = {
+        conversationId: exportData.conversationId,
+        endpoint: exportData.endpoint,
+        title: exportData.title,
+        exportAt: exportData.exportAt,
+      };
+
+      if (includeOptions === true) {
+        data['options'] = cleanupPreset({ preset: conversation as TPreset });
+      }
+
+      if (Boolean(exportBranches) || Boolean(recursive)) {
+        const messagesTree = await buildMessageTree({
+          messageId: queryParam,
+          message: null,
+          messages: exportData.messages,
+          branches: Boolean(exportBranches),
+          recursive: Boolean(recursive),
+        });
+        if (Boolean(recursive) && !Array.isArray(messagesTree)) {
+          data['messagesTree'] = (messagesTree as { children?: PublicMessage[] }).children;
+        } else {
+          data['messages'] = messagesTree;
+        }
+      } else {
+        data['messages'] = exportData.messages;
+      }
+
+      /** Use JSON.stringify without indentation to minimize file size for deeply nested recursive exports */
+      const jsonString = JSON.stringify(data);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      download(blob, `${filename}.json`, 'application/json');
+    } catch (error) {
+      console.error('Failed to export conversation:', error);
     }
-
-    /** Use JSON.stringify without indentation to minimize file size for deeply nested recursive exports */
-    const jsonString = JSON.stringify(data);
-    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-    download(blob, `${filename}.json`, 'application/json');
   };
 
   const exportConversation = () => {

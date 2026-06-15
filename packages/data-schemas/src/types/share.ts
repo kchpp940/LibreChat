@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import type { IMessage } from './message';
+import type { PublicMessage } from './publicMessage';
 
 export interface ISharedLink {
   _id?: Types.ObjectId;
@@ -69,7 +70,7 @@ export interface SharedLinksResult {
 
 export interface SharedMessagesResult {
   conversationId: string;
-  messages: Array<SharedMessage>;
+  messages: Array<PublicMessage>;
   shareId: string;
   title?: string;
   createdAt?: Date;
