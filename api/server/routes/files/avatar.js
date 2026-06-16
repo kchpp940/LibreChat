@@ -38,16 +38,22 @@ router.post('/', async (req, res) => {
       tenantId: req.user.tenantId,
     });
 
-    const descriptor = {
-      file_id: `avatar-${userId}`,
-      filename: 'avatar',
-      type: `image/${appConfig.imageOutputType}`,
-      bytes: resizedBuffer.length,
-      url,
-      context: FileContext.avatar,
-      embedded: false,
-    };
-
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const descriptor = Object.assign(
+      toPublicFileDescriptor({
+        file_id: `avatar-${userId}`,
+        filename: 'avatar',
+        type: `image/${appConfig.imageOutputType}`,
+        bytes: resizedBuffer.length,
+        filepath: url,
+        context: FileContext.avatar,
+        embedded: false,
+      }, baseUrl),
+      {
+        url,
+        thumbnailUrl: url,
+      },
+    );
     res.json(descriptor);
   } catch (error) {
     const message = 'An error occurred while uploading the profile picture';

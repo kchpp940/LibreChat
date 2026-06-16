@@ -21,17 +21,26 @@ import type { ExtendedFile } from '~/common';
 export const partialTypes = ['text/x-'];
 
 /**
- * PublicFileAssetDescriptor boundary adapter.
+ * PublicFileAssetDescriptor boundary adapter — LEGACY ONLY.
  *
- * SAFETY: This is the ONLY place in client code where `.filepath` and `.preview`
- * (internal TFile fields) may be accessed. All other components must go through
- * these helpers to get file display URLs. This keeps the boundary clean — if we
- * ever remove `filepath` from all client-facing types, only these helpers need
- * to be updated.
+ * ⚠️  MIGRATION STATUS: All service-side file/avatar/image serialization
+ *     now uses `toPublicFileDescriptor()`. These helpers are ONLY for
+ *     backward-compat with data saved before v0.8.x and should NOT be
+ *     needed for any new code path.
  *
- * Never add `.filepath` / `.preview` access anywhere else in client code.
- * If you need a URL, use `getFileUrl(file)`.
- * If you need a thumbnail, use `getFileThumbnailUrl(file)`.
+ *     If you are writing a new feature: consume `.url` / `.thumbnailUrl`
+ *     directly from `PublicFileAssetDescriptor`. Do NOT call these helpers
+ *     "just to be safe" — they are a temporary compatibility shim that
+ *     will be removed once all old cached data is expired.
+ *
+ * SAFETY: This is the ONLY place in client code where `.filepath` and
+ * `.preview` (internal TFile fields) may be accessed. All other
+ * components, hooks and data-provider code are FORBIDDEN from reading
+ * these fields — enforcement via `check:file-boundary` script.
+ *
+ * ❌ Never add `.filepath` / `.preview` / `.source` / `.metadata` access
+ *    anywhere else in client code.
+ * ✅ Use `file.url`, `file.thumbnailUrl`, `file.filterSource` directly.
  */
 
 type AnyFileLike =
@@ -40,9 +49,14 @@ type AnyFileLike =
   | { url?: string; filepath?: string; preview?: string; thumbnailUrl?: string };
 
 /**
- * Get the public display URL for any file-like object.
- * Handles both PublicFileAssetDescriptor (has `url`) and legacy internal
- * types (TFile / ImageFile which have `filepath` / `preview`).
+ * ⚠️ LEGACY COMPAT ONLY — will be removed.
+ *
+ * Prefer `file.url` when you know the object is a `PublicFileAssetDescriptor`.
+ * This fallback exists only to load conversations cached before the
+ * PublicFileAssetDescriptor refactor.
+ *
+ * @deprecated Use `file.url` directly — all server serializers now return
+ *             `PublicFileAssetDescriptor` with `.url` populated.
  */
 export function getFileUrl(file: AnyFileLike): string | undefined {
   if ('url' in file && file.url) return file.url;
@@ -51,9 +65,14 @@ export function getFileUrl(file: AnyFileLike): string | undefined {
 }
 
 /**
- * Get the thumbnail URL for any file-like object.
- * Handles both PublicFileAssetDescriptor (has `thumbnailUrl`) and legacy
- * internal types (TFile / ImageFile which have `preview` / `filepath`).
+ * ⚠️ LEGACY COMPAT ONLY — will be removed.
+ *
+ * Prefer `file.thumbnailUrl` when you know the object is a
+ * `PublicFileAssetDescriptor`.
+ *
+ * @deprecated Use `file.thumbnailUrl` directly — all server serializers
+ *             now return `PublicFileAssetDescriptor` with `.thumbnailUrl`
+ *             populated (falls back to `.url` server-side).
  */
 export function getFileThumbnailUrl(file: AnyFileLike): string | undefined {
   if ('thumbnailUrl' in file && file.thumbnailUrl) return file.thumbnailUrl;
@@ -62,11 +81,13 @@ export function getFileThumbnailUrl(file: AnyFileLike): string | undefined {
 }
 
 /**
- * @deprecated Use `getFileUrl` / `getFileThumbnailUrl` instead — they enforce
- * the PublicFileAssetDescriptor boundary.
+ * ⚠️ TFile import retained ONLY for the legacy adapter helpers above.
+ *    Do NOT import or use TFile anywhere else in client code.
  *
- * TFile import is retained ONLY for the boundary adapter helpers above.
- * Do NOT use TFile for any other purpose in client code.
+ * @deprecated `TFile` is a server-side internal type. Client code must
+ *             consume ONLY `PublicFileAssetDescriptor`. If you need a
+ *             display field that's missing, add it to
+ *             `PublicFileAssetDescriptor` on the data-provider side.
  */
 type _TFileUsage = TFile;
 export type { _TFileUsage as __DO_NOT_USE_TFile__ };

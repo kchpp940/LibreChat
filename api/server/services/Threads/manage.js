@@ -595,7 +595,7 @@ async function processMessages({ openai, client, messages = [] }) {
               file_id,
               basename,
             });
-            replacementText = file.filepath;
+            replacementText = file.url;
           } else if (type === AnnotationTypes.FILE_CITATION && file_id) {
             file = await retrieveAndProcessFile({
               openai,

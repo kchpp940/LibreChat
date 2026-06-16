@@ -24,6 +24,11 @@ const SRC_DIR = new URL('../src/', import.meta.url).pathname;
 // Each entry has: pattern (regex), message, severity, context? (variable name pattern)
 // Rules without `contextPattern` always match; rules with `contextPattern` only
 // match when preceded by a variable name matching the context regex.
+//
+// Severity tiers:
+//   error  — ALWAYS forbidden in client code (including hooks and data-provider)
+//   warn   — Forbidden outside boundary adapters, but may have false positives
+//            in non-file contexts (e.g. form.source, audio.metadata)
 const FIELD_RULES = [
   {
     pattern: /\.storageKey\b/g,
@@ -44,12 +49,23 @@ const FIELD_RULES = [
     severity: 'error',
   },
   {
+    pattern: /\.preview\b(?![A-Za-z])/g,
+    message:
+      '`.preview` is an internal TFile field — use `.thumbnailUrl` from PublicFileAssetDescriptor. Server serializers now set `thumbnailUrl = preview ?? filepath`.',
+    severity: 'error',
+    // Context-aware matching: only flag when preceded by a file-like variable name.
+    // Non-file contexts (e.g. message navigation "entry.preview" text preview,
+    // or "initialPreview" props) are excluded by the whitelist pattern below.
+    contextPattern:
+      /(?:^|[\s(={,;])(?:file|files|attachment|attachments|imageFile|imgFile|uploadedFile|fileData|rawFile|fileRecord|agentFile|assistantFile|tempFile|fakeFile|fileObj|fileItem|fileEntry|fileDoc|cached|image|avatar)\s*\.\s*$/i,
+  },
+  {
     pattern: /\.(?:source|metadata)\b/g,
     message:
       '`.source` and `.metadata` are internal file fields. For file objects, use `.filterSource` from PublicFileAssetDescriptor instead of `.source`, and access display-safe fields instead of raw `.metadata`. If this is not a file object, you can ignore this warning.',
     severity: 'warn',
     // Only flag when the preceding identifier looks like a file-related variable
-    contextPattern: /(?:^|[\s(={,;])(?:file|files|attachment|attachments|f|uploadedFile|fileData|rawFile|fileRecord|agentFile|assistantFile|tempFile|fakeFile|fileObj|fileItem|fileEntry|fileDoc)\s*\.\s*$/i,
+    contextPattern: /(?:^|[\s(={,;])(?:file|files|attachment|attachments|f|uploadedFile|fileData|rawFile|fileRecord|agentFile|assistantFile|tempFile|fakeFile|fileObj|fileItem|fileEntry|fileDoc|avatar|imageFile)\s*\.\s*$/i,
   },
 ];
 

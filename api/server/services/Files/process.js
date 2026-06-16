@@ -1110,17 +1110,20 @@ async function retrieveAndProcessFile({
     return null;
   }
 
+  const baseUrl = `${client.req.protocol}://${client.req.get('host')}`;
   let basename = _basename;
   const processArgs = { openai, file_id, filename: basename, userId: client.req.user.id };
 
   // If no basename provided, return only the file metadata
   if (!basename) {
-    return await processOpenAIFile({ ...processArgs, saveFile: true });
+    const result = await processOpenAIFile({ ...processArgs, saveFile: true });
+    return toPublicFileDescriptor(result, baseUrl);
   }
 
   const fileExt = path.extname(basename);
   if (client.attachedFileIds?.has(file_id) || client.processedFileIds?.has(file_id)) {
-    return processOpenAIFile({ ...processArgs, updateUsage: true });
+    const result = await processOpenAIFile({ ...processArgs, updateUsage: true });
+    return toPublicFileDescriptor(result, baseUrl);
   }
 
   /**
@@ -1143,7 +1146,8 @@ async function retrieveAndProcessFile({
   }
 
   if (!dataBuffer) {
-    return await processOpenAIFile({ ...processArgs, saveFile: true });
+    const result = await processOpenAIFile({ ...processArgs, saveFile: true });
+    return toPublicFileDescriptor(result, baseUrl);
   }
 
   // If the filetype is unknown, inspect the file
@@ -1152,27 +1156,31 @@ async function retrieveAndProcessFile({
     const isImageOutput = detectedExt && imageExtRegex.test('.' + detectedExt);
 
     if (!isImageOutput) {
-      return await processOpenAIFile({ ...processArgs, saveFile: true });
+      const result = await processOpenAIFile({ ...processArgs, saveFile: true });
+      return toPublicFileDescriptor(result, baseUrl);
     }
 
-    return await processOpenAIImageOutput({
+    const result = await processOpenAIImageOutput({
       file_id,
       req: client.req,
       buffer: dataBuffer,
       filename: basename,
       fileExt: detectedExt,
     });
+    return toPublicFileDescriptor(result, baseUrl);
   } else if (dataBuffer && imageExtRegex.test(basename)) {
-    return await processOpenAIImageOutput({
+    const result = await processOpenAIImageOutput({
       file_id,
       req: client.req,
       buffer: dataBuffer,
       filename: basename,
       fileExt,
     });
+    return toPublicFileDescriptor(result, baseUrl);
   } else {
     logger.debug(`[retrieveAndProcessFile] Non-image file type detected: ${basename}`);
-    return await processOpenAIFile({ ...processArgs, saveFile: true });
+    const result = await processOpenAIFile({ ...processArgs, saveFile: true });
+    return toPublicFileDescriptor(result, baseUrl);
   }
 }
 

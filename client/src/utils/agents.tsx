@@ -4,19 +4,25 @@ import { Skeleton } from '@librechat/client';
 import type t from 'librechat-data-provider';
 
 /**
- * PublicFileAssetDescriptor boundary adapter for avatars.
+ * PublicFileAssetDescriptor boundary adapter for avatars — LEGACY ONLY.
+ *
+ * ⚠️  MIGRATION STATUS: All agent/assistant avatar serializers now return
+ *     descriptors with `.url` populated (files/avatar.js route uses
+ *     toPublicFileDescriptor). These helpers are ONLY for backward-compat
+ *     with data saved before v0.8.x that may still have `filepath`/`source`.
+ *
+ *     New code should use `avatar.url` directly.
  *
  * SAFETY: This is the ONLY place in client code where `avatar.filepath` and
- * `avatar.source` may be accessed. These fields are retained for backward
- * compatibility with agent/assistant avatars saved before the
- * PublicFileAssetDescriptor refactor. All new code should use `avatar.url`.
+ * `avatar.source` may be accessed. All other components, hooks and
+ * data-provider code are FORBIDDEN from reading these fields — enforcement
+ * via `check:file-boundary` script.
  *
- * Never add `avatar.filepath` or `avatar.source` access anywhere else in
- * client code. Always use `getAgentAvatarUrl(agent)` or `getAvatarUrl(avatar)`
- * instead.
+ * ❌ Never add `avatar.filepath` / `avatar.source` access anywhere else.
+ * ✅ Use `avatar.url` / `getAvatarUrl(avatar)` only.
  *
  * Extracts the avatar URL from an agent's avatar property.
- * Handles both string (legacy raw URL) and object (PublicFileAssetDescriptor-like) formats.
+ * Handles both string (legacy raw URL) and object formats.
  */
 export const getAgentAvatarUrl = (agent: t.Agent | null | undefined): string | null => {
   if (!agent?.avatar) {
@@ -31,9 +37,15 @@ export const getAgentAvatarUrl = (agent: t.Agent | null | undefined): string | n
 };
 
 /**
+ * ⚠️ LEGACY COMPAT ONLY — will be removed.
+ *
  * Extracts the avatar URL from an avatar descriptor object.
- * Handles backward compatibility with `filepath` field.
- * Use this when you only have the avatar object, not the full agent.
+ * For new code use `avatar.url` directly; this fallback handles only
+ * pre-refactor cached data.
+ *
+ * @deprecated Use `avatar.url` directly — avatar route serializers now
+ *             return PublicFileAssetDescriptor-compatible objects with
+ *             `.url` populated.
  */
 export const getAvatarUrl = (
   avatar: t.AgentAvatar | t.AssistantAvatar | undefined | null,
