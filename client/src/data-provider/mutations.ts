@@ -1,11 +1,10 @@
 import {
   Constants,
   defaultAssistantsVersion,
-  ConversationListResponse,
 } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataService, MutationKeys, QueryKeys, defaultOrderQuery } from 'librechat-data-provider';
-import type { InfiniteData, UseMutationResult } from '@tanstack/react-query';
+import type { UseMutationResult } from '@tanstack/react-query';
 import type * as t from 'librechat-data-provider';
 import { logger } from '~/utils';
 import useUpdateTagsInConvo from '~/hooks/Conversations/useUpdateTagsInConvo';
@@ -34,7 +33,7 @@ export const useUpdateConversationMutation = (
           () => updatedConvo,
           false,
         );
-        queryClient.invalidateQueries([QueryKeys.projectConversations]);
+        conversationCacheService.invalidateProjectConversations(queryClient);
       },
     },
   );
@@ -128,7 +127,7 @@ export const useArchiveConvoMutation = (
       },
       onSettled: () => {
         conversationCacheService.invalidateAllConversationLists(queryClient);
-        queryClient.invalidateQueries([QueryKeys.projectConversations]);
+        conversationCacheService.invalidateProjectConversations(queryClient);
         queryClient.invalidateQueries([QueryKeys.projects]);
       },
       ..._options,
@@ -281,7 +280,7 @@ export const useConversationTagMutation = ({
   const queryClient = useQueryClient();
   const { onSuccess, ..._options } = options || {};
   const onMutationSuccess: typeof onSuccess = (_data, vars) => {
-    queryClient.setQueryData<t.TConversationTag[]>([QueryKeys.conversationTags], (queryData) => {
+    conversationCacheService.setConversationTags(queryClient, (queryData) => {
       if (!queryData) {
         return [
           {
@@ -294,7 +293,6 @@ export const useConversationTagMutation = ({
         ] as t.TConversationTag[];
       }
       if (tag === undefined || !tag.length) {
-        // Check if the tag already exists
         const existingTagIndex = queryData.findIndex((item) => item.tag === _data.tag);
         if (existingTagIndex !== -1) {
           logger.log(
@@ -303,12 +301,10 @@ export const useConversationTagMutation = ({
             queryData,
             _data,
           );
-          // If the tag exists, update it
           const updatedData = [...queryData];
           updatedData[existingTagIndex] = { ...updatedData[existingTagIndex], ..._data };
           return updatedData.sort((a, b) => a.position - b.position);
         } else {
-          // If the tag doesn't exist, add it
           logger.log(
             'tag_mutation',
             `"Created" tag is new, adding from ${context}`,
@@ -361,63 +357,7 @@ export const useConversationTagMutation = ({
 export const useDeleteTagInConversations = () => {
   const queryClient = useQueryClient();
   const deleteTagInAllConversation = (deletedTag: string) => {
-    const data = queryClient.getQueryData<InfiniteData<ConversationListResponse>>([
-      QueryKeys.allConversations,
-    ]);
-
-    // If there is no conversations cache yet, nothing to update
-    if (!data || !Array.isArray(data.pages) || data.pages.length === 0) {
-      return;
-    }
-
-    const conversationIdsWithTag: string[] = [];
-
-    // Create an updated copy of the infinite query data without mutating the cache directly
-    const updatedData: InfiniteData<ConversationListResponse> = {
-      pageParams: Array.isArray(data.pageParams) ? [...data.pageParams] : [],
-      pages: data.pages.map((page) => ({
-        ...page,
-        conversations: page.conversations.map((conversation) => {
-          if (
-            conversation.conversationId &&
-            'tags' in conversation &&
-            Array.isArray((conversation as unknown as { tags?: string[] }).tags) &&
-            (conversation as unknown as { tags: string[] }).tags.includes(deletedTag)
-          ) {
-            conversationIdsWithTag.push(conversation.conversationId);
-            return {
-              ...conversation,
-              tags: (conversation as unknown as { tags: string[] }).tags.filter(
-                (tag: string) => tag !== deletedTag,
-              ),
-            } as t.TConversation;
-          }
-          return conversation as t.TConversation;
-        }),
-      })),
-    };
-
-    queryClient.setQueryData<InfiniteData<ConversationListResponse>>(
-      [QueryKeys.allConversations],
-      updatedData,
-    );
-
-    // Remove the deleted tag from the cache of each individual conversation
-    for (let i = 0; i < conversationIdsWithTag.length; i++) {
-      const conversationId = conversationIdsWithTag[i];
-      const conversationData = queryClient.getQueryData<t.TConversation>([
-        QueryKeys.conversation,
-        conversationId,
-      ]);
-      if (conversationData && Array.isArray((conversationData as { tags?: string[] }).tags)) {
-        queryClient.setQueryData<t.TConversation>([QueryKeys.conversation, conversationId], {
-          ...conversationData,
-          tags: (conversationData as { tags: string[] }).tags.filter(
-            (tag: string) => tag !== deletedTag,
-          ),
-        });
-      }
-    }
+    conversationCacheService.removeTagFromAllConversations(queryClient, deletedTag);
   };
   return deleteTagInAllConversation;
 };
@@ -432,12 +372,7 @@ export const useDeleteConversationTagMutation = (
 
   return useMutation((tag: string) => dataService.deleteConversationTag(tag), {
     onSuccess: (_data, tagToDelete, context) => {
-      queryClient.setQueryData<t.TConversationTag[]>([QueryKeys.conversationTags], (data) => {
-        if (!data) {
-          return data;
-        }
-        return data.filter((t) => t.tag !== tagToDelete);
-      });
+      conversationCacheService.deleteConversationTag(queryClient, tagToDelete);
 
       deleteTagInAllConversations(tagToDelete);
       onSuccess?.(_data, tagToDelete, context);
@@ -502,7 +437,7 @@ export const useDeleteConversationMutation = (
         }
 
         conversationCacheService.invalidateAllConversationLists(queryClient);
-        queryClient.invalidateQueries([QueryKeys.projectConversations]);
+        conversationCacheService.invalidateProjectConversations(queryClient);
         queryClient.invalidateQueries([QueryKeys.projects]);
         if (deletedProjectId) {
           queryClient.invalidateQueries([QueryKeys.project, deletedProjectId]);
@@ -536,25 +471,14 @@ export const useDuplicateConversationMutation = (
         data.messages,
       );
       conversationCacheService.invalidateConversations(queryClient, 'all');
-      queryClient.invalidateQueries([QueryKeys.projectConversations]);
+      conversationCacheService.invalidateProjectConversations(queryClient);
       queryClient.invalidateQueries([QueryKeys.projects]);
       if (duplicatedConversation.chatProjectId) {
         queryClient.invalidateQueries([QueryKeys.project, duplicatedConversation.chatProjectId]);
       }
 
       if (duplicatedConversation.tags && duplicatedConversation.tags.length > 0) {
-        queryClient.setQueryData<t.TConversationTag[]>(
-          conversationCacheService.getTagsQueryKey(),
-          (oldTags) => {
-            if (!oldTags) return oldTags;
-            return oldTags.map((tag) => {
-              if (duplicatedConversation.tags?.includes(tag.tag)) {
-                return { ...tag, count: tag.count + 1 };
-              }
-              return tag;
-            });
-          },
-        );
+        conversationCacheService.incrementTagCounts(queryClient, duplicatedConversation.tags);
       }
 
       onSuccess?.(data, vars, context);
@@ -584,25 +508,14 @@ export const useForkConvoMutation = (
       conversationCacheService.addConversation(queryClient, forkedConversation);
       queryClient.setQueryData([QueryKeys.messages, forkedConversationId], data.messages);
       conversationCacheService.invalidateConversations(queryClient, 'all');
-      queryClient.invalidateQueries([QueryKeys.projectConversations]);
+      conversationCacheService.invalidateProjectConversations(queryClient);
       queryClient.invalidateQueries([QueryKeys.projects]);
       if (forkedConversation.chatProjectId) {
         queryClient.invalidateQueries([QueryKeys.project, forkedConversation.chatProjectId]);
       }
 
       if (forkedConversation.tags && forkedConversation.tags.length > 0) {
-        queryClient.setQueryData<t.TConversationTag[]>(
-          conversationCacheService.getTagsQueryKey(),
-          (oldTags) => {
-            if (!oldTags) return oldTags;
-            return oldTags.map((tag) => {
-              if (forkedConversation.tags?.includes(tag.tag)) {
-                return { ...tag, count: tag.count + 1 };
-              }
-              return tag;
-            });
-          },
-        );
+        conversationCacheService.incrementTagCounts(queryClient, forkedConversation.tags);
       }
 
       onSuccess?.(data, vars, context);
@@ -621,7 +534,7 @@ export const useUploadConversationsMutation = (
     mutationFn: (formData: FormData) => dataService.importConversationsFile(formData),
     onSuccess: (data, variables, context) => {
       /* TODO: optimize to return imported conversations and add manually */
-      queryClient.invalidateQueries([QueryKeys.allConversations]);
+      conversationCacheService.invalidateConversations(queryClient, 'all');
       if (onSuccess) {
         onSuccess(data, variables, context);
       }

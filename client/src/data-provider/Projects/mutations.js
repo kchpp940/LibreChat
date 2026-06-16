@@ -1,6 +1,7 @@
 import { useRecoilCallback } from 'recoil';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataService, QueryKeys } from 'librechat-data-provider';
+import { conversationCacheService } from '../Conversations/cacheService';
 import store from '~/store';
 export const useCreateProjectMutation = () => {
     const queryClient = useQueryClient();
@@ -41,7 +42,7 @@ export const useDeleteProjectMutation = () => {
             // refetches (→ not-found) rather than rendering stale cache within `cacheTime`.
             queryClient.removeQueries([QueryKeys.project, projectId], { type: 'inactive' });
             queryClient.invalidateQueries([QueryKeys.projects]);
-            queryClient.invalidateQueries([QueryKeys.allConversations]);
+            conversationCacheService.invalidateConversations(queryClient, 'all');
         },
     });
 };
@@ -59,15 +60,15 @@ export const useAssignConversationToProjectMutation = () => {
     return useMutation((payload) => dataService.assignConversationToProject(payload), {
         onSuccess: (result) => {
             updateActiveConversation(result.conversation);
-            queryClient.setQueryData([QueryKeys.conversation, result.conversation.conversationId], result.conversation);
+            conversationCacheService.setConversation(queryClient, result.conversation.conversationId, result.conversation);
             [result.previousProjectId, result.projectId].forEach((projectId) => {
                 if (projectId) {
                     queryClient.invalidateQueries([QueryKeys.project, projectId]);
                 }
             });
             queryClient.invalidateQueries([QueryKeys.projects]);
-            queryClient.invalidateQueries([QueryKeys.allConversations]);
-            queryClient.invalidateQueries([QueryKeys.projectConversations]);
+            conversationCacheService.invalidateConversations(queryClient, 'all');
+            conversationCacheService.invalidateProjectConversations(queryClient);
         },
     });
 };

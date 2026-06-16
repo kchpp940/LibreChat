@@ -11,7 +11,6 @@ import type {
   UseInfiniteQueryOptions,
   QueryObserverResult,
   UseQueryOptions,
-  InfiniteData,
 } from '@tanstack/react-query';
 import type t from 'librechat-data-provider';
 import type {
@@ -30,8 +29,7 @@ import type {
   SharedLinksListParams,
   SharedLinksResponse,
 } from 'librechat-data-provider';
-import type { ConversationCursorData } from '~/utils/convos';
-import { findConversationInInfinite, isNotFoundError } from '~/utils';
+import { isNotFoundError } from '~/utils';
 import { conversationCacheService } from './Conversations/cacheService';
 
 export const useGetPresetsQuery = (
@@ -56,11 +54,7 @@ export const useGetConvoIdQuery = (
     conversationCacheService.getDetailQueryKey(id),
     () => {
       // Try to find in all fetched infinite pages
-      const convosQuery = queryClient.getQueryData<InfiniteData<ConversationCursorData>>(
-        [QueryKeys.allConversations],
-        { exact: false },
-      );
-      const found = findConversationInInfinite(convosQuery, id);
+      const found = conversationCacheService.findConversation(queryClient, id);
 
       if (found && found.messages != null) {
         return found;

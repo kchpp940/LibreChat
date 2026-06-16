@@ -74,7 +74,7 @@ export const useDeleteProjectMutation = (): UseMutationResult<
       // refetches (→ not-found) rather than rendering stale cache within `cacheTime`.
       queryClient.removeQueries([QueryKeys.project, projectId], { type: 'inactive' });
       queryClient.invalidateQueries([QueryKeys.projects]);
-      queryClient.invalidateQueries([QueryKeys.allConversations]);
+      conversationCacheService.invalidateConversations(queryClient, 'all');
     },
   });
 };
@@ -126,8 +126,8 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
           }
         });
         queryClient.invalidateQueries([QueryKeys.projects]);
-        queryClient.invalidateQueries([QueryKeys.allConversations]);
-        queryClient.invalidateQueries([QueryKeys.projectConversations]);
+        conversationCacheService.invalidateConversations(queryClient, 'all');
+        conversationCacheService.invalidateProjectConversations(queryClient);
       },
     },
   );

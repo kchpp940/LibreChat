@@ -634,6 +634,101 @@ export const conversationCacheService = {
     await queryClient.cancelQueries([QueryKeys.allConversations]);
     await queryClient.cancelQueries([QueryKeys.archivedConversations]);
   },
+
+  setConversationTags: (
+    queryClient: QueryClient,
+    updater: (oldTags: TConversationTag[] | undefined) => TConversationTag[] | undefined,
+  ) => {
+    queryClient.setQueryData<TConversationTag[]>([QueryKeys.conversationTags], updater);
+  },
+
+  deleteConversationTag: (queryClient: QueryClient, tagToDelete: string) => {
+    queryClient.setQueryData<TConversationTag[]>([QueryKeys.conversationTags], (data) => {
+      if (!data) {
+        return data;
+      }
+      return data.filter((t) => t.tag !== tagToDelete);
+    });
+  },
+
+  removeTagFromAllConversations: (queryClient: QueryClient, deletedTag: string) => {
+    const types: ConversationQueryType[] = ['all', 'archived', 'project'];
+    const seenIds = new Set<string>();
+
+    for (const type of types) {
+      const baseKey = getBaseQueryKey(type);
+      const queries = queryClient.getQueryCache().findAll(baseKey, { exact: false });
+
+      for (const query of queries) {
+        queryClient.setQueryData<InfiniteData<ConversationListResponse>>(query.queryKey, (oldData) => {
+          if (!oldData || !Array.isArray(oldData.pages) || oldData.pages.length === 0) {
+            return oldData;
+          }
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page) => ({
+              ...page,
+              conversations: page.conversations.map((conversation) => {
+                if (
+                  conversation.conversationId &&
+                  'tags' in conversation &&
+                  Array.isArray((conversation as { tags?: string[] }).tags) &&
+                  (conversation as { tags: string[] }).tags.includes(deletedTag)
+                ) {
+                  if (!seenIds.has(conversation.conversationId)) {
+                    seenIds.add(conversation.conversationId);
+                  }
+                  return {
+                    ...conversation,
+                    tags: (conversation as { tags: string[] }).tags.filter(
+                      (tag: string) => tag !== deletedTag,
+                    ),
+                  } as TConversation;
+                }
+                return conversation as TConversation;
+              }),
+            })),
+          };
+        });
+      }
+    }
+
+    for (const conversationId of seenIds) {
+      const conversationData = queryClient.getQueryData<TConversation>([
+        QueryKeys.conversation,
+        conversationId,
+      ]);
+      if (conversationData && Array.isArray((conversationData as { tags?: string[] }).tags)) {
+        queryClient.setQueryData<TConversation>([QueryKeys.conversation, conversationId], {
+          ...conversationData,
+          tags: (conversationData as { tags: string[] }).tags.filter(
+            (tag: string) => tag !== deletedTag,
+          ),
+        });
+      }
+    }
+  },
+
+  incrementTagCounts: (queryClient: QueryClient, tags: string[]) => {
+    if (!tags || tags.length === 0) {
+      return;
+    }
+    queryClient.setQueryData<TConversationTag[]>([QueryKeys.conversationTags], (oldTags) => {
+      if (!oldTags) {
+        return oldTags;
+      }
+      return oldTags.map((tag) => {
+        if (tags.includes(tag.tag)) {
+          return { ...tag, count: tag.count + 1 };
+        }
+        return tag;
+      });
+    });
+  },
+
+  invalidateProjectConversations: (queryClient: QueryClient) => {
+    queryClient.invalidateQueries([QueryKeys.projectConversations]);
+  },
 };
 
 export default conversationCacheService;
