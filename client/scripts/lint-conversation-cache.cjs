@@ -30,14 +30,23 @@ const DEPRECATED_CONVO_UTILS = [
 
 const ALLOWED_FILES = [
   'data-provider/Conversations/cacheService.ts',
+  'data-provider/Conversations/cacheService.js',
   'data-provider/Conversations/index.ts',
+  'data-provider/Conversations/index.js',
   'data-provider/queries.ts',
+  'data-provider/queries.js',
   'data-provider/mutations.ts',
+  'data-provider/mutations.js',
   'data-provider/tags.ts',
+  'data-provider/tags.js',
   'data-provider/Favorites.ts',
+  'data-provider/Favorites.js',
   'data-provider/SSE/queries.ts',
+  'data-provider/SSE/queries.js',
   'data-provider/Projects/mutations.ts',
+  'data-provider/Projects/mutations.js',
   'utils/convos.ts',
+  'utils/convos.js',
 ];
 
 const ALLOWED_DIRS = [
@@ -55,7 +64,7 @@ function walk(dir, callback) {
     const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) {
       walk(fullPath, callback);
-    } else if (/\.(ts|tsx)$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.spec.ts') && !file.endsWith('.test.ts')) {
+    } else if (/\.(ts|tsx|js|jsx)$/.test(file) && !file.endsWith('.d.ts') && !file.endsWith('.spec.ts') && !file.endsWith('.spec.js') && !file.endsWith('.test.ts') && !file.endsWith('.test.js')) {
       callback(fullPath);
     }
   }

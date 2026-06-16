@@ -1,9 +1,8 @@
 import { Constants, defaultAssistantsVersion, } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataService, MutationKeys, QueryKeys, defaultOrderQuery } from 'librechat-data-provider';
-import { logger, 
-/* Conversations */
-addConvoToAllQueries, findConversationInInfinite, updateConvoInAllQueries, removeConvoFromAllQueries, } from '~/utils';
+import { logger } from '~/utils';
+import { conversationCacheService } from './Conversations';
 import useUpdateTagsInConvo from '~/hooks/Conversations/useUpdateTagsInConvo';
 import { updateConversationTag } from '~/utils/conversationTags';
 import { useConversationTagsQuery } from './queries';
@@ -12,8 +11,8 @@ export const useUpdateConversationMutation = (id) => {
     return useMutation((payload) => dataService.updateConversation(payload), {
         onSuccess: (updatedConvo, payload) => {
             const targetId = payload.conversationId || id;
-            queryClient.setQueryData([QueryKeys.conversation, targetId], updatedConvo);
-            updateConvoInAllQueries(queryClient, targetId, () => updatedConvo);
+            conversationCacheService.setConversation(queryClient, targetId, updatedConvo);
+            conversationCacheService.updateConversation(queryClient, targetId, () => updatedConvo);
             queryClient.invalidateQueries([QueryKeys.projectConversations]);
         },
     });
@@ -40,7 +39,7 @@ export const useArchiveConvoMutation = (options) => {
         onMutate,
         onSuccess: (_data, vars, context) => {
             const isArchived = vars.isArchived === true;
-            removeConvoFromAllQueries(queryClient, vars.conversationId);
+            conversationCacheService.removeConversationFromAllQueries(queryClient, vars.conversationId);
             const archivedQueries = queryClient
                 .getQueryCache()
                 .findAll([QueryKeys.archivedConversations], { exact: false });
@@ -72,7 +71,11 @@ export const useArchiveConvoMutation = (options) => {
                     }
                 });
             }
-            queryClient.setQueryData([QueryKeys.conversation, vars.conversationId], isArchived ? null : _data);
+            if (isArchived) {
+                conversationCacheService.removeConversation(queryClient, vars.conversationId);
+            } else {
+                conversationCacheService.setConversation(queryClient, vars.conversationId, _data);
+            }
             if (_data.chatProjectId) {
                 queryClient.invalidateQueries([QueryKeys.project, _data.chatProjectId]);
             }
@@ -218,10 +221,10 @@ export const useConversationTagMutation = ({ context, tag, options, }) => {
             return updateConversationTag(queryData, vars, _data, tag);
         });
         if (vars.addToConversation === true && vars.conversationId != null && _data.tag) {
-            const currentConvo = queryClient.getQueryData([
-                QueryKeys.conversation,
+            const currentConvo = conversationCacheService.getConversation(
+                queryClient,
                 vars.conversationId,
-            ]);
+            );
             if (!currentConvo) {
                 return;
             }
@@ -280,12 +283,9 @@ export const useDeleteTagInConversations = () => {
         // Remove the deleted tag from the cache of each individual conversation
         for (let i = 0; i < conversationIdsWithTag.length; i++) {
             const conversationId = conversationIdsWithTag[i];
-            const conversationData = queryClient.getQueryData([
-                QueryKeys.conversation,
-                conversationId,
-            ]);
+            const conversationData = conversationCacheService.getConversation(queryClient, conversationId);
             if (conversationData && Array.isArray(conversationData.tags)) {
-                queryClient.setQueryData([QueryKeys.conversation, conversationId], {
+                conversationCacheService.setConversation(queryClient, conversationId, {
                     ...conversationData,
                     tags: conversationData.tags.filter((tag) => tag !== deletedTag),
                 });
@@ -316,38 +316,25 @@ export const useDeleteConversationMutation = (options) => {
     const queryClient = useQueryClient();
     return useMutation((payload) => dataService.deleteConversation(payload), {
         onMutate: async () => {
-            await queryClient.cancelQueries([QueryKeys.allConversations]);
+            await conversationCacheService.cancelConversationsQuery(queryClient);
             await queryClient.cancelQueries([QueryKeys.archivedConversations]);
-            // could store old state if needed for rollback
         },
         onError: () => {
-            // TODO: CHECK THIS, no-op; restore if needed
         },
         onSuccess: (data, vars, context) => {
             const deletedConversation = vars.conversationId
-                ? queryClient.getQueryData([QueryKeys.conversation, vars.conversationId])
+                ? conversationCacheService.getConversation(queryClient, vars.conversationId)
                 : undefined;
             let deletedProjectId = deletedConversation?.chatProjectId;
             if (!deletedProjectId && vars.conversationId) {
-                const cacheKeys = [QueryKeys.allConversations, QueryKeys.projectConversations];
-                for (const cacheKey of cacheKeys) {
-                    const queries = queryClient.getQueryCache().findAll([cacheKey], { exact: false });
-                    for (const query of queries) {
-                        const found = findConversationInInfinite(queryClient.getQueryData(query.queryKey), vars.conversationId);
-                        if (found?.chatProjectId) {
-                            deletedProjectId = found.chatProjectId;
-                            break;
-                        }
-                    }
-                    if (deletedProjectId) {
-                        break;
-                    }
+                const found = conversationCacheService.findConversation(queryClient, vars.conversationId);
+                if (found?.chatProjectId) {
+                    deletedProjectId = found.chatProjectId;
                 }
             }
             if (vars.conversationId) {
-                removeConvoFromAllQueries(queryClient, vars.conversationId);
+                conversationCacheService.removeConversationFromAllQueries(queryClient, vars.conversationId);
             }
-            // Also remove from all archivedConversations caches
             const archivedQueries = queryClient
                 .getQueryCache()
                 .findAll([QueryKeys.archivedConversations], { exact: false });
@@ -367,14 +354,8 @@ export const useDeleteConversationMutation = (options) => {
                     };
                 });
             }
-            queryClient.removeQueries({
-                queryKey: [QueryKeys.conversation, vars.conversationId],
-                exact: true,
-            });
-            queryClient.invalidateQueries({
-                queryKey: [QueryKeys.allConversations],
-                refetchPage: (_, index) => index === 0,
-            });
+            conversationCacheService.removeConversation(queryClient, vars.conversationId);
+            conversationCacheService.invalidateConversations(queryClient);
             queryClient.invalidateQueries({
                 queryKey: [QueryKeys.archivedConversations],
                 refetchPage: (_, index) => index === 0,
@@ -397,8 +378,8 @@ export const useDuplicateConversationMutation = (options) => {
             if (!duplicatedConversation?.conversationId) {
                 return;
             }
-            queryClient.setQueryData([QueryKeys.conversation, duplicatedConversation.conversationId], duplicatedConversation);
-            addConvoToAllQueries(queryClient, duplicatedConversation);
+            conversationCacheService.setConversation(queryClient, duplicatedConversation.conversationId, duplicatedConversation);
+            conversationCacheService.addConversation(queryClient, duplicatedConversation);
             queryClient.setQueryData([QueryKeys.messages, duplicatedConversation.conversationId], data.messages);
             queryClient.invalidateQueries({
                 queryKey: [QueryKeys.allConversations],
@@ -439,8 +420,8 @@ export const useForkConvoMutation = (options) => {
             if (!forkedConversationId) {
                 return;
             }
-            queryClient.setQueryData([QueryKeys.conversation, forkedConversationId], forkedConversation);
-            addConvoToAllQueries(queryClient, forkedConversation);
+            conversationCacheService.setConversation(queryClient, forkedConversationId, forkedConversation);
+            conversationCacheService.addConversation(queryClient, forkedConversation);
             queryClient.setQueryData([QueryKeys.messages, forkedConversationId], data.messages);
             queryClient.invalidateQueries({
                 queryKey: [QueryKeys.allConversations],

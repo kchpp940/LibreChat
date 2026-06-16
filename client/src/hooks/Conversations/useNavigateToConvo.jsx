@@ -2,10 +2,10 @@ import { useCallback } from 'react';
 import { useSetRecoilState } from 'recoil';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, Constants, dataService, getEndpointField, getDefaultParamsEndpoint, } from 'librechat-data-provider';
+import { QueryKeys, Constants, getEndpointField, getDefaultParamsEndpoint, } from 'librechat-data-provider';
 import { clearModelForNonEphemeralAgent, getDefaultEndpoint, clearMessagesCache, buildDefaultConvo, logger, } from '~/utils';
 import { useApplyModelSpecEffects } from '~/hooks/Agents';
-import { startupConfigKey } from '~/data-provider';
+import { startupConfigKey, conversationCacheService } from '~/data-provider';
 import store from '~/store';
 const useNavigateToConvo = (index = 0) => {
     const navigate = useNavigate();
@@ -32,7 +32,7 @@ const useNavigateToConvo = (index = 0) => {
             return;
         }
         try {
-            const data = await queryClient.fetchQuery([QueryKeys.conversation, conversationId], () => dataService.getConversationById(conversationId));
+            const data = await conversationCacheService.fetchConversation(queryClient, conversationId);
             logger.log('conversation', 'Fetched fresh conversation data', data);
             const convoData = { ...data };
             clearModelForNonEphemeralAgent(convoData);
@@ -90,7 +90,7 @@ const useNavigateToConvo = (index = 0) => {
              * request when navigating in from a non-chat route (e.g. /projects).
              */
             queryClient.removeQueries([QueryKeys.messages, convo.conversationId]);
-            queryClient.invalidateQueries([QueryKeys.conversation, convo.conversationId]);
+            conversationCacheService.invalidateConversationDetail(queryClient, convo.conversationId);
             fetchFreshData(convo);
         }
         else {

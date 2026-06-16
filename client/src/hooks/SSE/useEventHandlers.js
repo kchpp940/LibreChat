@@ -3,8 +3,8 @@ import { v4 } from 'uuid';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { QueryKeys, Constants, EndpointURLs, ContentTypes, tPresetSchema, tMessageSchema, tConvoUpdateSchema, isAssistantsEndpoint, } from 'librechat-data-provider';
-import { logger, setDraft, scrollToEnd, getAllContentText, upsertConvoInAllQueries, updateConvoInAllQueries, removeConvoFromAllQueries, findConversationInInfinite, } from '~/utils';
-import { startupConfigKey, queueTitleGeneration, markTitleGenerationProcessed, } from '~/data-provider';
+import { logger, setDraft, scrollToEnd, getAllContentText, } from '~/utils';
+import { startupConfigKey, queueTitleGeneration, markTitleGenerationProcessed, conversationCacheService, } from '~/data-provider';
 import { shouldResetSubagentAtomsOnConversationChange } from './cleanup';
 import useAttachmentHandler from '~/hooks/SSE/useAttachmentHandler';
 import useContentHandler from '~/hooks/SSE/useContentHandler';
@@ -114,18 +114,12 @@ const createErrorMessage = ({ errorMetadata, getMessages, submission, error, }) 
 export const getConvoTitle = ({ parentId, queryClient, currentTitle, conversationId, }) => {
     if (parentId !== Constants.NO_PARENT &&
         (currentTitle?.toLowerCase().includes('new chat') ?? false)) {
-        const currentConvo = queryClient.getQueryData([
-            QueryKeys.conversation,
-            conversationId,
-        ]);
-        if (currentConvo?.title) {
-            return currentConvo.title;
+        const cachedConvo = conversationCacheService.findConversation(queryClient, conversationId ?? '');
+        if (cachedConvo?.title) {
+            return cachedConvo.title;
         }
-        const convos = queryClient.getQueryData([
-            QueryKeys.allConversations,
-        ]);
-        const cachedConvo = findConversationInInfinite(convos, conversationId ?? '');
-        return cachedConvo?.title ?? currentConvo?.title ?? null;
+        const currentConvo = conversationCacheService.getConversation(queryClient, conversationId);
+        return currentConvo?.title ?? null;
     }
     return currentTitle;
 };
@@ -231,7 +225,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
         }
         const isNewConvo = conversation.conversationId !== submission.conversation.conversationId;
         if (isNewConvo) {
-            removeConvoFromAllQueries(queryClient, submission.conversation.conversationId);
+            conversationCacheService.removeConversationFromAllQueries(queryClient, submission.conversation.conversationId);
         }
         if (setConversation && !isAddedRequest) {
             setConversation((prevState) => {
@@ -281,10 +275,10 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 return update;
             });
             if (requestMessage.parentMessageId === Constants.NO_PARENT) {
-                upsertConvoInAllQueries(queryClient, update);
+                conversationCacheService.upsertConversation(queryClient, update);
             }
             else {
-                updateConvoInAllQueries(queryClient, update.conversationId, (_c) => update, true);
+                conversationCacheService.updateConversationInAllQueries(queryClient, update.conversationId, (_c) => update, true);
             }
             if (update.chatProjectId) {
                 queryClient.invalidateQueries([QueryKeys.projects]);
@@ -361,10 +355,10 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
             });
             if (!isTemporary) {
                 if (parentMessageId === Constants.NO_PARENT) {
-                    upsertConvoInAllQueries(queryClient, update);
+                    conversationCacheService.upsertConversation(queryClient, update);
                 }
                 else {
-                    updateConvoInAllQueries(queryClient, update.conversationId, (_c) => update, true);
+                    conversationCacheService.updateConversationInAllQueries(queryClient, update.conversationId, (_c) => update, true);
                 }
                 if (update.chatProjectId) {
                     queryClient.invalidateQueries([QueryKeys.projects]);
@@ -405,8 +399,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
         if (!conversationId || !hasRealTitle(title)) {
             return;
         }
-        queryClient.setQueryData([QueryKeys.conversation, conversationId], (convo) => convo ? { ...convo, title } : convo);
-        updateConvoInAllQueries(queryClient, conversationId, (convo) => ({ ...convo, title }));
+        conversationCacheService.updateConversation(queryClient, conversationId, (convo) => convo ? { ...convo, title } : convo);
         markTitleGenerationProcessed(conversationId);
         if (location.pathname.includes(conversationId)) {
             document.title = title;
@@ -452,8 +445,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                     return;
                 }
                 if (currentConvoId && currentConvoId !== Constants.NEW_CONVO) {
-                    removeConvoFromAllQueries(queryClient, currentConvoId);
-                    queryClient.removeQueries({ queryKey: [QueryKeys.conversation, currentConvoId] });
+                    conversationCacheService.removeConversationFromCache(queryClient, currentConvoId);
                     queryClient.removeQueries({ queryKey: [QueryKeys.messages, currentConvoId] });
                 }
                 setMessages([]);
@@ -504,7 +496,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
             if (!conversation.conversationId && hasNoResponse) {
                 const currentConvoId = (submissionConvo.conversationId ?? conversation.conversationId) || Constants.NEW_CONVO;
                 if (isNewConvo && submissionConvo.conversationId) {
-                    removeConvoFromAllQueries(queryClient, submissionConvo.conversationId);
+                    conversationCacheService.removeConversationFromAllQueries(queryClient, submissionConvo.conversationId);
                 }
                 const isNewChat = location.pathname === `/c/${Constants.NEW_CONVO}` &&
                     currentConvoId === Constants.NEW_CONVO;
@@ -552,7 +544,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 queryClient.setQueryData([QueryKeys.messages, conversation.conversationId], [...currentMessages]);
             }
             if (isNewConvo && submissionConvo.conversationId) {
-                removeConvoFromAllQueries(queryClient, submissionConvo.conversationId);
+                conversationCacheService.removeConversationFromAllQueries(queryClient, submissionConvo.conversationId);
             }
             /** A title applied locally (e.g. an immediate-mode title fetched while the
              *  response was still streaming) must survive the final event, whose
@@ -574,17 +566,16 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                         update.title = prevTitle;
                     }
                     if (conversation.conversationId) {
-                        queryClient.setQueryData([QueryKeys.conversation, conversation.conversationId], (cachedConvo) => {
-                            const merged = {
-                                ...cachedConvo,
-                                ...serverConversation,
-                            };
-                            const cachedTitle = cachedConvo?.title;
-                            if (!hasRealTitle(serverConversation.title) && hasRealTitle(cachedTitle)) {
-                                merged.title = cachedTitle;
-                            }
-                            return merged;
-                        });
+                        const cachedConvo = conversationCacheService.getConversation(queryClient, conversation.conversationId);
+                        const merged = {
+                            ...cachedConvo,
+                            ...serverConversation,
+                        };
+                        const cachedTitle = cachedConvo?.title;
+                        if (!hasRealTitle(serverConversation.title) && hasRealTitle(cachedTitle)) {
+                            merged.title = cachedTitle;
+                        }
+                        conversationCacheService.setConversation(queryClient, conversation.conversationId, merged);
                     }
                     return update;
                 });

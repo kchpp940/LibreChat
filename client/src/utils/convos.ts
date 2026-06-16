@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { LocalStorageKeys, QueryKeys } from 'librechat-data-provider';
+import { LocalStorageKeys } from 'librechat-data-provider';
 import {
   format,
   isToday,
@@ -12,6 +12,7 @@ import {
 } from 'date-fns';
 import type { TConversation, GroupedConversations } from 'librechat-data-provider';
 import type { InfiniteData } from '@tanstack/react-query';
+import { conversationCacheService } from '~/data-provider';
 
 // Date group helpers
 export const dateKeys = {
@@ -242,34 +243,7 @@ export function addConversationToAllConversationsQueries(
   queryClient: QueryClient,
   newConversation: TConversation,
 ) {
-  // Find all keys that start with QueryKeys.allConversations
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    if (!conversationMatchesProjectQuery(query.queryKey, newConversation)) {
-      continue;
-    }
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (old) => {
-      if (
-        !old ||
-        old.pages[0].conversations.some((c) => c.conversationId === newConversation.conversationId)
-      ) {
-        return old;
-      }
-      return {
-        ...old,
-        pages: [
-          {
-            ...old.pages[0],
-            conversations: [newConversation, ...old.pages[0].conversations],
-          },
-          ...old.pages.slice(1),
-        ],
-      };
-    });
-  }
+  conversationCacheService.addConversationToAllQueries(queryClient, newConversation);
 }
 
 export function removeConvoFromInfinitePages(
@@ -362,37 +336,7 @@ export function storeEndpointSettings(conversation: TConversation | null) {
  * @deprecated Use conversationCacheService.addConversation from '~/data-provider' instead
  */
 export function addConvoToAllQueries(queryClient: QueryClient, newConvo: TConversation) {
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    if (!conversationMatchesProjectQuery(query.queryKey, newConvo)) {
-      continue;
-    }
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (oldData) => {
-      if (!oldData) {
-        return oldData;
-      }
-      if (
-        oldData.pages.some((p) =>
-          p.conversations.some((c) => c.conversationId === newConvo.conversationId),
-        )
-      ) {
-        return oldData;
-      }
-      return {
-        ...oldData,
-        pages: [
-          {
-            ...oldData.pages[0],
-            conversations: [newConvo, ...oldData.pages[0].conversations],
-          },
-          ...oldData.pages.slice(1),
-        ],
-      };
-    });
-  }
+  conversationCacheService.addConversation(queryClient, newConvo);
 }
 
 /**
@@ -403,99 +347,7 @@ export function upsertConvoInAllQueries(
   nextConvo: TConversation,
   moveToTop = true,
 ) {
-  if (!nextConvo.conversationId) {
-    return;
-  }
-
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (oldData) => {
-      if (!oldData) {
-        return oldData;
-      }
-
-      let pageIdx = -1;
-      let convoIdx = -1;
-      for (let pi = 0; pi < oldData.pages.length; pi++) {
-        const ci = oldData.pages[pi].conversations.findIndex(
-          (c) => c.conversationId === nextConvo.conversationId,
-        );
-        if (ci !== -1) {
-          pageIdx = pi;
-          convoIdx = ci;
-          break;
-        }
-      }
-
-      const now = new Date().toISOString();
-      if (pageIdx === -1) {
-        if (!conversationMatchesProjectQuery(query.queryKey, nextConvo)) {
-          return oldData;
-        }
-        const firstPage = oldData.pages[0] ?? { conversations: [], nextCursor: null };
-        return {
-          ...oldData,
-          pages: [
-            {
-              ...firstPage,
-              conversations: [
-                { ...nextConvo, updatedAt: nextConvo.updatedAt ?? now },
-                ...firstPage.conversations,
-              ],
-            },
-            ...oldData.pages.slice(1),
-          ],
-        };
-      }
-
-      const found = oldData.pages[pageIdx].conversations[convoIdx];
-      const updated = {
-        ...found,
-        ...nextConvo,
-        updatedAt: nextConvo.updatedAt ?? (moveToTop ? now : found.updatedAt),
-      };
-
-      if (!conversationMatchesProjectQuery(query.queryKey, updated)) {
-        return removeConvoFromInfinitePages(oldData, updated.conversationId ?? '');
-      }
-
-      if (!moveToTop || (pageIdx === 0 && convoIdx === 0)) {
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page, pi) =>
-            pi === pageIdx
-              ? {
-                  ...page,
-                  conversations: page.conversations.map((c, ci) => (ci === convoIdx ? updated : c)),
-                }
-              : page,
-          ),
-        };
-      }
-
-      const pages = oldData.pages.map((page, pi) => {
-        if (pi === 0 && pageIdx === 0) {
-          const conversations = page.conversations.filter((_, ci) => ci !== convoIdx);
-          return { ...page, conversations: [updated, ...conversations] };
-        }
-        if (pi === 0) {
-          return { ...page, conversations: [updated, ...page.conversations] };
-        }
-        if (pi === pageIdx) {
-          return {
-            ...page,
-            conversations: page.conversations.filter((_, ci) => ci !== convoIdx),
-          };
-        }
-        return page;
-      });
-
-      return { ...oldData, pages };
-    });
-  }
+  conversationCacheService.upsertConversation(queryClient, nextConvo, moveToTop);
 }
 
 /**
@@ -507,106 +359,12 @@ export function updateConvoInAllQueries(
   updater: (c: TConversation) => TConversation,
   moveToTop = false,
 ) {
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (oldData) => {
-      if (!oldData) {
-        return oldData;
-      }
-
-      // Find conversation location (single pass with early exit)
-      let pageIdx = -1;
-      let convoIdx = -1;
-      for (let pi = 0; pi < oldData.pages.length; pi++) {
-        const ci = oldData.pages[pi].conversations.findIndex(
-          (c) => c.conversationId === conversationId,
-        );
-        if (ci !== -1) {
-          pageIdx = pi;
-          convoIdx = ci;
-          break;
-        }
-      }
-
-      if (pageIdx === -1) {
-        return oldData;
-      }
-
-      const found = oldData.pages[pageIdx].conversations[convoIdx];
-      const updated = moveToTop
-        ? { ...updater(found), updatedAt: new Date().toISOString() }
-        : updater(found);
-
-      if (!conversationMatchesProjectQuery(query.queryKey, updated)) {
-        return removeConvoFromInfinitePages(oldData, conversationId);
-      }
-
-      // If not moving to top, or already at top of page 0, update in place
-      if (!moveToTop || (pageIdx === 0 && convoIdx === 0)) {
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page, pi) =>
-            pi === pageIdx
-              ? {
-                  ...page,
-                  conversations: page.conversations.map((c, ci) => (ci === convoIdx ? updated : c)),
-                }
-              : page,
-          ),
-        };
-      }
-
-      // Move to top: only modify affected pages
-      const newPages = oldData.pages.map((page, pi) => {
-        if (pi === 0 && pageIdx === 0) {
-          // Source is page 0: remove from current position, add to front
-          const convos = page.conversations.filter((_, ci) => ci !== convoIdx);
-          return { ...page, conversations: [updated, ...convos] };
-        }
-        if (pi === 0) {
-          // Add to front of page 0
-          return { ...page, conversations: [updated, ...page.conversations] };
-        }
-        if (pi === pageIdx) {
-          // Remove from source page
-          return {
-            ...page,
-            conversations: page.conversations.filter((_, ci) => ci !== convoIdx),
-          };
-        }
-        return page;
-      });
-
-      return { ...oldData, pages: newPages };
-    });
-  }
+  conversationCacheService.updateConversationInAllQueries(queryClient, conversationId, updater, moveToTop);
 }
 
 /**
- * @deprecated Use conversationCacheService.removeConversation from '~/data-provider' instead
+ * @deprecated Use conversationCacheService.removeConversationFromAllQueries from '~/data-provider' instead
  */
 export function removeConvoFromAllQueries(queryClient: QueryClient, conversationId: string) {
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (oldData) => {
-      if (!oldData) {
-        return oldData;
-      }
-      return {
-        ...oldData,
-        pages: oldData.pages
-          .map((page) => ({
-            ...page,
-            conversations: page.conversations.filter((c) => c.conversationId !== conversationId),
-          }))
-          .filter((page) => page.conversations.length > 0),
-      };
-    });
-  }
+  conversationCacheService.removeConversationFromAllQueries(queryClient, conversationId);
 }

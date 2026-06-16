@@ -3,10 +3,10 @@ import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
 import { BookmarkPlusIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Constants, QueryKeys } from 'librechat-data-provider';
+import { Constants } from 'librechat-data-provider';
 import { BookmarkFilledIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { DropdownPopup, TooltipAnchor, Spinner, useToastContext } from '@librechat/client';
-import { useConversationTagsQuery, useTagConversationMutation } from '~/data-provider';
+import { useConversationTagsQuery, useTagConversationMutation, conversationCacheService } from '~/data-provider';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
 import { BookmarkEditDialog } from '~/components/Bookmarks';
 import { useBookmarkSuccess, useLocalize } from '~/hooks';
@@ -62,7 +62,7 @@ const BookmarkMenu = () => {
             return;
         }
         logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags before setting', tags);
-        const allTags = queryClient.getQueryData([QueryKeys.conversationTags]) ?? [];
+        const allTags = conversationCacheService.getConversationTags(queryClient);
         const existingTags = allTags.map((t) => t.tag);
         const filteredTags = tags?.filter((t) => existingTags.includes(t));
         logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags after filtering', filteredTags);

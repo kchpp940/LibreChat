@@ -3,8 +3,8 @@ import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { request, Constants, QueryKeys, ErrorTypes, StepEvents, apiBaseUrl, createPayload, ViolationTypes, removeNullishValues, } from 'librechat-data-provider';
-import { clearAllDrafts, removeConvoFromAllQueries, upsertConvoInAllQueries, markStreamStartFailedMetadata, } from '~/utils';
-import { useGetUserBalance, useGetStartupConfig, queueTitleGeneration, streamStatusQueryKey, } from '~/data-provider';
+import { clearAllDrafts, markStreamStartFailedMetadata } from '~/utils';
+import { conversationCacheService, useGetUserBalance, useGetStartupConfig, queueTitleGeneration, streamStatusQueryKey, } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store, { useChatStreamDispatch } from '~/store';
@@ -249,10 +249,13 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         }
         const optimisticConversation = buildOptimisticConversation(currentSubmission, conversationId);
         const optimisticMessages = getOptimisticMessages(currentSubmission, conversationId, getMessages());
-        queryClient.setQueryData([QueryKeys.conversation, conversationId], (current) => current ?? optimisticConversation);
+        const currentConversation = conversationCacheService.getConversation(queryClient, conversationId);
+        if (!currentConversation) {
+            conversationCacheService.setConversation(queryClient, conversationId, optimisticConversation);
+        }
         queryClient.setQueryData([QueryKeys.messages, conversationId], optimisticMessages);
         queryClient.setQueryData([QueryKeys.messages, Constants.NEW_CONVO], optimisticMessages);
-        upsertConvoInAllQueries(queryClient, optimisticConversation);
+        conversationCacheService.upsertConversation(queryClient, optimisticConversation);
         return hydrateSubmissionMessages(currentSubmission, conversationId);
     }, [getMessages, queryClient]);
     const [_completed, setCompleted] = useState(new Set());
@@ -536,7 +539,7 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 }
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    removeConvoFromAllQueries(queryClient, currentStreamId);
+                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
                 }
                 setStreamId(null);
                 optimisticStreamIdsRef.current.delete(currentStreamId);
@@ -576,7 +579,7 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 removeActiveJob(currentStreamId);
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    removeConvoFromAllQueries(queryClient, currentStreamId);
+                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
                 }
                 try {
                     const errorData = JSON.parse(e.data);
@@ -646,7 +649,7 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 removeActiveJob(currentStreamId);
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    removeConvoFromAllQueries(queryClient, currentStreamId);
+                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
                 }
                 setStreamId(null);
                 optimisticStreamIdsRef.current.delete(currentStreamId);
