@@ -1,7 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { SandpackPreview, SandpackProvider } from '@codesandbox/sandpack-react/unstyled';
 import { sharedFiles, buildSandpackOptions } from '~/utils/artifacts';
-export const ArtifactPreview = memo(function ({ files, fileKey, template, sharedProps, previewRef, currentCode, bundlerURLs, }) {
+export const ArtifactPreview = memo(function ({ files, fileKey, template, sharedProps, previewRef, currentCode, startupConfig, }) {
     const artifactFiles = useMemo(() => {
         if (Object.keys(files).length === 0) {
             return files;
@@ -15,7 +15,7 @@ export const ArtifactPreview = memo(function ({ files, fileKey, template, shared
             [fileKey]: { code },
         };
     }, [currentCode, files, fileKey]);
-    const options = useMemo(() => buildSandpackOptions(template, bundlerURLs), [bundlerURLs, template]);
+    const options = useMemo(() => buildSandpackOptions(template, startupConfig), [startupConfig, template]);
     if (Object.keys(artifactFiles).length === 0) {
         return null;
     }

@@ -22,7 +22,6 @@ import { ShareArtifactsContainer } from './ShareArtifacts';
 import { useLocalize, useDocumentTitle } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import { ShareContext } from '~/Providers';
-import { CapabilitiesProvider } from '~/Providers/CapabilitiesContext';
 import MessagesView from './MessagesView';
 import Footer from '../Chat/Footer';
 import { cn } from '~/utils';
@@ -149,15 +148,13 @@ function SharedView() {
     );
 
   return (
-    <CapabilitiesProvider capabilities={config?.capabilities}>
-      <ShareContext.Provider value={{ isSharedConvo: true }}>
-        <div className="relative flex h-screen w-full overflow-hidden dark:bg-surface-secondary">
-          <main className="relative flex w-full grow overflow-hidden dark:bg-surface-secondary">
-            {artifactsContainer}
-          </main>
-        </div>
-      </ShareContext.Provider>
-    </CapabilitiesProvider>
+    <ShareContext.Provider value={{ isSharedConvo: true }}>
+      <div className="relative flex h-screen w-full overflow-hidden dark:bg-surface-secondary">
+        <main className="relative flex w-full grow overflow-hidden dark:bg-surface-secondary">
+          {artifactsContainer}
+        </main>
+      </div>
+    </ShareContext.Provider>
   );
 }
 

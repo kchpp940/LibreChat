@@ -3,11 +3,11 @@ import * as Tabs from '@radix-ui/react-tabs';
 import { useCodeState } from '~/Providers/EditorContext';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { ArtifactCodeEditor } from './ArtifactCodeEditor';
-import { useArtifactBundlerURLs } from '~/Providers/CapabilitiesContext';
+import { useGetStartupConfig } from '~/data-provider';
 import { ArtifactPreview } from './ArtifactPreview';
 export default function ArtifactTabs({ artifact, previewRef, isSharedConvo, }) {
     const { currentCode, setCurrentCode } = useCodeState();
-    const bundlerURLs = useArtifactBundlerURLs();
+    const { data: startupConfig } = useGetStartupConfig();
     const monacoRef = useRef(null);
     const lastIdRef = useRef(null);
     useEffect(() => {
@@ -23,7 +23,7 @@ export default function ArtifactTabs({ artifact, previewRef, isSharedConvo, }) {
       </Tabs.Content>
 
       <Tabs.Content value="preview" className="h-full w-full flex-grow overflow-hidden" tabIndex={-1}>
-        <ArtifactPreview files={files} fileKey={fileKey} template={template} previewRef={previewRef} sharedProps={sharedProps} currentCode={currentCode} bundlerURLs={bundlerURLs}/>
+        <ArtifactPreview files={files} fileKey={fileKey} template={template} previewRef={previewRef} sharedProps={sharedProps} currentCode={currentCode} startupConfig={startupConfig}/>
       </Tabs.Content>
     </div>);
 }

@@ -4,7 +4,7 @@ import type {
   SandpackProviderProps,
   SandpackPredefinedTemplate,
 } from '@codesandbox/sandpack-react';
-import type { TAttachment, TFile } from 'librechat-data-provider';
+import type { TStartupConfig, TAttachment, TFile } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 
 const artifactFilename = {
@@ -180,15 +180,15 @@ export const sharedOptions: SandpackProviderProps['options'] = {
 
 export function buildSandpackOptions(
   template: SandpackProviderProps['template'],
-  config?: { bundlerURL?: string; staticBundlerURL?: string },
+  startupConfig?: TStartupConfig,
 ): SandpackProviderProps['options'] {
-  if (!config) {
+  if (!startupConfig) {
     return sharedOptions;
   }
 
   return {
     ...sharedOptions,
-    bundlerURL: template === 'static' ? config.staticBundlerURL : config.bundlerURL,
+    bundlerURL: template === 'static' ? startupConfig.staticBundlerURL : startupConfig.bundlerURL,
   };
 }
 

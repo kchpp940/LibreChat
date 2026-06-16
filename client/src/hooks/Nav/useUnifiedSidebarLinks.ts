@@ -44,6 +44,7 @@ export default function useUnifiedSidebarLinks() {
     keyProvided,
     endpoint,
     endpointType,
+    interfaceConfig,
     endpointsConfig,
     includeHidePanel: false,
   });

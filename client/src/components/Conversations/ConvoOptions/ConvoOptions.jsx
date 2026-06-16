@@ -5,11 +5,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { DropdownPopup, Spinner, useToastContext } from '@librechat/client';
 import { Ellipsis, Share2, CopyPlus, Archive, FolderInput, FolderX, Pen, Trash, } from 'lucide-react';
 import { QueryKeys, PermissionTypes, Permissions } from 'librechat-data-provider';
-import { useDuplicateConversationMutation, useAssignConversationToProjectMutation, useDeleteConversationMutation, useArchiveConvoMutation, } from '~/data-provider';
+import { useDuplicateConversationMutation, useAssignConversationToProjectMutation, useDeleteConversationMutation, useGetStartupConfig, useArchiveConvoMutation, } from '~/data-provider';
 import { useHasAccess, useLocalize, useNavigateToConvo, useNewConvo } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 import { useChatContext } from '~/Providers';
-import { useCanShareConversations } from '~/Providers/CapabilitiesContext';
 import DeleteButton from './DeleteButton';
 import ProjectButton from './ProjectButton';
 import ShareButton from './ShareButton';
@@ -18,7 +17,7 @@ function ConvoOptions({ conversationId, chatProjectId, title, retainView, rename
     const localize = useLocalize();
     const queryClient = useQueryClient();
     const { index } = useChatContext();
-    const canShareConversations = useCanShareConversations();
+    const { data: startupConfig } = useGetStartupConfig();
     const { navigateToConvo } = useNavigateToConvo(index);
     const { showToast } = useToastContext();
     const navigate = useNavigate();
@@ -175,7 +174,7 @@ function ConvoOptions({ conversationId, chatProjectId, title, retainView, rename
             label: localize('com_ui_share'),
             onClick: shareHandler,
             icon: <Share2 className="icon-sm mr-2 text-text-primary" aria-hidden="true"/>,
-            show: canShareConversations && canCreateSharedLinks,
+            show: startupConfig && startupConfig.sharedLinksEnabled && canCreateSharedLinks,
             ariaHasPopup: 'dialog',
             ariaControls: 'share-conversation-dialog',
             /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
@@ -231,7 +230,7 @@ function ConvoOptions({ conversationId, chatProjectId, title, retainView, rename
     ], [
         localize,
         shareHandler,
-        canShareConversations,
+        startupConfig,
         renameHandler,
         deleteHandler,
         isArchiveLoading,

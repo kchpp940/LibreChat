@@ -17,7 +17,7 @@ import {
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
-import type { TEndpointsConfig } from 'librechat-data-provider';
+import type { TInterfaceConfig, TEndpointsConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
 import {
   useAgentCapabilities,
@@ -34,13 +34,13 @@ import { MemoryPanel } from '~/components/SidePanel/Memories';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
 import { PromptsAccordion } from '~/components/Prompts';
 import { SkillsAccordion } from '~/components/Skills';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 
 export default function useSideNavLinks({
   hidePanel,
   keyProvided,
   endpoint,
   endpointType,
+  interfaceConfig,
   endpointsConfig,
   includeHidePanel = true,
 }: {
@@ -48,10 +48,10 @@ export default function useSideNavLinks({
   keyProvided: boolean;
   endpoint?: EModelEndpoint | null;
   endpointType?: EModelEndpoint | null;
+  interfaceConfig: Partial<TInterfaceConfig>;
   endpointsConfig: TEndpointsConfig;
   includeHidePanel?: boolean;
 }) {
-  const interfaceConfig = useInterfaceFlags();
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,

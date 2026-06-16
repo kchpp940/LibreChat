@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Button, OGDialog, OGDialogTemplate } from '@librechat/client';
 import { AuthType, RerankerTypes, SearchProviders, ScraperProviders, SearchCategories, } from 'librechat-data-provider';
 import InputSection from './InputSection';
-import { useWebSearchCapabilities } from '~/Providers/CapabilitiesContext';
+import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 export default function ApiKeyDialog({ isOpen, onSubmit, onRevoke, onOpenChange, authTypes, isToolAuthenticated, register, handleSubmit, triggerRef, triggerRefs, }) {
     const localize = useLocalize();
-    const webSearchCaps = useWebSearchCapabilities();
-    const [selectedProvider, setSelectedProvider] = useState(webSearchCaps?.searchProvider || SearchProviders.SERPER);
-    const [selectedReranker, setSelectedReranker] = useState(webSearchCaps?.rerankerType || RerankerTypes.JINA);
-    const [selectedScraper, setSelectedScraper] = useState(webSearchCaps?.scraperProvider || ScraperProviders.FIRECRAWL);
+    const { data: config } = useGetStartupConfig();
+    const [selectedProvider, setSelectedProvider] = useState(config?.webSearch?.searchProvider || SearchProviders.SERPER);
+    const [selectedReranker, setSelectedReranker] = useState(config?.webSearch?.rerankerType || RerankerTypes.JINA);
+    const [selectedScraper, setSelectedScraper] = useState(config?.webSearch?.scraperProvider || ScraperProviders.FIRECRAWL);
     const providerOptions = [
         {
             key: SearchProviders.SERPER,
@@ -162,13 +162,13 @@ export default function ApiKeyDialog({ isOpen, onSubmit, onRevoke, onOpenChange,
             <div className="mb-4 text-center font-medium">{localize('com_ui_web_search')}</div>
             <form onSubmit={handleSubmit(onSubmit)}>
               {/* Provider Section */}
-              {providerAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_provider')} selectedKey={selectedProvider} onSelectionChange={handleProviderChange} dropdownOptions={providerOptions} showDropdown={!webSearchCaps?.searchProvider} register={register} dropdownOpen={dropdownOpen.provider} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, provider: open }))} dropdownKey="provider"/>)}
+              {providerAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_provider')} selectedKey={selectedProvider} onSelectionChange={handleProviderChange} dropdownOptions={providerOptions} showDropdown={!config?.webSearch?.searchProvider} register={register} dropdownOpen={dropdownOpen.provider} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, provider: open }))} dropdownKey="provider"/>)}
 
               {/* Scraper Section */}
-              {scraperAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_scraper')} selectedKey={selectedScraper} onSelectionChange={handleScraperChange} dropdownOptions={scraperOptions} showDropdown={!webSearchCaps?.scraperProvider} register={register} dropdownOpen={dropdownOpen.scraper} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, scraper: open }))} dropdownKey="scraper"/>)}
+              {scraperAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_scraper')} selectedKey={selectedScraper} onSelectionChange={handleScraperChange} dropdownOptions={scraperOptions} showDropdown={!config?.webSearch?.scraperProvider} register={register} dropdownOpen={dropdownOpen.scraper} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, scraper: open }))} dropdownKey="scraper"/>)}
 
               {/* Reranker Section */}
-              {rerankerAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_reranker')} selectedKey={selectedReranker} onSelectionChange={handleRerankerChange} dropdownOptions={rerankerOptions} showDropdown={!webSearchCaps?.rerankerType} register={register} dropdownOpen={dropdownOpen.reranker} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, reranker: open }))} dropdownKey="reranker"/>)}
+              {rerankerAuthType !== AuthType.SYSTEM_DEFINED && (<InputSection title={localize('com_ui_web_search_reranker')} selectedKey={selectedReranker} onSelectionChange={handleRerankerChange} dropdownOptions={rerankerOptions} showDropdown={!config?.webSearch?.rerankerType} register={register} dropdownOpen={dropdownOpen.reranker} setDropdownOpen={(open) => setDropdownOpen((prev) => ({ ...prev, reranker: open }))} dropdownKey="reranker"/>)}
             </form>
           </>} selection={{
             selectHandler: handleSubmit(onSubmit),

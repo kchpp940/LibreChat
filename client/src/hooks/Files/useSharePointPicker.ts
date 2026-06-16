@@ -6,7 +6,6 @@ import { useLocalize, useAuthContext } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
 import useSharePointToken from './useSharePointToken';
 import store from '~/store';
-import { useCanUseSharePoint } from '~/Providers/CapabilitiesContext';
 
 interface UseSharePointPickerProps {
   containerNode: HTMLDivElement | null;
@@ -40,7 +39,6 @@ export default function useSharePointPicker({
   const channelIdRef = useRef<string>('');
 
   const { data: startupConfig } = useGetStartupConfig();
-  const sharePointEnabled = useCanUseSharePoint();
 
   const sharePointBaseUrl = startupConfig?.sharePointBaseUrl;
   const isEntraIdUser = user?.provider === 'openid';
@@ -373,7 +371,7 @@ export default function useSharePointPicker({
     cleanup();
   }, [cleanup]);
 
-  const isAvailable = sharePointEnabled && isEntraIdUser && !tokenError;
+  const isAvailable = startupConfig?.sharePointFilePickerEnabled && isEntraIdUser && !tokenError;
 
   return {
     openSharePointPicker: isAvailable ? openSharePointPicker : () => {},

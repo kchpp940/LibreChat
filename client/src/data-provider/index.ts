@@ -1,5 +1,6 @@
 export * from './Auth';
 export * from './Agents';
+export * from './Conversations/cacheService';
 export * from './Endpoints';
 export * from './Skills';
 export * from './Files';

@@ -4,7 +4,6 @@ import { EModelEndpoint } from 'librechat-data-provider';
 import { BirthdayIcon, TooltipAnchor, SplitText } from '@librechat/client';
 import { getIconEndpoint, getEntity, getModelSpec, createConfigHtmlSanitizer, CONFIG_HTML_MEDIA_TAGS, CONFIG_HTML_MEDIA_ATTR, } from '~/utils';
 import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
@@ -26,7 +25,6 @@ export default function Landing({ centerFormOnLanding }) {
     const agentsMap = useAgentsMapContext();
     const assistantMap = useAssistantsMapContext();
     const { data: startupConfig } = useGetStartupConfig();
-    const interfaceFlags = useInterfaceFlags();
     const { data: endpointsConfig } = useGetEndpointsQuery();
     const { user } = useAuthContext();
     const localize = useLocalize();
@@ -63,8 +61,9 @@ export default function Landing({ centerFormOnLanding }) {
         allowedAttr: CONFIG_HTML_MEDIA_ATTR,
     }), []);
     const getGreeting = useCallback(() => {
-        if (typeof interfaceFlags.customWelcome === 'string') {
-            const customWelcome = interfaceFlags.customWelcome;
+        if (typeof startupConfig?.interface?.customWelcome === 'string') {
+            const customWelcome = startupConfig.interface.customWelcome;
+            // Replace {{user.name}} with actual user name if available
             if (user?.name && customWelcome.includes('{{user.name}}')) {
                 return customWelcome.replace(/{{user.name}}/g, user.name);
             }
@@ -93,7 +92,7 @@ export default function Landing({ centerFormOnLanding }) {
         else {
             return localize('com_ui_good_evening');
         }
-    }, [localize, interfaceFlags.customWelcome, user?.name]);
+    }, [localize, startupConfig?.interface?.customWelcome, user?.name]);
     const handleLineCountChange = useCallback((count) => {
         setTextHasMultipleLines(count > 1);
         setLineCount(count);
@@ -122,7 +121,7 @@ export default function Landing({ centerFormOnLanding }) {
         }
         return margin;
     }, [lineCount, description, textHasMultipleLines, contentHeight]);
-    const greetingText = typeof interfaceFlags.customWelcome === 'string'
+    const greetingText = typeof startupConfig?.interface?.customWelcome === 'string'
         ? getGreeting()
         : getGreeting() + (user?.name ? ', ' + user.name : '');
     return (<div className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}>

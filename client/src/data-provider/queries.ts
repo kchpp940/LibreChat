@@ -32,6 +32,7 @@ import type {
 } from 'librechat-data-provider';
 import type { ConversationCursorData } from '~/utils/convos';
 import { findConversationInInfinite, isNotFoundError } from '~/utils';
+import { conversationCacheService } from './Conversations/cacheService';
 
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
@@ -52,7 +53,7 @@ export const useGetConvoIdQuery = (
   const queryClient = useQueryClient();
 
   return useQuery<t.TConversation>(
-    [QueryKeys.conversation, id],
+    conversationCacheService.getDetailQueryKey(id),
     () => {
       // Try to find in all fetched infinite pages
       const convosQuery = queryClient.getQueryData<InfiniteData<ConversationCursorData>>(
@@ -87,12 +88,17 @@ export const useConversationsInfiniteQuery = (
   config?: UseInfiniteQueryOptions<ConversationListResponse, unknown>,
 ) => {
   const { isArchived, sortBy, sortDirection, tags, search, projectId } = params;
+  const queryType = isArchived ? 'archived' : 'all';
 
   return useInfiniteQuery<ConversationListResponse>({
-    queryKey: [
-      isArchived ? QueryKeys.archivedConversations : QueryKeys.allConversations,
-      { isArchived, sortBy, sortDirection, tags, search, projectId },
-    ],
+    queryKey: conversationCacheService.getQueryKey(queryType, {
+      isArchived,
+      sortBy,
+      sortDirection,
+      tags,
+      search,
+      projectId,
+    }),
     queryFn: ({ pageParam }) =>
       dataService.listConversations({
         isArchived,
@@ -169,7 +175,7 @@ export const useConversationTagsQuery = (
   config?: UseQueryOptions<t.TConversationTagsResponse>,
 ): QueryObserverResult<t.TConversationTagsResponse> => {
   return useQuery<t.TConversationTag[]>(
-    [QueryKeys.conversationTags],
+    conversationCacheService.getTagsQueryKey(),
     () => dataService.getConversationTags(),
     {
       refetchOnWindowFocus: false,

@@ -26,18 +26,16 @@ import {
 import usePersonalizationAccess from '~/hooks/usePersonalizationAccess';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { useGetStartupConfig } from '~/data-provider';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import { cn } from '~/utils';
 
 export default function Settings({ open, onOpenChange }: TDialogProps) {
   const isSmallScreen = useMediaQuery('(max-width: 767px)');
   const { data: startupConfig } = useGetStartupConfig();
-  const interfaceFlags = useInterfaceFlags();
   const localize = useLocalize();
   const [activeTab, setActiveTab] = useState(SettingsTabValues.GENERAL);
   const tabRefs = useRef({});
   const { hasAnyPersonalizationFeature, hasMemoryOptOut } = usePersonalizationAccess();
-  const aboutEnabled = interfaceFlags.buildInfo !== false;
+  const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
 
   useEffect(() => {
     if (!aboutEnabled && activeTab === SettingsTabValues.ABOUT) {

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { TooltipAnchor } from '@librechat/client';
+import { getConfigDefaults } from 'librechat-data-provider';
 import type { ModelSelectorProps } from '~/common';
 import {
   renderModelSpecs,
@@ -13,7 +14,8 @@ import { getSelectedIcon, getDisplayValue } from './utils';
 import { CustomMenu as Menu } from './CustomMenu';
 import DialogManager from './DialogManager';
 import { useLocalize } from '~/hooks';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
+
+const defaultInterface = getConfigDefaults().interface;
 
 function ModelSelectorContent() {
   const localize = useLocalize();
@@ -122,7 +124,7 @@ function ModelSelectorContent() {
 }
 
 export default function ModelSelector({ startupConfig }: ModelSelectorProps) {
-  const interfaceConfig = useInterfaceFlags();
+  const interfaceConfig = startupConfig?.interface ?? defaultInterface;
   const modelSpecs = startupConfig?.modelSpecs?.list ?? [];
 
   // Hide the selector when modelSelect is false and there are no model specs to show

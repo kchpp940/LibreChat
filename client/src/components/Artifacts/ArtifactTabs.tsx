@@ -6,7 +6,7 @@ import type { Artifact } from '~/common';
 import { useCodeState } from '~/Providers/EditorContext';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { ArtifactCodeEditor } from './ArtifactCodeEditor';
-import { useArtifactBundlerURLs } from '~/Providers/CapabilitiesContext';
+import { useGetStartupConfig } from '~/data-provider';
 import { ArtifactPreview } from './ArtifactPreview';
 
 export default function ArtifactTabs({
@@ -19,7 +19,7 @@ export default function ArtifactTabs({
   isSharedConvo?: boolean;
 }) {
   const { currentCode, setCurrentCode } = useCodeState();
-  const bundlerURLs = useArtifactBundlerURLs();
+  const { data: startupConfig } = useGetStartupConfig();
   const monacoRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const lastIdRef = useRef<string | null>(null);
 
@@ -55,7 +55,7 @@ export default function ArtifactTabs({
           previewRef={previewRef}
           sharedProps={sharedProps}
           currentCode={currentCode}
-          bundlerURLs={bundlerURLs}
+          startupConfig={startupConfig}
         />
       </Tabs.Content>
     </div>

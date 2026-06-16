@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
-import { Permissions, alternateName, PermissionBits, EModelEndpoint, PermissionTypes, isAgentsEndpoint, isAssistantsEndpoint, } from 'librechat-data-provider';
+import { Permissions, alternateName, PermissionBits, EModelEndpoint, PermissionTypes, isAgentsEndpoint, getConfigDefaults, isAssistantsEndpoint, } from 'librechat-data-provider';
 import { useGetPresetsQuery, useGetEndpointsQuery, useListAgentsQuery, useGetStartupConfig, } from '~/data-provider';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
 import { useAgentsMapContext } from '~/Providers/AgentsMapContext';
@@ -8,7 +8,7 @@ import { mapEndpoints, getPresetTitle } from '~/utils';
 import { EndpointIcon } from '~/components/Endpoints';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import { filterMentionEndpoints } from './mentions';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
+const defaultInterface = getConfigDefaults().interface;
 const assistantMapFn = ({ endpoint, assistantMap, endpointsConfig, }) => ({ id, name, description }) => ({
     type: endpoint,
     label: name ?? '',
@@ -41,7 +41,7 @@ export default function useMentions({ assistantMap, includeAssistants, }) {
         name,
         description,
     })));
-    const interfaceConfig = useInterfaceFlags();
+    const interfaceConfig = useMemo(() => startupConfig?.interface ?? defaultInterface, [startupConfig?.interface]);
     const includedEndpoints = useMemo(() => new Set(startupConfig?.modelSpecs?.addedEndpoints ?? []), [startupConfig?.modelSpecs?.addedEndpoints]);
     const validEndpoints = useMemo(() => filterMentionEndpoints({
         endpoints,

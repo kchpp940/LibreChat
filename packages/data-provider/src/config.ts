@@ -1327,24 +1327,6 @@ export type TCapabilityUse = {
   use: boolean;
 };
 
-export type CapabilitySource = 'env' | 'yaml' | 'default' | 'merged';
-
-export interface CapabilityMeta {
-  schemaVersion: string;
-  generatedAt: number;
-  source: {
-    env: boolean;
-    yaml: boolean;
-    defaults: boolean;
-  };
-  cacheTtlMs: number;
-}
-
-export interface TCapabilitySnapshot {
-  _meta: CapabilityMeta;
-  capabilities: TRuntimeCapabilities;
-}
-
 export type TModelCapabilities = {
   endpoints: Record<string, boolean>;
   models: Record<string, boolean>;
@@ -1356,11 +1338,6 @@ export type TFileCapabilities = {
   preview: boolean;
   maxFileSize?: number;
   allowedMimeTypes?: string[];
-  sharePointFilePickerEnabled: boolean;
-  sharePointBaseUrl?: string;
-  sharePointPickerGraphScope?: string;
-  sharePointPickerSharePointScope?: string;
-  conversationImportMaxFileSize: number;
 };
 
 export type TRuntimeCapabilities = {
@@ -1396,7 +1373,6 @@ export type TRuntimeCapabilities = {
   remoteAgents: TCapabilityUseCreateShare;
   mcpServers: TCapabilityUseCreateShare & {
     configureObo: boolean;
-    placeholder?: string;
     trustCheckbox?: {
       label?: LocalizedString;
       subLabel?: LocalizedString;
@@ -1416,9 +1392,6 @@ export type TRuntimeCapabilities = {
     fileSearch: boolean;
     fileCitations: boolean;
     buildInfo: boolean;
-    customWelcome?: string;
-    privacyPolicy?: { url?: string; externalUrl?: string };
-    termsOfService?: { url?: string; externalUrl?: string; modalAcceptance?: boolean; modalTitle?: string; modalContent?: string };
     peoplePicker: {
       users: boolean;
       groups: boolean;
@@ -1430,12 +1403,6 @@ export type TRuntimeCapabilities = {
 export type TStartupConfig = {
   appTitle: string;
   socialLogins?: string[];
-  /**
-   * @deprecated Use `capabilities.interface` instead.
-   * This field is preserved for backwards compatibility only.
-   * The single source of truth is the `capabilities` object generated
-   * by the server-side CapabilityRegistry.
-   */
   interface?: TInterfaceConfig;
   turnstile?: TTurnstileConfig;
   balance?: TBalanceConfig;
@@ -1470,17 +1437,7 @@ export type TStartupConfig = {
   customFooter?: string;
   modelSpecs?: TSpecsConfig;
   modelDescriptions?: Record<string, Record<string, string>>;
-  /**
-   * @deprecated Use `capabilities.sharedLinks.enabled` instead.
-   * This field is preserved for backwards compatibility only.
-   * The single source of truth is the `capabilities` object generated
-   * by the server-side CapabilityRegistry.
-   */
   sharedLinksEnabled: boolean;
-  /**
-   * @deprecated Use `capabilities.sharedLinks.publicEnabled` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   publicSharedLinksEnabled: boolean;
   /** Effective default timing for when conversation titles become fetchable.
    * `immediate` = fetch in parallel with the active stream (default);
@@ -1488,43 +1445,15 @@ export type TStartupConfig = {
   titleGenerationTiming?: 'immediate' | 'final';
   analyticsGtmId?: string;
   rum?: TRumConfig;
-  /**
-   * @deprecated Use `capabilities.artifacts.bundlerURL` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   bundlerURL?: string;
-  /**
-   * @deprecated Use `capabilities.artifacts.staticBundlerURL` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   staticBundlerURL?: string;
-  /**
-   * @deprecated Use `capabilities.files.sharePointFilePickerEnabled` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   sharePointFilePickerEnabled?: boolean;
-  /**
-   * @deprecated Use `capabilities.files.sharePointBaseUrl` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   sharePointBaseUrl?: string;
-  /**
-   * @deprecated Use `capabilities.files.sharePointPickerGraphScope` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   sharePointPickerGraphScope?: string;
-  /**
-   * @deprecated Use `capabilities.files.sharePointPickerSharePointScope` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   sharePointPickerSharePointScope?: string;
   openidReuseTokens?: boolean;
   allowAccountDeletion: boolean;
   minPasswordLength?: number;
-  /**
-   * @deprecated Use `capabilities.webSearch` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   webSearch?: {
     searchProvider?: SearchProviders;
     scraperProvider?: ScraperProviders;
@@ -1553,10 +1482,6 @@ export type TStartupConfig = {
     }
   >;
   mcpPlaceholder?: string;
-  /**
-   * @deprecated Use `capabilities.files.conversationImportMaxFileSize` instead.
-   * This field is preserved for backwards compatibility only.
-   */
   conversationImportMaxFileSize?: number;
   buildInfo?: {
     commit?: string | null;
@@ -1564,14 +1489,6 @@ export type TStartupConfig = {
     branch?: string | null;
     buildDate?: string | null;
   };
-  /**
-   * Unified runtime capabilities — the single source of truth for
-   * feature availability. Generated by the server-side CapabilityRegistry
-   * by merging env vars, librechat.yaml, and defaults.
-   *
-   * Always prefer reading from this object over the flat legacy fields
-   * above (sharedLinksEnabled, bundlerURL, webSearch, etc.).
-   */
   capabilities?: TRuntimeCapabilities;
 };
 

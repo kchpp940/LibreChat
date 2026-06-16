@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QueryKeys } from 'librechat-data-provider';
 import { useToastContext } from '@librechat/client';
-import { useGetSkillStatesQuery, useUpdateSkillStatesMutation, } from '~/data-provider';
+import { useGetSkillStatesQuery, useUpdateSkillStatesMutation, useGetStartupConfig, } from '~/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { logger } from '~/utils';
-import { useSkillCapabilities } from '~/Providers/CapabilitiesContext';
 const EMPTY_STATES = {};
 /**
  * Module-scoped, per-user write queues so every hook instance (SkillList,
@@ -78,7 +77,7 @@ export default function useSkillActiveState() {
     const { user } = useAuthContext();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
-    const skills = useSkillCapabilities();
+    const configQuery = useGetStartupConfig();
     const getQuery = useGetSkillStatesQuery();
     const updateMutation = useUpdateSkillStatesMutation();
     const userId = user?.id ?? '';
@@ -98,11 +97,12 @@ export default function useSkillActiveState() {
         lastSeenUserId = userId;
     }, [userId]);
     const defaultActiveOnShare = useMemo(() => {
+        const skills = configQuery.data?.interface?.skills;
         if (typeof skills === 'object' && skills !== null && 'defaultActiveOnShare' in skills) {
             return skills.defaultActiveOnShare === true;
         }
         return false;
-    }, [skills]);
+    }, [configQuery.data]);
     const skillStates = useMemo(() => (getQuery.data && typeof getQuery.data === 'object' ? getQuery.data : EMPTY_STATES), [getQuery.data]);
     const canToggle = !getQuery.isLoading && !getQuery.isError && getQuery.data !== undefined;
     const flush = useCallback(async () => {

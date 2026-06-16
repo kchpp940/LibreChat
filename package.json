@@ -77,7 +77,6 @@
     "e2e:report": "npx playwright show-report e2e/playwright-report",
     "lint:fix": "eslint --fix \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
     "lint": "eslint \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",
-    "lint:capabilities": "node scripts/check-capability-usage.mjs",
     "sort-imports": "node scripts/sort-imports.mts",
     "sort-imports:check": "node scripts/sort-imports.mts --check",
     "format": "npx prettier --write \"{,!(node_modules|venv)/**/}*.{js,jsx,ts,tsx}\"",

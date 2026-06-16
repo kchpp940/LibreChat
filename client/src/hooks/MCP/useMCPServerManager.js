@@ -5,14 +5,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Constants, QueryKeys, Permissions, ResourceType, PermissionTypes, } from 'librechat-data-provider';
 import { useCancelMCPOAuthMutation, useUpdateUserPluginsMutation, useReinitializeMCPServerMutation, useGetAllEffectivePermissionsQuery, } from 'librechat-data-provider/react-query';
 import { useLocalize, useHasAccess, useMCPSelect, useMCPConnectionStatus } from '~/hooks';
-import { useMCPServersQuery } from '~/data-provider';
+import { useGetStartupConfig, useMCPServersQuery } from '~/data-provider';
 import { mcpServerInitStatesAtom, getServerInitState } from '~/store/mcp';
-import { useMcpServerCapabilities } from '~/Providers/CapabilitiesContext';
 export function useMCPServerManager({ conversationId, storageContextKey, } = {}) {
     const localize = useLocalize();
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
-    const mcpCaps = useMcpServerCapabilities();
+    /** Retained for `interface.mcpServers.placeholder` used by `placeholderText` below */
+    const { data: startupConfig } = useGetStartupConfig();
     const canUseMcp = useHasAccess({
         permissionType: PermissionTypes.MCP_SERVERS,
         permission: Permissions.USE,
@@ -345,7 +345,7 @@ export function useMCPServerManager({ conversationId, storageContextKey, } = {})
     const getOAuthUrl = useCallback((serverName) => {
         return getServerInitState(serverInitStates, serverName).oauthUrl;
     }, [serverInitStates]);
-    const placeholderText = useMemo(() => mcpCaps.placeholder || localize('com_ui_mcp_servers'), [mcpCaps.placeholder, localize]);
+    const placeholderText = useMemo(() => startupConfig?.interface?.mcpServers?.placeholder || localize('com_ui_mcp_servers'), [startupConfig?.interface?.mcpServers?.placeholder, localize]);
     const toggleServerSelection = useCallback((serverName) => {
         if (isInitializing(serverName)) {
             return;

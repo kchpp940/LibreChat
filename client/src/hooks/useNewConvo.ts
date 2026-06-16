@@ -40,14 +40,12 @@ import { useResetChatBadges } from './useChatBadges';
 import { useApplyModelSpecEffects } from './Agents';
 import { usePauseGlobalAudio } from './Audio';
 import { useHasAccess } from '~/hooks';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import store from '~/store';
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: startupConfig } = useGetStartupConfig();
-  const interfaceFlags = useInterfaceFlags();
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const clearAllConversations = store.useClearConvoState();
   const defaultPreset = useRecoilValue(store.defaultPreset);
@@ -329,7 +327,7 @@ const useNewConvo = (index = 0) => {
         result?.softDefault != null
           ? !hasModelSelection(_template)
           : startupConfig?.modelSpecs?.prioritize === true ||
-            !interfaceFlags.modelSelect ||
+            (startupConfig?.interface?.modelSelect ?? true) !== true ||
             (result?.last != null &&
               Object.keys(_template).filter((key) => key !== 'chatProjectId').length === 0);
       if (!preset && startupConfig && shouldApplyModelSpec && defaultModelSpec) {

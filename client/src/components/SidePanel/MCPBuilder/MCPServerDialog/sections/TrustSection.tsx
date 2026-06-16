@@ -2,20 +2,20 @@ import { useMemo } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Checkbox, Label } from '@librechat/client';
 import { useLocalize, useLocalizedConfig } from '~/hooks';
+import { useGetStartupConfig } from '~/data-provider';
 import { createConfigHtmlSanitizer } from '~/utils/configHtml';
 import type { MCPServerFormData } from '../hooks/useMCPServerForm';
-import { useMcpServerCapabilities } from '~/Providers/CapabilitiesContext';
 
 export default function TrustSection() {
   const localize = useLocalize();
-  const mcpCaps = useMcpServerCapabilities();
+  const { data: startupConfig } = useGetStartupConfig();
   const getLocalizedValue = useLocalizedConfig();
   const sanitize = useMemo(() => createConfigHtmlSanitizer(), []);
   const {
     control,
     formState: { errors },
   } = useFormContext<MCPServerFormData>();
-  const trustCheckbox = mcpCaps.trustCheckbox;
+  const trustCheckbox = startupConfig?.interface?.mcpServers?.trustCheckbox;
   const labelHTML = sanitize(getLocalizedValue(trustCheckbox?.label, localize('com_ui_trust_app')));
   const subLabelHTML = sanitize(
     getLocalizedValue(trustCheckbox?.subLabel, localize('com_agents_mcp_trust_subtext')),

@@ -143,13 +143,13 @@ const TAILWIND_CDN = 'https://cdn.tailwindcss.com/3.4.17#tailwind.js';
 export const sharedOptions = {
     externalResources: [TAILWIND_CDN],
 };
-export function buildSandpackOptions(template, config) {
-    if (!config) {
+export function buildSandpackOptions(template, startupConfig) {
+    if (!startupConfig) {
         return sharedOptions;
     }
     return {
         ...sharedOptions,
-        bundlerURL: template === 'static' ? config.staticBundlerURL : config.bundlerURL,
+        bundlerURL: template === 'static' ? startupConfig.staticBundlerURL : startupConfig.bundlerURL,
     };
 }
 /**

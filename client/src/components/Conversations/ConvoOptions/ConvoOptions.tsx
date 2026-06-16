@@ -20,12 +20,12 @@ import {
   useDuplicateConversationMutation,
   useAssignConversationToProjectMutation,
   useDeleteConversationMutation,
+  useGetStartupConfig,
   useArchiveConvoMutation,
 } from '~/data-provider';
 import { useHasAccess, useLocalize, useNavigateToConvo, useNewConvo } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 import { useChatContext } from '~/Providers';
-import { useCanShareConversations } from '~/Providers/CapabilitiesContext';
 import DeleteButton from './DeleteButton';
 import ProjectButton from './ProjectButton';
 import ShareButton from './ShareButton';
@@ -55,7 +55,7 @@ function ConvoOptions({
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { index } = useChatContext();
-  const canShareConversations = useCanShareConversations();
+  const { data: startupConfig } = useGetStartupConfig();
   const { navigateToConvo } = useNavigateToConvo(index);
   const { showToast } = useToastContext();
 
@@ -241,7 +241,7 @@ function ConvoOptions({
         label: localize('com_ui_share'),
         onClick: shareHandler,
         icon: <Share2 className="icon-sm mr-2 text-text-primary" aria-hidden="true" />,
-        show: canShareConversations && canCreateSharedLinks,
+        show: startupConfig && startupConfig.sharedLinksEnabled && canCreateSharedLinks,
         ariaHasPopup: 'dialog' as const,
         ariaControls: 'share-conversation-dialog',
         /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
@@ -310,7 +310,7 @@ function ConvoOptions({
     [
       localize,
       shareHandler,
-      canShareConversations,
+      startupConfig,
       renameHandler,
       deleteHandler,
       isArchiveLoading,

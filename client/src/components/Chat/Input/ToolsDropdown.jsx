@@ -6,13 +6,13 @@ import { AuthType, Permissions, ArtifactModes, PermissionTypes, defaultAgentCapa
 import { useLocalize, useHasAccess, useAgentCapabilities } from '~/hooks';
 import ArtifactsSubMenu from '~/components/Chat/Input/ArtifactsSubMenu';
 import MCPSubMenu from '~/components/Chat/Input/MCPSubMenu';
+import { useGetStartupConfig } from '~/data-provider';
 import { useBadgeRowContext } from '~/Providers';
 import { cn } from '~/utils';
-import { useMcpServerCapabilities } from '~/Providers/CapabilitiesContext';
 const ToolsDropdown = ({ disabled }) => {
     const localize = useLocalize();
     const context = useBadgeRowContext();
-    const mcpCaps = useMcpServerCapabilities();
+    const { data: startupConfig } = useGetStartupConfig();
     const { codeEnabled, webSearchEnabled, artifactsEnabled, fileSearchEnabled, skillsEnabled } = useAgentCapabilities(context?.agentsConfig?.capabilities ?? defaultAgentCapabilities);
     const canUseWebSearch = useHasAccess({
         permissionType: PermissionTypes.WEB_SEARCH,
@@ -92,7 +92,7 @@ const ToolsDropdown = ({ disabled }) => {
         const newValue = !skills?.toggleState;
         skills?.debouncedChange({ value: newValue });
     }, [skills]);
-    const mcpPlaceholder = mcpCaps.placeholder;
+    const mcpPlaceholder = startupConfig?.interface?.mcpServers?.placeholder;
     const dropdownItems = [];
     if (fileSearchEnabled && canUseFileSearch) {
         dropdownItems.push({

@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useMediaQuery } from '@librechat/client';
-import { PermissionTypes, Permissions } from 'librechat-data-provider';
+import { getConfigDefaults, PermissionTypes, Permissions } from 'librechat-data-provider';
 import ModelSelector from './Menus/Endpoints/ModelSelector';
 import { useGetStartupConfig } from '~/data-provider';
 import ExportAndShareMenu from './ExportAndShareMenu';
@@ -10,13 +10,13 @@ import BookmarkMenu from './Menus/BookmarkMenu';
 import { TemporaryChat } from './TemporaryChat';
 import AddMultiConvo from './AddMultiConvo';
 import { useHasAccess } from '~/hooks';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 import { cn } from '~/utils';
 import store from '~/store';
+const defaultInterface = getConfigDefaults().interface;
 function Header() {
     const { data: startupConfig } = useGetStartupConfig();
     const navVisible = useRecoilValue(store.sidebarExpanded);
-    const interfaceConfig = useInterfaceFlags();
+    const interfaceConfig = useMemo(() => startupConfig?.interface ?? defaultInterface, [startupConfig]);
     const hasAccessToBookmarks = useHasAccess({
         permissionType: PermissionTypes.BOOKMARKS,
         permission: Permissions.USE,
@@ -40,14 +40,14 @@ function Header() {
               {hasAccessToBookmarks === true && <BookmarkMenu />}
               {hasAccessToMultiConvo === true && <AddMultiConvo />}
               {isSmallScreen && (<>
-                  <ExportAndShareMenu />
+                  <ExportAndShareMenu isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}/>
                   {hasAccessToTemporaryChat === true && <TemporaryChat />}
                 </>)}
             </div>)}
         </div>
 
         {!isSmallScreen && (<div className="flex items-center gap-2">
-            <ExportAndShareMenu />
+            <ExportAndShareMenu isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}/>
             {hasAccessToTemporaryChat === true && <TemporaryChat />}
           </div>)}
       </div>

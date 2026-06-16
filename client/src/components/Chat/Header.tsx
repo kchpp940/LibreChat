@@ -59,7 +59,9 @@ function Header() {
               {hasAccessToMultiConvo === true && <AddMultiConvo />}
               {isSmallScreen && (
                 <>
-                  <ExportAndShareMenu />
+                  <ExportAndShareMenu
+                    isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
+                  />
                   {hasAccessToTemporaryChat === true && <TemporaryChat />}
                 </>
               )}
@@ -69,7 +71,9 @@ function Header() {
 
         {!isSmallScreen && (
           <div className="flex items-center gap-2">
-            <ExportAndShareMenu />
+            <ExportAndShareMenu
+              isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
+            />
             {hasAccessToTemporaryChat === true && <TemporaryChat />}
           </div>
         )}

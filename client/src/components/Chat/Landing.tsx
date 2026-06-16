@@ -14,7 +14,6 @@ import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
-import { useInterfaceFlags } from '~/Providers/CapabilitiesContext';
 
 const containerClassName =
   'shadow-stroke relative flex h-full items-center justify-center rounded-full bg-white dark:bg-presentation dark:text-white text-black dark:after:shadow-none ';
@@ -41,7 +40,6 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
   const assistantMap = useAssistantsMapContext();
   const { data: startupConfig } = useGetStartupConfig();
   const { data: endpointsConfig } = useGetEndpointsQuery();
-  const interfaceFlags = useInterfaceFlags();
   const { user } = useAuthContext();
   const localize = useLocalize();
 
@@ -92,8 +90,8 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
   );
 
   const getGreeting = useCallback(() => {
-    if (typeof interfaceFlags.customWelcome === 'string') {
-      const customWelcome = interfaceFlags.customWelcome;
+    if (typeof startupConfig?.interface?.customWelcome === 'string') {
+      const customWelcome = startupConfig.interface.customWelcome;
       // Replace {{user.name}} with actual user name if available
       if (user?.name && customWelcome.includes('{{user.name}}')) {
         return customWelcome.replace(/{{user.name}}/g, user.name);
@@ -126,7 +124,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     else {
       return localize('com_ui_good_evening');
     }
-  }, [localize, interfaceFlags.customWelcome, user?.name]);
+  }, [localize, startupConfig?.interface?.customWelcome, user?.name]);
 
   const handleLineCountChange = useCallback((count: number) => {
     setTextHasMultipleLines(count > 1);
@@ -160,7 +158,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
   }, [lineCount, description, textHasMultipleLines, contentHeight]);
 
   const greetingText =
-    typeof interfaceFlags.customWelcome === 'string'
+    typeof startupConfig?.interface?.customWelcome === 'string'
       ? getGreeting()
       : getGreeting() + (user?.name ? ', ' + user.name : '');
 

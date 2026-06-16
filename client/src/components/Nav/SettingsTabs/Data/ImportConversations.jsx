@@ -1,17 +1,17 @@
 import { useState, useRef, useCallback } from 'react';
 import { Import } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Spinner, useToastContext, Label, Button } from '@librechat/client';
-import { useUploadConversationsMutation } from '~/data-provider';
+import { startupConfigKey, useUploadConversationsMutation } from '~/data-provider';
 import { NotificationSeverity } from '~/common';
 import { useLocalize } from '~/hooks';
 import { cn, logger } from '~/utils';
-import { useConversationImportMaxFileSize } from '~/Providers/CapabilitiesContext';
 function ImportConversations() {
     const localize = useLocalize();
+    const queryClient = useQueryClient();
     const { showToast } = useToastContext();
     const fileInputRef = useRef(null);
     const [isUploading, setIsUploading] = useState(false);
-    const maxFileSize = useConversationImportMaxFileSize();
     const handleSuccess = useCallback(() => {
         showToast({
             message: localize('com_ui_import_conversation_success'),
@@ -37,6 +37,8 @@ function ImportConversations() {
     });
     const handleFileUpload = useCallback(async (file) => {
         try {
+            const startupConfig = queryClient.getQueryData(startupConfigKey(true));
+            const maxFileSize = startupConfig?.conversationImportMaxFileSize;
             if (maxFileSize && file.size > maxFileSize) {
                 const size = (maxFileSize / (1024 * 1024)).toFixed(2);
                 showToast({
@@ -58,7 +60,7 @@ function ImportConversations() {
                 status: NotificationSeverity.ERROR,
             });
         }
-    }, [uploadFile, showToast, localize, maxFileSize]);
+    }, [uploadFile, showToast, localize, queryClient]);
     const handleFileChange = useCallback((event) => {
         const file = event.target.files?.[0];
         if (file) {

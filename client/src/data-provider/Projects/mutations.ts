@@ -12,6 +12,7 @@ import type {
   TAssignConversationToProjectResponse,
 } from 'librechat-data-provider';
 import store from '~/store';
+import { conversationCacheService } from '../Conversations/cacheService';
 
 export const useCreateProjectMutation = (): UseMutationResult<
   TChatProject,
@@ -105,10 +106,20 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
     {
       onSuccess: (result) => {
         updateActiveConversation(result.conversation);
-        queryClient.setQueryData(
-          [QueryKeys.conversation, result.conversation.conversationId],
-          result.conversation,
-        );
+        const convoId = result.conversation.conversationId ?? '';
+        if (convoId) {
+          conversationCacheService.setConversation(
+            queryClient,
+            convoId,
+            result.conversation,
+          );
+          conversationCacheService.updateConversation(
+            queryClient,
+            convoId,
+            () => result.conversation,
+            false,
+          );
+        }
         [result.previousProjectId, result.projectId].forEach((projectId) => {
           if (projectId) {
             queryClient.invalidateQueries([QueryKeys.project, projectId]);
