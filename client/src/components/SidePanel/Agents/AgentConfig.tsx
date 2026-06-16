@@ -116,9 +116,9 @@ export default function AgentConfig() {
 
   const mergedFileMap = useMemo(() => {
     const newFileMap = { ...fileMap };
-    agentFiles.forEach((file: PublicFileAssetDescriptor) => {
+    agentFiles.forEach((file) => {
       if (file.file_id) {
-        newFileMap[file.file_id] = file as unknown as (typeof newFileMap)[string];
+        newFileMap[file.file_id] = file;
       }
     });
     return newFileMap;

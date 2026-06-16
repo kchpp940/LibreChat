@@ -7,6 +7,7 @@ import type { AgentForm } from '~/common';
 import { AgentAvatarRender, NoImage, AvatarMenu } from './Images';
 import { useGetFileConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { getAvatarUrl } from '~/utils';
 
 function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
   const localize = useLocalize();
@@ -19,21 +20,21 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
   });
 
   // Derive whether agent has a remote avatar from the avatar prop
-  const hasRemoteAvatar = Boolean(avatar?.url ?? avatar?.filepath);
+  const hasRemoteAvatar = Boolean(getAvatarUrl(avatar));
 
   useEffect(() => {
     if (avatarAction) {
       return;
     }
 
-    if ((avatar?.url ?? avatar?.filepath) && avatarPreview !== (avatar?.url ?? avatar?.filepath)) {
-      setValue('avatar_preview', avatar?.url ?? avatar?.filepath);
+    if (getAvatarUrl(avatar) && avatarPreview !== getAvatarUrl(avatar)) {
+      setValue('avatar_preview', getAvatarUrl(avatar));
     }
 
-    if (!(avatar?.url ?? avatar?.filepath) && avatarPreview !== '') {
+    if (!getAvatarUrl(avatar) && avatarPreview !== '') {
       setValue('avatar_preview', '');
     }
-  }, [avatar?.url ?? avatar?.filepath, avatarAction, avatarPreview, setValue]);
+  }, [getAvatarUrl(avatar), avatarAction, avatarPreview, setValue]);
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,11 +69,11 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
   );
 
   const handleReset = useCallback(() => {
-    const remoteAvatarExists = Boolean(avatar?.url ?? avatar?.filepath);
+    const remoteAvatarExists = Boolean(getAvatarUrl(avatar));
     setValue('avatar_preview', '', { shouldDirty: true });
     setValue('avatar_file', null, { shouldDirty: true });
     setValue('avatar_action', remoteAvatarExists ? 'reset' : null, { shouldDirty: true });
-  }, [avatar?.url ?? avatar?.filepath, setValue]);
+  }, [getAvatarUrl(avatar), setValue]);
 
   const hasIcon = Boolean(avatarPreview) || hasRemoteAvatar;
   const canReset = hasIcon;
@@ -101,7 +102,7 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
 
 const MemoizedAvatar = memo(
   Avatar,
-  (prevProps, nextProps) => (prevProps.avatar?.url ?? prevProps.avatar?.filepath) === (nextProps.avatar?.url ?? nextProps.avatar?.filepath),
+  (prevProps, nextProps) => getAvatarUrl(prevProps.avatar) === getAvatarUrl(nextProps.avatar),
 );
 MemoizedAvatar.displayName = 'Avatar';
 

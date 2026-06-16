@@ -6,7 +6,7 @@ import { AgentCapabilities, defaultAgentFormValues } from 'librechat-data-provid
 import type { UseMutationResult, QueryObserverResult } from '@tanstack/react-query';
 import type { Agent, AgentCreateParams } from 'librechat-data-provider';
 import type { TAgentCapabilities, AgentForm } from '~/common';
-import { cn, createProviderOption, processAgentOption, getDefaultAgentFormValues } from '~/utils';
+import { cn, createProviderOption, processAgentOption, getDefaultAgentFormValues, getAvatarUrl } from '~/utils';
 import { useLocalize, useAgentDefaultPermissionLevel } from '~/hooks';
 import { useListAgentsQuery } from '~/data-provider';
 
@@ -82,7 +82,7 @@ function AgentSelect({
         // Make sure support_contact is properly loaded
         support_contact: fullAgent.support_contact,
         avatar_file: null,
-        avatar_preview: fullAgent.avatar?.url ?? fullAgent.avatar?.filepath ?? '',
+        avatar_preview: getAvatarUrl(fullAgent.avatar) ?? '',
         avatar_action: null,
       };
 

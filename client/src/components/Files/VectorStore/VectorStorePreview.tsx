@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import DeleteIconButton from '../DeleteIconButton';
 import { TrashIcon, Button } from '@librechat/client';
-import { TFile } from 'librechat-data-provider/dist/types';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import UploadFileButton from '../FileList/UploadFileButton';
 import UploadFileModal from '../FileList/UploadFileModal';
 import { BarChart4Icon, Clock3, FileClock, FileIcon, InfoIcon, PlusIcon } from 'lucide-react';
@@ -17,58 +17,42 @@ const tempVectorStore = {
   expires: 'Never',
   createdAt: '2022-01-01T10:00:00',
 };
-const tempFilesAttached: TFile[] = [
+const tempFilesAttached: PublicFileAssetDescriptor[] = [
   {
     filename: 'File1.jpg',
-    object: 'file',
     bytes: 10000,
     createdAt: '2022-01-01T10:00:00',
-    _id: '1',
     type: 'image',
-    usage: 12,
-    user: 'abc',
-    file_id: 'file_id',
+    file_id: 'file_id_1',
     embedded: true,
-    filepath: 'filepath',
+    url: '/files/file_id_1',
   },
   {
-    filename: 'File1.jpg',
-    object: 'file',
-    bytes: 10000,
-    createdAt: '2022-01-01T10:00:00',
-    _id: '1',
+    filename: 'File2.jpg',
+    bytes: 15000,
+    createdAt: '2022-01-02T10:00:00',
     type: 'image',
-    usage: 12,
-    user: 'abc',
-    file_id: 'file_id',
+    file_id: 'file_id_2',
     embedded: true,
-    filepath: 'filepath',
+    url: '/files/file_id_2',
   },
   {
-    filename: 'File1.jpg',
-    object: 'file',
-    bytes: 10000,
-    createdAt: '2022-01-01T10:00:00',
-    _id: '1',
+    filename: 'File3.jpg',
+    bytes: 20000,
+    createdAt: '2022-01-03T10:00:00',
     type: 'image',
-    usage: 12,
-    user: 'abc',
-    file_id: 'file_id',
+    file_id: 'file_id_3',
     embedded: true,
-    filepath: 'filepath',
+    url: '/files/file_id_3',
   },
   {
-    filename: 'File1.jpg',
-    object: 'file',
-    bytes: 10000,
-    createdAt: '2022-01-01T10:00:00',
-    _id: '1',
+    filename: 'File4.jpg',
+    bytes: 25000,
+    createdAt: '2022-01-04T10:00:00',
     type: 'image',
-    usage: 12,
-    user: 'abc',
-    file_id: 'file_id',
+    file_id: 'file_id_4',
     embedded: true,
-    filepath: 'filepath',
+    url: '/files/file_id_4',
   },
 ];
 const tempAssistants = [

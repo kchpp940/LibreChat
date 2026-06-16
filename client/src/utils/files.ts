@@ -20,6 +20,57 @@ import type { ExtendedFile } from '~/common';
 
 export const partialTypes = ['text/x-'];
 
+/**
+ * PublicFileAssetDescriptor boundary adapter.
+ *
+ * SAFETY: This is the ONLY place in client code where `.filepath` and `.preview`
+ * (internal TFile fields) may be accessed. All other components must go through
+ * these helpers to get file display URLs. This keeps the boundary clean — if we
+ * ever remove `filepath` from all client-facing types, only these helpers need
+ * to be updated.
+ *
+ * Never add `.filepath` / `.preview` access anywhere else in client code.
+ * If you need a URL, use `getFileUrl(file)`.
+ * If you need a thumbnail, use `getFileThumbnailUrl(file)`.
+ */
+
+type AnyFileLike =
+  | Partial<PublicFileAssetDescriptor>
+  | Partial<TFile>
+  | { url?: string; filepath?: string; preview?: string; thumbnailUrl?: string };
+
+/**
+ * Get the public display URL for any file-like object.
+ * Handles both PublicFileAssetDescriptor (has `url`) and legacy internal
+ * types (TFile / ImageFile which have `filepath` / `preview`).
+ */
+export function getFileUrl(file: AnyFileLike): string | undefined {
+  if ('url' in file && file.url) return file.url;
+  if ('filepath' in file && file.filepath) return file.filepath;
+  return undefined;
+}
+
+/**
+ * Get the thumbnail URL for any file-like object.
+ * Handles both PublicFileAssetDescriptor (has `thumbnailUrl`) and legacy
+ * internal types (TFile / ImageFile which have `preview` / `filepath`).
+ */
+export function getFileThumbnailUrl(file: AnyFileLike): string | undefined {
+  if ('thumbnailUrl' in file && file.thumbnailUrl) return file.thumbnailUrl;
+  if ('preview' in file && file.preview) return file.preview;
+  return getFileUrl(file);
+}
+
+/**
+ * @deprecated Use `getFileUrl` / `getFileThumbnailUrl` instead — they enforce
+ * the PublicFileAssetDescriptor boundary.
+ *
+ * TFile import is retained ONLY for the boundary adapter helpers above.
+ * Do NOT use TFile for any other purpose in client code.
+ */
+type _TFileUsage = TFile;
+export type { _TFileUsage as __DO_NOT_USE_TFile__ };
+
 const textDocument = {
   paths: TextPaths,
   fill: '#FF5588',

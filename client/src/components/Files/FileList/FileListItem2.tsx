@@ -1,11 +1,11 @@
 import React from 'react';
 import { FileIcon, PlusIcon } from 'lucide-react';
 import { Button, DotsIcon, TrashIcon } from '@librechat/client';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { useNavigate } from 'react-router-dom';
 
 type FileListItemProps = {
-  file: TFile;
+  file: PublicFileAssetDescriptor;
   deleteFile: (id: string | undefined) => void;
   attachedVectorStores: { name: string }[];
 };
@@ -65,7 +65,7 @@ export default function FileListItem2({
         </Button>
         <Button
           className="w-min bg-transparent text-[#666666] hover:bg-slate-200"
-          onClick={() => deleteFile(file._id)}
+          onClick={() => deleteFile(file.file_id)}
         >
           <TrashIcon className="" />
         </Button>

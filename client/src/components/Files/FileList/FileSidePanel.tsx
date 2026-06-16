@@ -2,7 +2,6 @@ import React from 'react';
 import FileList from './FileList';
 import { Button, Input } from '@librechat/client';
 import { PublicFileAssetDescriptor } from 'librechat-data-provider';
-import type { TFile } from 'librechat-data-provider';
 import UploadFileButton from './UploadFileButton';
 import { ListFilter } from 'lucide-react';
 import { useLocalize } from '~/hooks';
@@ -85,7 +84,7 @@ export default function FileSidePanel() {
       </div>
       <div className="mt-3">
         <FileList
-          files={fakeFiles as unknown as TFile[]}
+          files={fakeFiles}
           deleteFile={deleteFile}
           attachedVectorStores={attachedVectorStores}
         />

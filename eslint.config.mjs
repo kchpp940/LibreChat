@@ -166,6 +166,30 @@ export default [
       'jsx-a11y/interactive-supports-focus': 'off',
       'jsx-a11y/no-noninteractive-tabindex': 'off',
       'jsx-a11y/img-redundant-alt': 'off',
+      // PublicFileAssetDescriptor boundary enforcement
+      //
+      // Frontend file display code must only consume `PublicFileAssetDescriptor`
+      // and MUST NOT cast descriptors back to the internal `TFile` type.
+      // These rules guard the type-level engineering boundary.
+      //
+      // For property-level boundary checks (source / filepath / metadata /
+      // storageKey / storageRegion), see the dedicated script:
+      //   `npm run check:file-boundary`  (client/scripts/check-file-boundary.mjs)
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "TSAsExpression > TSTypeReference > Identifier[name='TFile']",
+          message:
+            'Do not cast to `TFile` in client code — frontend must only consume `PublicFileAssetDescriptor`. Casting a public descriptor to the internal TFile type bypasses the display boundary and may expose internal fields like storageKey, source, filepath, or metadata.',
+        },
+        {
+          selector:
+            "TSAsExpression > TSUnknownKeyword + TSTypeReference > Identifier[name='TFile']",
+          message:
+            'Do not cast through `unknown` to `TFile` in client code — frontend must only consume `PublicFileAssetDescriptor`. The `as unknown as TFile` pattern deliberately bypasses type checks around the file display boundary.',
+        },
+      ],
     },
   },
   {

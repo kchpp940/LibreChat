@@ -4,8 +4,19 @@ import { Skeleton } from '@librechat/client';
 import type t from 'librechat-data-provider';
 
 /**
- * Extracts the avatar URL from an agent's avatar property
- * Handles both string and object formats
+ * PublicFileAssetDescriptor boundary adapter for avatars.
+ *
+ * SAFETY: This is the ONLY place in client code where `avatar.filepath` and
+ * `avatar.source` may be accessed. These fields are retained for backward
+ * compatibility with agent/assistant avatars saved before the
+ * PublicFileAssetDescriptor refactor. All new code should use `avatar.url`.
+ *
+ * Never add `avatar.filepath` or `avatar.source` access anywhere else in
+ * client code. Always use `getAgentAvatarUrl(agent)` or `getAvatarUrl(avatar)`
+ * instead.
+ *
+ * Extracts the avatar URL from an agent's avatar property.
+ * Handles both string (legacy raw URL) and object (PublicFileAssetDescriptor-like) formats.
  */
 export const getAgentAvatarUrl = (agent: t.Agent | null | undefined): string | null => {
   if (!agent?.avatar) {
@@ -16,11 +27,20 @@ export const getAgentAvatarUrl = (agent: t.Agent | null | undefined): string | n
     return agent.avatar;
   }
 
-  if (agent.avatar && typeof agent.avatar === 'object' && 'filepath' in agent.avatar) {
-    return agent.avatar?.url ?? agent.avatar?.filepath ?? null;
-  }
+  return getAvatarUrl(agent.avatar);
+};
 
-  return null;
+/**
+ * Extracts the avatar URL from an avatar descriptor object.
+ * Handles backward compatibility with `filepath` field.
+ * Use this when you only have the avatar object, not the full agent.
+ */
+export const getAvatarUrl = (
+  avatar: t.AgentAvatar | t.AssistantAvatar | undefined | null,
+): string | null => {
+  if (!avatar) return null;
+  if (typeof avatar === 'string') return avatar;
+  return avatar.url ?? avatar.filepath ?? null;
 };
 
 const LazyAgentAvatar = ({

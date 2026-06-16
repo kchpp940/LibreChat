@@ -18,7 +18,7 @@ import type {
 import type { Endpoint } from '~/common';
 import { useHasAccess, useShowMarketplace } from '~/hooks';
 import { useGetEndpointsQuery } from '~/data-provider';
-import { mapEndpoints, getIconKey } from '~/utils';
+import { mapEndpoints, getIconKey, getAvatarUrl } from '~/utils';
 import { icons } from './Icons';
 
 const defaultInterface = getConfigDefaults().interface;
@@ -131,7 +131,7 @@ export const useEndpoints = ({
           return acc;
         }, {});
         result.modelIcons = agents?.reduce((acc, agent) => {
-          acc[agent.id] = agent?.avatar?.url ?? agent?.avatar?.filepath;
+          acc[agent.id] = getAvatarUrl(agent?.avatar);
           return acc;
         }, {});
       }

@@ -87,6 +87,19 @@ const getContentDisposition = (fileName, disposition = 'attachment') => {
   return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
 };
 
+/**
+ * Allowlist of fields on the public file asset descriptor.
+ *
+ * These are the only fields that may be sent to the client for display purposes.
+ * Never add internal fields like `storageKey`, `storageRegion`, `source`,
+ * `filepath`, `preview`, `metadata`, `user`, `tenantId`, `_id`, `__v`, `object`,
+ * or `usage` to this list — they are internal implementation details.
+ *
+ * `text` and `textFormat` are included specifically for inline attachment
+ * previews (code interpreter output, tool artifacts). They are attachment
+ * content, not file metadata, and should only be populated on message
+ * attachment payloads — not on file list / file detail responses.
+ */
 const PUBLIC_DESCRIPTOR_FIELDS = [
   'file_id',
   'filename',
@@ -109,6 +122,20 @@ const PUBLIC_DESCRIPTOR_FIELDS = [
   'conversationId',
 ];
 
+/**
+ * Serialize an internal TFile / IMongoFile record into a public
+ * `PublicFileAssetDescriptor` suitable for client-side display.
+ *
+ * - Strips all internal fields (storage keys, user IDs, raw metadata, etc.)
+ * - Computes `url` from the raw record's `preview` or `filepath` via the
+ *   download URL route — never exposes raw storage paths
+ * - Sets `thumbnailUrl` when the file has an image preview
+ * - Maps `source` → `filterSource` (display-only storage origin label)
+ *
+ * @param {object} file - Internal file record (TFile / IMongoFile)
+ * @param {string} [baseUrl] - Optional base URL for download endpoint
+ * @returns {import('librechat-data-provider').PublicFileAssetDescriptor}
+ */
 const toPublicFileDescriptor = (file, baseUrl) => {
   const raw = typeof file.toObject === 'function' ? file.toObject() : file;
   const descriptor = {};

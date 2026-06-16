@@ -4,7 +4,7 @@ import type { Assistant, Agent } from 'librechat-data-provider';
 import type { TMessageIcon } from '~/common';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetEndpointsQuery } from '~/data-provider';
-import { getIconEndpoint } from '~/utils';
+import { getIconEndpoint, getAvatarUrl } from '~/utils';
 import { isImageURL } from '~/utils/icons';
 import Icon from '~/components/Endpoints/Icon';
 
@@ -27,7 +27,7 @@ export function arePropsEqual(prev: MessageIconProps, next: MessageIconProps): b
     [prev.iconData?.modelLabel, next.iconData?.modelLabel],
     [prev.iconData?.isCreatedByUser, next.iconData?.isCreatedByUser],
     [prev.agent?.name, next.agent?.name],
-    [prev.agent?.avatar?.url ?? prev.agent?.avatar?.filepath, next.agent?.avatar?.url ?? next.agent?.avatar?.filepath],
+    [getAvatarUrl(prev.agent?.avatar), getAvatarUrl(next.agent?.avatar)],
     [prev.assistant?.name, next.assistant?.name],
     [prev.assistant?.metadata?.avatar, next.assistant?.metadata?.avatar],
   ];
@@ -44,7 +44,7 @@ const MessageIcon = memo(({ iconData, assistant, agent }: MessageIconProps) => {
   const { data: endpointsConfig } = useGetEndpointsQuery();
 
   const agentName = agent?.name ?? '';
-  const agentAvatar = agent?.avatar?.url ?? agent?.avatar?.filepath ?? '';
+  const agentAvatar = getAvatarUrl(agent?.avatar) ?? '';
   const assistantName = assistant?.name ?? '';
   const assistantAvatar = assistant?.metadata?.avatar ?? '';
   let avatarURL = '';

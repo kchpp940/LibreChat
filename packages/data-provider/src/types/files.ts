@@ -102,6 +102,17 @@ export type FileConfigInput = {
   checkType?: (fileType: string, supportedTypes: RegExp[]) => boolean;
 };
 
+/**
+ * Public-facing file asset descriptor.
+ *
+ * This is the only file type that should be consumed by client-side display code.
+ * It contains only display-safe fields and never exposes internal storage paths,
+ * storage keys, user IDs, tenant IDs, or raw metadata.
+ *
+ * Internal fields like `storageKey`, `storageRegion`, `source`, `filepath`,
+ * `preview`, `metadata`, `user`, `tenantId`, `_id`, `__v`, `object`, `usage`
+ * must NOT be added to this type or derived from it via type casting.
+ */
 export type PublicFileAssetDescriptor = {
   file_id: string;
   filename: string;
@@ -117,7 +128,22 @@ export type PublicFileAssetDescriptor = {
   expiresAt?: string | Date;
   status?: 'pending' | 'ready' | 'failed';
   previewError?: string;
+  /**
+   * Inline text content for code-output / tool-artifact attachments.
+   *
+   * Scope: only populated on message attachments that carry inline text content
+   * (e.g. code interpreter output, tool call results rendered as text previews).
+   * Not populated on regular file uploads or file list entries.
+   *
+   * This is attachment content, not file metadata. Do not use for storage or
+   * permission decisions — use `file_id` / `url` instead.
+   */
   text?: string;
+  /**
+   * Format hint for inline `text` content — used by the client to decide how
+   * to render the attachment preview (plain text vs HTML-safe).
+   * Only meaningful when `text` is present.
+   */
   textFormat?: 'html' | 'text' | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;

@@ -2,12 +2,12 @@
 import { PlusIcon } from 'lucide-react';
 import { Button, Checkbox, DotsIcon, FileIcon } from '@librechat/client';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { TVectorStore } from '~/common';
 import { formatDate, getFileType } from '~/utils';
 import { useLocalize } from '~/hooks';
 
-type TFileWithVectors = TFile & { vectorsAttached?: TVectorStore[] };
+type TFileWithVectors = PublicFileAssetDescriptor & { vectorsAttached?: TVectorStore[] };
 
 export const fileTableColumns: ColumnDef<TFileWithVectors>[] = [
   {

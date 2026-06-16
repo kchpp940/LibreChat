@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TFile } from 'librechat-data-provider/dist/types';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { CheckMark, TrashIcon, Button } from '@librechat/client';
 import VectorStoreButton from '../VectorStore/VectorStoreButton';
 import { CircleIcon, Clock3Icon, InfoIcon } from 'lucide-react';
@@ -7,18 +7,14 @@ import DeleteIconButton from '../DeleteIconButton';
 import { TThread, TVectorStore } from '~/common';
 import { useParams } from 'react-router-dom';
 
-const tempFile: TFile = {
+const tempFile: PublicFileAssetDescriptor = {
   filename: 'File1.jpg',
-  object: 'file',
   bytes: 10000,
   createdAt: '2022-01-01T10:00:00',
-  _id: '1',
   type: 'image',
-  usage: 12,
-  user: 'abc',
   file_id: 'file_id',
   embedded: true,
-  filepath: 'filepath',
+  url: '/files/file_id',
 };
 
 const tempThreads: TThread[] = [
@@ -76,7 +72,7 @@ export default function FilePreview() {
             <InfoIcon className="size-4 text-gray-500" />
             &nbsp; File ID
           </span>
-          <span className="w-1/2 text-gray-500 sm:w-3/4 md:w-3/5">{file._id}</span>
+          <span className="w-1/2 text-gray-500 sm:w-3/4 md:w-3/5">{file.file_id}</span>
         </div>
         <div className="mt-3 flex flex-row">
           <span className="flex w-1/2 flex-row items-center sm:w-1/4 md:w-2/5">
@@ -86,16 +82,9 @@ export default function FilePreview() {
           <div className="w-1/2 sm:w-3/4 md:w-3/5">
             <span className="flex w-20 flex-row items-center justify-evenly rounded-full bg-[#f2f8ec] p-1 text-[#91c561]">
               <CheckMark className="m-0 p-0" />
-              <div>{file.object}</div>
+              <div>{file.type}</div>
             </span>
           </div>
-        </div>
-        <div className="mt-3 flex flex-row">
-          <span className="flex w-1/2 flex-row items-center sm:w-1/4 md:w-2/5">
-            <Clock3Icon className="m-0 size-4 p-0 text-gray-500" />
-            &nbsp; Purpose
-          </span>
-          <span className="w-1/2 text-gray-500 sm:w-3/4 md:w-3/5">{file.message}</span>
         </div>
         <div className="mt-3 flex flex-row">
           <span className="flex w-1/2 flex-row items-center sm:w-1/4 md:w-2/5">
