@@ -513,6 +513,27 @@ export class ConversationCacheService {
     });
   }
 
+  findConversationInListCache(conversationId) {
+    const listData = this.queryClient.getQueriesData({
+      queryKey: [QueryKeys.allConversations],
+      exact: false,
+    });
+    for (const [, data] of listData) {
+      if (!data) continue;
+      const found = data.conversations?.find(
+        (c) => c.conversationId === conversationId,
+      );
+      if (found) {
+        return found;
+      }
+    }
+    const foundInInfinite = this.findConversation(conversationId);
+    if (foundInInfinite) {
+      return foundInInfinite;
+    }
+    return undefined;
+  }
+
   getSingleConversation(conversationId) {
     return this.queryClient.getQueryData(convoQueryKeys.single(conversationId));
   }

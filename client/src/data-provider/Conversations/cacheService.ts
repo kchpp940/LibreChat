@@ -569,6 +569,28 @@ export class ConversationCacheService {
     });
   }
 
+  findConversationInListCache(conversationId: string): TConversation | undefined {
+    const listData = this.queryClient.getQueriesData<ConversationData>({
+      queryKey: [QueryKeys.allConversations],
+      exact: false,
+    });
+    for (const [, data] of listData) {
+      if (!data) continue;
+      const found = (data as ConversationData).conversations?.find(
+        (c) => c.conversationId === conversationId,
+      );
+      if (found) {
+        return found;
+      }
+    }
+    // Also check infinite list queries
+    const foundInInfinite = this.findConversation(conversationId);
+    if (foundInInfinite) {
+      return foundInInfinite;
+    }
+    return undefined;
+  }
+
   getSingleConversation(conversationId: string): TConversation | undefined {
     return this.queryClient.getQueryData<TConversation>(convoQueryKeys.single(conversationId));
   }

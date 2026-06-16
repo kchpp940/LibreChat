@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { LocalStorageKeys, QueryKeys } from 'librechat-data-provider';
+import { LocalStorageKeys } from 'librechat-data-provider';
 import {
   format,
   isToday,
@@ -146,28 +146,6 @@ export type ConversationCursorData = {
   nextCursor?: string | null;
 };
 
-function getConversationQueryProjectId(queryKey: readonly unknown[]): string | undefined {
-  const params = queryKey[1];
-  if (!params || typeof params !== 'object') {
-    return undefined;
-  }
-  return (params as { projectId?: string }).projectId;
-}
-
-function conversationMatchesProjectQuery(
-  queryKey: readonly unknown[],
-  conversation: Pick<TConversation, 'chatProjectId'>,
-): boolean {
-  const projectId = getConversationQueryProjectId(queryKey);
-  if (!projectId) {
-    return true;
-  }
-  if (projectId === 'unassigned') {
-    return !conversation.chatProjectId;
-  }
-  return conversation.chatProjectId === projectId;
-}
-
 /**
  * Reads the project id from the current URL's `?projectId` param — the source of
  * truth for a new chat's project scope (the conversation atom can lag behind it).
@@ -236,38 +214,16 @@ export function addConversationToInfinitePages(
   };
 }
 
+/**
+ * @deprecated Use `useConversationCache().addConversation()` instead.
+ * This compatibility wrapper will be removed in a future release.
+ */
 export function addConversationToAllConversationsQueries(
   queryClient: QueryClient,
   newConversation: TConversation,
 ) {
-  // Find all keys that start with QueryKeys.allConversations
-  const queries = queryClient
-    .getQueryCache()
-    .findAll([QueryKeys.allConversations], { exact: false });
-
-  for (const query of queries) {
-    if (!conversationMatchesProjectQuery(query.queryKey, newConversation)) {
-      continue;
-    }
-    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (old) => {
-      if (
-        !old ||
-        old.pages[0].conversations.some((c) => c.conversationId === newConversation.conversationId)
-      ) {
-        return old;
-      }
-      return {
-        ...old,
-        pages: [
-          {
-            ...old.pages[0],
-            conversations: [newConversation, ...old.pages[0].conversations],
-          },
-          ...old.pages.slice(1),
-        ],
-      };
-    });
-  }
+  const cache = new ConversationCacheService(queryClient);
+  cache.addConversation(newConversation);
 }
 
 export function removeConvoFromInfinitePages(

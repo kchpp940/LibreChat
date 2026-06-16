@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { dataService, QueryKeys } from 'librechat-data-provider';
+import { dataService } from 'librechat-data-provider';
 import { isNotFoundError } from '~/utils';
 import type {
   UseInfiniteQueryOptions,
@@ -19,7 +19,6 @@ import {
   convoQueryKeys,
   flattenConversations,
   hasNextPage,
-  findConversationInData,
   useConversationCacheService,
 } from './cacheService';
 
@@ -76,15 +75,12 @@ export const useConversationByIdQuery = (
   config?: Omit<UseQueryOptions<TConversation>, 'queryKey' | 'queryFn'>,
 ): QueryObserverResult<TConversation, unknown> => {
   const queryClient = useQueryClient();
+  const cache = useConversationCacheService(queryClient);
 
   return useQuery<TConversation>(
     convoQueryKeys.single(id),
     () => {
-      const convosQuery = queryClient.getQueryData<ConversationData>(
-        [QueryKeys.allConversations],
-        { exact: false },
-      );
-      const found = findConversationInData(convosQuery, id);
+      const found = cache.findConversationInListCache(id);
 
       if (found && found.messages != null) {
         return found;

@@ -46,21 +46,16 @@ const INFINITE_PAGE_PATTERNS = [
   /pageParams/,
 ];
 
+// Allow using convoQueryKeys helper (imported from cacheService)
+const ALLOWED_CONVO_KEY_USAGE = [
+  'convoQueryKeys.',
+  'flattenConversations',
+  'hasNextPage',
+];
+
 const ALLOWED_FILES = [
   'src/data-provider/Conversations/cacheService.ts',
   'src/data-provider/Conversations/cacheService.js',
-  'src/data-provider/Conversations/hooks.ts',
-  'src/data-provider/Conversations/hooks.js',
-  'src/data-provider/Conversations/mutations.ts',
-  'src/data-provider/Conversations/mutations.js',
-  'src/data-provider/Conversations/index.ts',
-  'src/data-provider/Conversations/index.js',
-  'src/utils/convos.ts',
-  'src/utils/convos.js',
-  'src/utils/convos.spec.ts',
-  'src/utils/convos.spec.js',
-  'src/utils/collection.ts',
-  'src/utils/collection.js',
 ];
 
 const EXCLUDED_DIRS = [
@@ -117,7 +112,7 @@ function scanFile(filePath) {
 
   const issues = [];
 
-  // Check for direct conversation query key usage
+  // Check for direct conversation query key usage (QueryKeys.conversation*)
   for (const key of CONVERSATION_QUERY_KEYS) {
     const regex = new RegExp(key.replace(/\./g, '\\.'), 'g');
     for (let i = 0; i < lines.length; i++) {
@@ -129,6 +124,11 @@ function scanFile(filePath) {
         }
         // Skip type-only references (in generics or type annotations)
         if (line.includes('type ') || line.includes('interface ') || line.includes(':')) {
+          continue;
+        }
+        // Skip if using convoQueryKeys helper or allowed functions
+        const hasAllowedUsage = ALLOWED_CONVO_KEY_USAGE.some(usage => line.includes(usage));
+        if (hasAllowedUsage) {
           continue;
         }
         issues.push({
@@ -167,39 +167,32 @@ function scanFile(filePath) {
     }
   }
 
-  // Check for infinite page pattern manipulations
-  for (const pattern of INFINITE_PAGE_PATTERNS) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (pattern.test(line)) {
-        // Skip if it's in cacheService
-        if (isAllowedFile(filePath)) {
-          continue;
-        }
-        // Check if this is related to conversation data (more strict)
-        const context = lines[Math.max(0, i - 5)] + ' ' + lines[Math.max(0, i - 2)] + ' ' + line + ' ' + lines[Math.min(i + 2, lines.length - 1)] + ' ' + lines[Math.min(i + 5, lines.length - 1)];
-        const conversationRelated =
-          (context.includes('conversation') || context.includes('conversations') || context.includes('Conversations'))
-          && !context.includes('projectConversations')
-          && !context.includes('page.projects')
-          && !context.includes('.projects')
-          && !context.includes('ProjectsInfiniteQuery')
-          && !context.includes('useProjectsInfiniteQuery')
-          && !context.includes('TCollection')
-          && !context.includes('collectionName')
-          && !context.includes('TData');
-        if (conversationRelated) {
-          // Skip if it's just reading data or using the hook's computed values
-          if (line.includes('conversations') && (line.includes('useConversationsInfiniteQuery') || line.includes('flattenConversations'))) {
-            continue;
-          }
-          issues.push({
-            line: i + 1,
-            column: line.search(pattern) + 1,
-            message: `Direct manipulation of infinite page data - use ConversationCacheService instead`,
-            severity: 'warning',
-          });
-        }
+  // Check for queryClient.setQueryData/setQueriesData that directly manipulate conversation infinite pages
+  // Pure function data manipulation (not via queryClient) is allowed
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Look for queryClient.setQueryData or queryClient.setQueriesData calls
+    const setDataMatch = line.match(/\.(setQueryData|setQueriesData)\s*\(/);
+    if (setDataMatch) {
+      // Skip if it's in cacheService
+      if (isAllowedFile(filePath)) {
+        continue;
+      }
+      // Check if this call manipulates infinite page structure
+      const context = lines.slice(i, Math.min(i + 15, lines.length)).join(' ');
+      const hasInfinitePagePattern = INFINITE_PAGE_PATTERNS.some(pattern => pattern.test(context));
+      const conversationRelated =
+        context.includes('conversation') ||
+        context.includes('conversations') ||
+        context.includes('Conversations') ||
+        CONVERSATION_QUERY_KEYS.some(key => context.includes(key));
+      if (hasInfinitePagePattern && conversationRelated) {
+        issues.push({
+          line: i + 1,
+          column: line.indexOf(setDataMatch[1]) + 1,
+          message: `Direct manipulation of conversation infinite pages via queryClient.${setDataMatch[1]} - use ConversationCacheService instead`,
+          severity: 'error',
+        });
       }
     }
   }
