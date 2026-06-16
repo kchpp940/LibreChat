@@ -235,6 +235,9 @@ export function addConversationToInfinitePages(
   };
 }
 
+/**
+ * @deprecated Use conversationCacheService.addConversationToAllQueries from '~/data-provider' instead
+ */
 export function addConversationToAllConversationsQueries(
   queryClient: QueryClient,
   newConversation: TConversation,
@@ -355,7 +358,9 @@ export function storeEndpointSettings(conversation: TConversation | null) {
   localStorage.setItem(LocalStorageKeys.LAST_MODEL, JSON.stringify(lastModel));
 }
 
-// Add
+/**
+ * @deprecated Use conversationCacheService.addConversation from '~/data-provider' instead
+ */
 export function addConvoToAllQueries(queryClient: QueryClient, newConvo: TConversation) {
   const queries = queryClient
     .getQueryCache()
@@ -390,6 +395,9 @@ export function addConvoToAllQueries(queryClient: QueryClient, newConvo: TConver
   }
 }
 
+/**
+ * @deprecated Use conversationCacheService.upsertConversation from '~/data-provider' instead
+ */
 export function upsertConvoInAllQueries(
   queryClient: QueryClient,
   nextConvo: TConversation,
@@ -490,7 +498,9 @@ export function upsertConvoInAllQueries(
   }
 }
 
-// Update
+/**
+ * @deprecated Use conversationCacheService.updateConversation from '~/data-provider' instead
+ */
 export function updateConvoInAllQueries(
   queryClient: QueryClient,
   conversationId: string,
@@ -575,7 +585,9 @@ export function updateConvoInAllQueries(
   }
 }
 
-// Remove
+/**
+ * @deprecated Use conversationCacheService.removeConversation from '~/data-provider' instead
+ */
 export function removeConvoFromAllQueries(queryClient: QueryClient, conversationId: string) {
   const queries = queryClient
     .getQueryCache()

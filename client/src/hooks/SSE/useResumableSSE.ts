@@ -27,8 +27,6 @@ import type { ActiveJobsResponse } from '~/data-provider';
 import type { TResData } from '~/common';
 import {
   clearAllDrafts,
-  removeConvoFromAllQueries,
-  upsertConvoInAllQueries,
   markStreamStartFailedMetadata,
 } from '~/utils';
 import {
@@ -36,6 +34,7 @@ import {
   useGetStartupConfig,
   queueTitleGeneration,
   streamStatusQueryKey,
+  conversationCacheService,
 } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -415,10 +414,10 @@ export default function useResumableSSE(
         getMessages(),
       );
 
-      queryClient.setQueryData<TConversation>(
-        [QueryKeys.conversation, conversationId],
-        (current) => current ?? optimisticConversation,
-      );
+      const currentConversation = conversationCacheService.getConversation(queryClient, conversationId);
+      if (!currentConversation) {
+        conversationCacheService.setConversation(queryClient, conversationId, optimisticConversation);
+      }
       queryClient.setQueryData<TMessage[]>(
         [QueryKeys.messages, conversationId],
         optimisticMessages,
@@ -427,7 +426,7 @@ export default function useResumableSSE(
         [QueryKeys.messages, Constants.NEW_CONVO],
         optimisticMessages,
       );
-      upsertConvoInAllQueries(queryClient, optimisticConversation);
+      conversationCacheService.upsertConversation(queryClient, optimisticConversation);
 
       return hydrateSubmissionMessages(currentSubmission, conversationId);
     },
@@ -780,7 +779,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            removeConvoFromAllQueries(queryClient, currentStreamId);
+            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
           }
           setIsSubmitting(false);
           setShowStopButton(false);
@@ -825,7 +824,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            removeConvoFromAllQueries(queryClient, currentStreamId);
+            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
           }
 
           try {
@@ -910,7 +909,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            removeConvoFromAllQueries(queryClient, currentStreamId);
+            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
           }
           setIsSubmitting(false);
           setShowStopButton(false);

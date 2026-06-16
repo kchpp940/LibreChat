@@ -7,14 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataService, MutationKeys, QueryKeys, defaultOrderQuery } from 'librechat-data-provider';
 import type { InfiniteData, UseMutationResult } from '@tanstack/react-query';
 import type * as t from 'librechat-data-provider';
-import {
-  logger,
-  /* Conversations */
-  addConvoToAllQueries,
-  findConversationInInfinite,
-  updateConvoInAllQueries,
-  removeConvoFromAllQueries,
-} from '~/utils';
+import { logger } from '~/utils';
 import useUpdateTagsInConvo from '~/hooks/Conversations/useUpdateTagsInConvo';
 import { updateConversationTag } from '~/utils/conversationTags';
 import { useConversationTagsQuery } from './queries';

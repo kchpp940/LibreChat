@@ -1,6 +1,6 @@
-import { QueryKeys } from 'librechat-data-provider';
+import { QueryKeys, dataService } from 'librechat-data-provider';
 import type { QueryClient, InfiniteData } from '@tanstack/react-query';
-import type { TConversation, ConversationListResponse } from 'librechat-data-provider';
+import type { TConversation, TConversationTag, ConversationListResponse } from 'librechat-data-provider';
 
 export type ConversationListParams = {
   isArchived?: boolean;
@@ -601,6 +601,25 @@ export const conversationCacheService = {
 
   invalidateConversationTags: (queryClient: QueryClient) => {
     queryClient.invalidateQueries([QueryKeys.conversationTags]);
+  },
+
+  getConversationTags: (queryClient: QueryClient): TConversationTag[] => {
+    return queryClient.getQueryData<TConversationTag[]>([QueryKeys.conversationTags]) ?? [];
+  },
+
+  invalidateConversationDetail: (queryClient: QueryClient, conversationId: string) => {
+    queryClient.invalidateQueries([QueryKeys.conversation, conversationId]);
+  },
+
+  cancelConversationDetail: async (queryClient: QueryClient, conversationId: string) => {
+    await queryClient.cancelQueries([QueryKeys.conversation, conversationId]);
+  },
+
+  fetchConversation: async (queryClient: QueryClient, conversationId: string): Promise<TConversation> => {
+    return queryClient.fetchQuery(
+      [QueryKeys.conversation, conversationId],
+      () => dataService.getConversationById(conversationId),
+    );
   },
 
   cancelConversationsQuery: async (
