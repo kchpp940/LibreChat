@@ -241,7 +241,7 @@ export const getStartupConfig = (
   return request.get(endpoints.config(options?.context));
 };
 
-export const getCapabilities = (): Promise<config.TRuntimeCapabilities> => {
+export const getCapabilities = (): Promise<config.TCapabilitySnapshot> => {
   return request.get(endpoints.capabilities());
 };
 

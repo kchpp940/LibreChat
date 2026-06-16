@@ -52,14 +52,14 @@ export const useGetStartupConfig = (
 };
 
 export const useGetCapabilities = (
-  config?: UseQueryOptions<t.TRuntimeCapabilities>,
-): QueryObserverResult<t.TRuntimeCapabilities> => {
+  config?: UseQueryOptions<t.TCapabilitySnapshot>,
+): QueryObserverResult<t.TCapabilitySnapshot> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TRuntimeCapabilities>(
+  return useQuery<t.TCapabilitySnapshot>(
     [QueryKeys.capabilities],
     () => dataService.getCapabilities(),
     {
-      staleTime: Infinity,
+      staleTime: 1000 * 60 * 5,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchOnMount: false,
