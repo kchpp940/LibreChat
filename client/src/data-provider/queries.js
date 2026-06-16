@@ -1,6 +1,6 @@
 import { QueryKeys, dataService, EModelEndpoint, isAgentsEndpoint, defaultOrderQuery, defaultAssistantsVersion, } from 'librechat-data-provider';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useConversationListQuery, useConversationByIdQuery, convoQueryKeys } from './Conversations';
+import { findConversationInInfinite, isNotFoundError } from '~/utils';
 export const useGetPresetsQuery = (config) => {
     return useQuery([QueryKeys.presets], () => dataService.getPresets(), {
         staleTime: 1000 * 10,
@@ -11,10 +11,51 @@ export const useGetPresetsQuery = (config) => {
     });
 };
 export const useGetConvoIdQuery = (id, config) => {
-    return useConversationByIdQuery(id, config);
+    const queryClient = useQueryClient();
+    return useQuery([QueryKeys.conversation, id], () => {
+        // Try to find in all fetched infinite pages
+        const convosQuery = queryClient.getQueryData([QueryKeys.allConversations], { exact: false });
+        const found = findConversationInInfinite(convosQuery, id);
+        if (found && found.messages != null) {
+            return found;
+        }
+        // Otherwise, fetch from API
+        return dataService.getConversationById(id);
+    }, {
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
+        retry: (failureCount, error) => {
+            if (isNotFoundError(error)) {
+                return false;
+            }
+            return failureCount < 3;
+        },
+        ...config,
+    });
 };
 export const useConversationsInfiniteQuery = (params, config) => {
-    return useConversationListQuery(params, config);
+    const { isArchived, sortBy, sortDirection, tags, search, projectId } = params;
+    return useInfiniteQuery({
+        queryKey: [
+            isArchived ? QueryKeys.archivedConversations : QueryKeys.allConversations,
+            { isArchived, sortBy, sortDirection, tags, search, projectId },
+        ],
+        queryFn: ({ pageParam }) => dataService.listConversations({
+            isArchived,
+            sortBy,
+            sortDirection,
+            tags,
+            search,
+            projectId,
+            cursor: pageParam?.toString(),
+        }),
+        getNextPageParam: (lastPage) => lastPage?.nextCursor ?? undefined,
+        keepPreviousData: true,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        cacheTime: 30 * 60 * 1000, // 30 minutes
+        ...config,
+    });
 };
 export const useMessagesInfiniteQuery = (params, config) => {
     const { sortBy, sortDirection, pageSize, conversationId, messageId, search, searchTypes } = params;
@@ -59,7 +100,7 @@ export const useSharedLinksQuery = (params, config) => {
     });
 };
 export const useConversationTagsQuery = (config) => {
-    return useQuery(convoQueryKeys.tags(), () => dataService.getConversationTags(), {
+    return useQuery([QueryKeys.conversationTags], () => dataService.getConversationTags(), {
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         refetchOnMount: false,

@@ -1,5 +1,5 @@
 import { imageExtRegex } from 'librechat-data-provider';
-import type { TAttachment, TAttachmentMetadata, TFile } from 'librechat-data-provider';
+import type { TAttachment, TAttachmentMetadata, PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { ToolArtifactType } from '~/utils/artifacts';
 import { detectArtifactTypeFromFile } from '~/utils/artifacts';
 
@@ -66,7 +66,7 @@ const leafOf = (filename: string | undefined): string => {
  * than hiding them on a name match alone.
  */
 export const isInternalSandboxArtifact = (attachment: TAttachment): boolean => {
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   if (file.bytes !== 0) {
     return false;
   }
@@ -110,7 +110,7 @@ export const displayFilename = (filename: string | undefined): string => {
  * omits the byte count) from silently sinking past real content. The
  * filter is intentionally narrow: only an explicit zero counts as empty.
  *
- * The internal cast targets the `TFile & TAttachmentMetadata` arm of
+ * The internal cast targets the `PublicFileAssetDescriptor & TAttachmentMetadata` arm of
  * `TAttachment` (the only one that declares `bytes`) rather than an
  * anonymous `{ bytes?: number }` shape. Tying the cast to the concrete
  * source type means a future `bytes` retype on `TFile` (e.g., to
@@ -118,7 +118,7 @@ export const displayFilename = (filename: string | undefined): string => {
  * silently papered over.
  */
 export const attachmentSalience = (item: TAttachment): number => {
-  const bytes = (item as TFile & TAttachmentMetadata).bytes;
+  const bytes = (item as PublicFileAssetDescriptor & TAttachmentMetadata).bytes;
   return bytes === 0 ? 1 : 0;
 };
 
@@ -142,16 +142,16 @@ export const byEntrySalience = <T extends { attachment: TAttachment }>(a: T, b: 
 
 /**
  * An attachment is treated as an image only when it has the dimensions and
- * filepath needed to render via `<Image>`. Without width/height the image
+ * url needed to render via `<Image>`. Without width/height the image
  * cannot reserve layout space, so we fall back to the file card.
  */
 export const isImageAttachment = (attachment: TAttachment): boolean => {
   if (!attachment.filename) {
     return false;
   }
-  const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
+  const { width, height, url = null } = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   return (
-    imageExtRegex.test(attachment.filename) && width != null && height != null && filepath != null
+    imageExtRegex.test(attachment.filename) && width != null && height != null && url != null
   );
 };
 
@@ -161,7 +161,7 @@ export const isImageAttachment = (attachment: TAttachment): boolean => {
  * treated as "no inline text available" and fall through to the download UI.
  */
 export const isTextAttachment = (attachment: TAttachment): boolean => {
-  const { text } = attachment as TFile & TAttachmentMetadata;
+  const { text } = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   return typeof text === 'string' && text.length > 0;
 };
 
@@ -172,7 +172,7 @@ export const isTextAttachment = (attachment: TAttachment): boolean => {
  * the message-render code reads cleanly.
  */
 export const artifactTypeForAttachment = (attachment: TAttachment): ToolArtifactType | null => {
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   return detectArtifactTypeFromFile(file);
 };
 
@@ -191,6 +191,6 @@ export const renderAttachmentKey = (
   attachment: TAttachment,
   index: number,
 ): string => {
-  const fileId = (attachment as TFile & TAttachmentMetadata).file_id;
+  const fileId = (attachment as PublicFileAssetDescriptor & TAttachmentMetadata).file_id;
   return `${prefix}-${fileId ?? 'noid'}-${index}`;
 };

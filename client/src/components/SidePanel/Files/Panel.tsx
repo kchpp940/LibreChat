@@ -1,10 +1,10 @@
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { useGetFiles } from '~/data-provider';
 import { columns } from './PanelColumns';
 import DataTable from './PanelTable';
 
 export default function FilesPanel() {
-  const { data: files = [] } = useGetFiles<TFile[]>();
+  const { data: files = [] } = useGetFiles<PublicFileAssetDescriptor[]>();
 
   return (
     <div className="h-auto w-full px-3 pb-3 pt-2">

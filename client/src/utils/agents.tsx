@@ -17,7 +17,7 @@ export const getAgentAvatarUrl = (agent: t.Agent | null | undefined): string | n
   }
 
   if (agent.avatar && typeof agent.avatar === 'object' && 'filepath' in agent.avatar) {
-    return agent.avatar.filepath;
+    return agent.avatar?.url ?? agent.avatar?.filepath ?? null;
   }
 
   return null;

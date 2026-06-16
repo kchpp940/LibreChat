@@ -136,10 +136,9 @@ export default function FileRow({
               >
                 {isImage ? (
                   <Image
-                    url={getCachedPreview(file.file_id) ?? file.preview ?? file.filepath}
+                    url={getCachedPreview(file.file_id) ?? file.thumbnailUrl ?? file.url}
                     onDelete={handleDelete}
                     progress={file.progress}
-                    source={file.source}
                   />
                 ) : (
                   <FileContainer file={file} onDelete={handleDelete} />

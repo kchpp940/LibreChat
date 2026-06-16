@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { QueryKeys } from 'librechat-data-provider';
-import type { BatchFile, TFile } from 'librechat-data-provider';
+import type { BatchFile, PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { useDeleteFilesMutation } from '~/data-provider';
 import useFileDeletion from './useFileDeletion';
 
@@ -20,11 +20,12 @@ export default function useDeleteFilesFromTable(callback?: () => void) {
 
       return { filesToDeleteMap };
     },
+
     onSuccess: (data, variables, context) => {
       console.log('Files deleted');
       const { filesToDeleteMap } = context as { filesToDeleteMap: Map<string, BatchFile> };
 
-      queryClient.setQueryData([QueryKeys.files], (oldFiles: TFile[] | undefined) => {
+      queryClient.setQueryData([QueryKeys.files], (oldFiles: PublicFileAssetDescriptor[] | undefined) => {
         const { files } = variables;
         return files.length
           ? oldFiles?.filter((file) => !filesToDeleteMap.has(file.file_id))

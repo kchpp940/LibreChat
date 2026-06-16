@@ -18,6 +18,7 @@ const {
 const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput, runPreviewFinalize } = require('~/server/services/Files/Code/process');
 const { saveBase64Image } = require('~/server/services/Files/process');
+const { toPublicFileDescriptor } = require('~/server/utils/files');
 
 function isHostFileAuthoringArtifact(artifact) {
   return artifact?.[HOST_FILE_AUTHORING_ARTIFACT_KEY] === true;
@@ -608,7 +609,7 @@ function createToolEndCallback({ req, res, artifactPromises, streamId = null }) 
               endpoint: metadata.provider,
               context: FileContext.image_generation,
             });
-            const fileMetadata = Object.assign(file, {
+            const fileMetadata = Object.assign(toPublicFileDescriptor(file, `${req.protocol}://${req.get('host')}`), {
               messageId: metadata.run_id,
               toolCallId: output.tool_call_id,
               conversationId: metadata.thread_id,
@@ -680,23 +681,16 @@ function createToolEndCallback({ req, res, artifactPromises, streamId = null }) 
              */
             session_id: file.storage_session_id ?? output.artifact.session_id,
           });
-          const fileMetadata = result?.file ?? null;
+          const rawFile = result?.file ?? null;
           const finalize = result?.finalize;
-          if (!fileMetadata) {
+          if (!rawFile) {
             return null;
           }
-          /* Initial emit: ship the attachment to the client immediately
-           * (carries `status: 'pending'` for office buckets so the UI
-           * shows "preparing preview…"). The agent's response stops
-           * blocking on extraction here.
-           *
-           * Use the shared `isStreamWritable` predicate rather than the
-           * narrower `streamId || res.headersSent` check that lived
-           * here before — a client disconnect mid-stream
-           * (`res.writableEnded`) would otherwise hit `res.write` and
-           * raise `ERR_STREAM_WRITE_AFTER_END` (caught by the outer
-           * IIFE catch but logged as noise). Same gate the Responses
-           * path uses below. */
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          const fileMetadata = Object.assign(toPublicFileDescriptor(rawFile, baseUrl), {
+            messageId: rawFile.messageId,
+            toolCallId: rawFile.toolCallId,
+          });
           if (isStreamWritable(res, streamId)) {
             writeAttachment(res, streamId, fileMetadata);
           }
@@ -722,7 +716,7 @@ function createToolEndCallback({ req, res, artifactPromises, streamId = null }) 
             previewRevision: result?.previewRevision,
             onResolved: (updated) => {
               writeAttachmentUpdate(res, streamId, {
-                ...updated,
+                ...toPublicFileDescriptor(updated, baseUrl),
                 messageId: metadata.run_id,
                 toolCallId,
               });
@@ -867,7 +861,7 @@ function createResponsesToolEndCallback({ req, res, tracker, artifactPromises })
               endpoint: metadata.provider,
               context: FileContext.image_generation,
             });
-            const fileMetadata = Object.assign(file, {
+            const fileMetadata = Object.assign(toPublicFileDescriptor(file, `${req.protocol}://${req.get('host')}`), {
               toolCallId: output.tool_call_id,
             });
 
@@ -875,13 +869,12 @@ function createResponsesToolEndCallback({ req, res, tracker, artifactPromises })
               return null;
             }
 
-            // For Responses API, emit attachment during streaming
             if (res.headersSent && !res.writableEnded) {
               const attachment = {
                 file_id: fileMetadata.file_id,
                 filename: fileMetadata.filename,
                 type: fileMetadata.type,
-                url: fileMetadata.filepath,
+                url: fileMetadata.url,
                 width: fileMetadata.width,
                 height: fileMetadata.height,
                 tool_call_id: output.tool_call_id,
@@ -947,14 +940,17 @@ function createResponsesToolEndCallback({ req, res, tracker, artifactPromises })
              */
             session_id: file.storage_session_id ?? output.artifact.session_id,
           });
-          const fileMetadata = result?.file ?? null;
+          const rawFile = result?.file ?? null;
           const finalize = result?.finalize;
-          if (!fileMetadata) {
+          if (!rawFile) {
             return null;
           }
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          const fileMetadata = Object.assign(toPublicFileDescriptor(rawFile, baseUrl), {
+            messageId: rawFile.messageId,
+            toolCallId: rawFile.toolCallId,
+          });
 
-          /* Initial emit (Open Responses extension format). The agent's
-           * response no longer blocks on extraction. */
           if (isStreamWritable(res, null)) {
             writeResponsesAttachment(
               res,
@@ -964,11 +960,6 @@ function createResponsesToolEndCallback({ req, res, tracker, artifactPromises })
             );
           }
 
-          /* Deferred preview rendering: extract HTML in the background
-           * and emit a follow-up `librechat:attachment` with the same
-           * `file_id` so the client merges the resolved record over the
-           * pending placeholder. Fire-and-forget — survives response
-           * close; polling covers the post-close gap. */
           runPreviewFinalize({
             finalize,
             fileId: fileMetadata.file_id,
@@ -980,7 +971,7 @@ function createResponsesToolEndCallback({ req, res, tracker, artifactPromises })
               writeResponsesAttachment(
                 res,
                 tracker,
-                buildResponsesAttachment(updated, toolCallId),
+                buildResponsesAttachment(toPublicFileDescriptor(updated, baseUrl), toolCallId),
                 metadata,
               );
             },
@@ -1007,11 +998,10 @@ function buildResponsesAttachment(fileMetadata, toolCallId) {
     file_id: fileMetadata.file_id,
     filename: fileMetadata.filename,
     type: fileMetadata.type,
-    url: fileMetadata.filepath,
+    url: fileMetadata.url,
     width: fileMetadata.width,
     height: fileMetadata.height,
     tool_call_id: toolCallId,
-    text: fileMetadata.text ?? null,
     textFormat: fileMetadata.textFormat ?? null,
     status: fileMetadata.status,
     previewError: fileMetadata.previewError,

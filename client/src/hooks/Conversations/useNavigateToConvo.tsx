@@ -23,13 +23,12 @@ import {
   logger,
 } from '~/utils';
 import { useApplyModelSpecEffects } from '~/hooks/Agents';
-import { startupConfigKey, useConversationCache } from '~/data-provider';
+import { startupConfigKey } from '~/data-provider';
 import store from '~/store';
 
 const useNavigateToConvo = (index = 0) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const cache = useConversationCache();
   const clearAllConversations = store.useClearConvoState();
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const setSubmission = useSetRecoilState(store.submissionByIndex(index));
@@ -58,7 +57,9 @@ const useNavigateToConvo = (index = 0) => {
       return;
     }
     try {
-      const data = await cache.fetchConversation(conversationId);
+      const data = await queryClient.fetchQuery([QueryKeys.conversation, conversationId], () =>
+        dataService.getConversationById(conversationId),
+      );
       logger.log('conversation', 'Fetched fresh conversation data', data);
 
       const convoData = { ...data };
@@ -126,7 +127,7 @@ const useNavigateToConvo = (index = 0) => {
        * request when navigating in from a non-chat route (e.g. /projects).
        */
       queryClient.removeQueries([QueryKeys.messages, convo.conversationId]);
-      cache.invalidateLists();
+      queryClient.invalidateQueries([QueryKeys.conversation, convo.conversationId]);
       fetchFreshData(convo);
     } else {
       setConversation(convo);

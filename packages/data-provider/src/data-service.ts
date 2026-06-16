@@ -406,7 +406,7 @@ export const getToolCalls = (params: q.GetToolCallParams): Promise<q.ToolCallRes
 
 /* Files */
 
-export const getFiles = (): Promise<f.TFile[]> => {
+export const getFiles = (): Promise<f.PublicFileAssetDescriptor[]> => {
   return request.get(endpoints.files());
 };
 
@@ -426,7 +426,7 @@ export const getFilePreview = (fileId: string): Promise<f.TFilePreview> => {
   return request.get(endpoints.filePreview(fileId));
 };
 
-export const getAgentFiles = (agentId: string): Promise<f.TFile[]> => {
+export const getAgentFiles = (agentId: string): Promise<f.PublicFileAssetDescriptor[]> => {
   return request.get(endpoints.agentFiles(agentId));
 };
 

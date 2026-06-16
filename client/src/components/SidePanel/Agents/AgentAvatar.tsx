@@ -19,21 +19,21 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
   });
 
   // Derive whether agent has a remote avatar from the avatar prop
-  const hasRemoteAvatar = Boolean(avatar?.filepath);
+  const hasRemoteAvatar = Boolean(avatar?.url ?? avatar?.filepath);
 
   useEffect(() => {
     if (avatarAction) {
       return;
     }
 
-    if (avatar?.filepath && avatarPreview !== avatar.filepath) {
-      setValue('avatar_preview', avatar.filepath);
+    if ((avatar?.url ?? avatar?.filepath) && avatarPreview !== (avatar?.url ?? avatar?.filepath)) {
+      setValue('avatar_preview', avatar?.url ?? avatar?.filepath);
     }
 
-    if (!avatar?.filepath && avatarPreview !== '') {
+    if (!(avatar?.url ?? avatar?.filepath) && avatarPreview !== '') {
       setValue('avatar_preview', '');
     }
-  }, [avatar?.filepath, avatarAction, avatarPreview, setValue]);
+  }, [avatar?.url ?? avatar?.filepath, avatarAction, avatarPreview, setValue]);
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,11 +68,11 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
   );
 
   const handleReset = useCallback(() => {
-    const remoteAvatarExists = Boolean(avatar?.filepath);
+    const remoteAvatarExists = Boolean(avatar?.url ?? avatar?.filepath);
     setValue('avatar_preview', '', { shouldDirty: true });
     setValue('avatar_file', null, { shouldDirty: true });
     setValue('avatar_action', remoteAvatarExists ? 'reset' : null, { shouldDirty: true });
-  }, [avatar?.filepath, setValue]);
+  }, [avatar?.url ?? avatar?.filepath, setValue]);
 
   const hasIcon = Boolean(avatarPreview) || hasRemoteAvatar;
   const canReset = hasIcon;
@@ -101,7 +101,7 @@ function Avatar({ avatar }: { avatar: AgentAvatar | null }) {
 
 const MemoizedAvatar = memo(
   Avatar,
-  (prevProps, nextProps) => prevProps.avatar?.filepath === nextProps.avatar?.filepath,
+  (prevProps, nextProps) => (prevProps.avatar?.url ?? prevProps.avatar?.filepath) === (nextProps.avatar?.url ?? nextProps.avatar?.filepath),
 );
 MemoizedAvatar.displayName = 'Avatar';
 

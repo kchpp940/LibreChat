@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
+import { QueryKeys } from 'librechat-data-provider';
 import { Controller, useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { Checkbox, Label, TextareaAutosize, Input, useToastContext } from '@librechat/client';
 import type { TConversationTag, TConversationTagRequest } from 'librechat-data-provider';
 import { useBookmarkContext } from '~/Providers/BookmarkContext';
-import { useConversationTagMutation, useConversationCache } from '~/data-provider';
+import { useConversationTagMutation } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { cn, logger } from '~/utils';
 
@@ -24,7 +26,7 @@ const BookmarkForm = ({
   formRef,
 }: TBookmarkFormProps) => {
   const localize = useLocalize();
-  const cache = useConversationCache();
+  const queryClient = useQueryClient();
   const { showToast } = useToastContext();
   const { bookmarks } = useBookmarkContext();
 
@@ -68,7 +70,8 @@ const BookmarkForm = ({
       });
       return;
     }
-    const allTags = cache.getTags() ?? [];
+    const allTags =
+      queryClient.getQueryData<TConversationTag[]>([QueryKeys.conversationTags]) ?? [];
     if (allTags.some((tag) => tag.tag === data.tag && tag.tag !== bookmark?.tag)) {
       showToast({
         message: localize('com_ui_bookmarks_create_exists'),

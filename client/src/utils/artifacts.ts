@@ -4,7 +4,7 @@ import type {
   SandpackProviderProps,
   SandpackPredefinedTemplate,
 } from '@codesandbox/sandpack-react';
-import type { TStartupConfig, TAttachment, TFile } from 'librechat-data-provider';
+import type { TStartupConfig, TAttachment, TFile, PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 
 const artifactFilename = {
@@ -778,8 +778,8 @@ export function detectArtifactTypeFromFile(
  * minimise collision risk for any caller that (rarely) lacks `file_id`.
  */
 export const toolArtifactKey = (
-  file: Partial<Pick<TFile, 'file_id' | 'filename' | 'filepath'>>,
-): string => `tool-artifact-${file.file_id ?? file.filename ?? file.filepath ?? 'unknown'}`;
+  file: Partial<Pick<PublicFileAssetDescriptor, 'file_id' | 'filename' | 'url'>>,
+): string => `tool-artifact-${file.file_id ?? file.filename ?? file.url ?? 'unknown'}`;
 
 /**
  * Stable epoch fallback (instead of `Date.now()`) when neither timestamp

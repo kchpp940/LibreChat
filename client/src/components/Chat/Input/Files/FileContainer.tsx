@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import { getFileType, cn } from '~/utils';
 import FilePreview from './FilePreview';
@@ -15,7 +15,7 @@ const FileContainer = ({
   onDelete,
   onClick,
 }: {
-  file: Partial<ExtendedFile | TFile>;
+  file: Partial<ExtendedFile | PublicFileAssetDescriptor>;
   overrideType?: string;
   /**
    * Optional pre-computed label for the chip. Callers in code-execution

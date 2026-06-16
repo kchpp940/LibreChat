@@ -11,6 +11,7 @@ import {
 } from '@librechat/client';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import ImagePreview from '~/components/Chat/Input/Files/ImagePreview';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { TranslationKeys, useLocalize } from '~/hooks';
@@ -26,7 +27,7 @@ const contextMap: Record<any, TranslationKeys> = {
   [FileContext.message_attachment]: 'com_ui_attachment',
 };
 
-export const columns: ColumnDef<TFile>[] = [
+export const columns: ColumnDef<PublicFileAssetDescriptor>[] = [
   {
     id: 'select',
     size: 40,
@@ -109,9 +110,8 @@ export const columns: ColumnDef<TFile>[] = [
         return (
           <div className="flex gap-2">
             <ImagePreview
-              url={file.filepath}
+              url={file.url}
               className="relative h-10 w-10 shrink-0 overflow-visible rounded-md"
-              source={file.source}
             />
             <span className="self-center truncate">{file.filename}</span>
           </div>
@@ -194,7 +194,7 @@ export const columns: ColumnDef<TFile>[] = [
     },
     cell: ({ row }) => {
       const localize = useLocalize();
-      const { source } = row.original;
+      const { filterSource: source } = row.original;
       if (source === FileSources.openai) {
         return (
           <div className="flex flex-wrap items-center gap-2">

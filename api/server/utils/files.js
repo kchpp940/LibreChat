@@ -87,9 +87,76 @@ const getContentDisposition = (fileName, disposition = 'attachment') => {
   return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
 };
 
+const PUBLIC_DESCRIPTOR_FIELDS = [
+  'file_id',
+  'filename',
+  'type',
+  'bytes',
+  'url',
+  'thumbnailUrl',
+  'width',
+  'height',
+  'context',
+  'embedded',
+  'filterSource',
+  'expiresAt',
+  'status',
+  'previewError',
+  'text',
+  'textFormat',
+  'createdAt',
+  'updatedAt',
+  'conversationId',
+];
+
+const toPublicFileDescriptor = (file, baseUrl) => {
+  const raw = typeof file.toObject === 'function' ? file.toObject() : file;
+  const descriptor = {};
+
+  for (const field of PUBLIC_DESCRIPTOR_FIELDS) {
+    if (raw[field] !== undefined) {
+      descriptor[field] = raw[field];
+    }
+  }
+
+  if (!descriptor.url) {
+    if (raw.preview) {
+      descriptor.url = raw.preview;
+    } else if (raw.filepath) {
+      descriptor.url = raw.filepath.startsWith('http')
+        ? raw.filepath
+        : `${baseUrl}/api/files/download/${raw.user}/${raw.file_id}`;
+    }
+  }
+
+  if (!descriptor.thumbnailUrl && raw.preview) {
+    descriptor.thumbnailUrl = raw.preview;
+  }
+
+  if (!descriptor.file_id && raw.file_id) {
+    descriptor.file_id = raw.file_id;
+  }
+  if (!descriptor.filename && raw.filename) {
+    descriptor.filename = raw.filename;
+  }
+  if (!descriptor.type && raw.type) {
+    descriptor.type = raw.type;
+  }
+  if (descriptor.bytes === undefined && raw.bytes !== undefined) {
+    descriptor.bytes = raw.bytes;
+  }
+  if (descriptor.embedded === undefined && raw.embedded !== undefined) {
+    descriptor.embedded = raw.embedded;
+  }
+
+  return descriptor;
+};
+
 module.exports = {
   determineFileType,
   getBufferMetadata,
   cleanFileName,
   getContentDisposition,
+  toPublicFileDescriptor,
+  PUBLIC_DESCRIPTOR_FIELDS,
 };

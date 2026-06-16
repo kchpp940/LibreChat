@@ -70,7 +70,7 @@ const textAttachment = (overrides: Partial<TAttachment> = {}): TAttachment =>
      * file to add a `RecoilRoot` wrapper. JSON has the same shape (text-
      * bearing, downloadable, expandable) without the panel coupling. */
     filename: 'output.json',
-    filepath: '/files/output.json',
+    url: '/files/output.json',
     text: '{"a":1,"b":2,"c":3}',
     ...overrides,
   }) as TAttachment;
@@ -123,7 +123,7 @@ describe('TextAttachment (via Attachment default export)', () => {
   });
 
   it('hides the download chip when filepath is absent', () => {
-    render(<Attachment attachment={textAttachment({ filepath: '' })} />);
+    render(<Attachment attachment={textAttachment({ url: '' })} />);
     expect(screen.queryByTestId('file-container')).not.toBeInTheDocument();
   });
 
@@ -202,13 +202,13 @@ describe('AttachmentGroup', () => {
       textAttachment({
         file_id: 'placeholder',
         filename: 'placeholder.zip',
-        filepath: '',
+        url: '',
         text: undefined,
       }),
       textAttachment({
         file_id: 'json',
         filename: 'output.json',
-        filepath: '/files/output.json',
+        url: '/files/output.json',
         text: '{"ok":true}',
       }),
     ] as TAttachment[];
@@ -232,7 +232,7 @@ describe('AttachmentGroup', () => {
       textAttachment({
         file_id: 'json',
         filename: 'output.json',
-        filepath: '/files/output.json',
+        url: '/files/output.json',
         text: longJson,
       }),
     ] as TAttachment[];

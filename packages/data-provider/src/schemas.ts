@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { TMessageContentParts, FunctionTool, FunctionToolCall } from './types/assistants';
 import type { SearchResultData } from './types/web';
-import type { TFile } from './types/files';
+import type { TFile, PublicFileAssetDescriptor } from './types/files';
 import { TFeedback, feedbackSchema } from './feedback';
 import { Tools } from './types/assistants';
 
@@ -809,18 +809,23 @@ export type TAttachmentMetadata = {
 };
 
 export type TAttachment =
-  | (TFile & TAttachmentMetadata)
-  | (Pick<TFile, 'filename' | 'filepath' | 'conversationId'> & {
+  | (PublicFileAssetDescriptor & TAttachmentMetadata)
+  | (Pick<PublicFileAssetDescriptor, 'filename' | 'url' | 'conversationId'> & {
       expiresAt: number;
+      width?: number;
+      height?: number;
     } & TAttachmentMetadata)
-  | (Partial<Pick<TFile, 'filename' | 'filepath'>> &
-      Pick<TFile, 'conversationId'> &
+  | (Partial<Pick<PublicFileAssetDescriptor, 'filename' | 'url'>> &
+      Pick<PublicFileAssetDescriptor, 'conversationId'> & {
+        width?: number;
+        height?: number;
+      } &
       TAttachmentMetadata);
 
 export type TMessage = z.input<typeof tMessageSchema> & {
   children?: TMessage[];
   content?: TMessageContentParts[];
-  files?: Partial<TFile>[];
+  files?: Partial<PublicFileAssetDescriptor>[];
   depth?: number;
   siblingIndex?: number;
   attachments?: TAttachment[];

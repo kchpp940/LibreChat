@@ -204,13 +204,19 @@ const ProjectChatsInline = memo(function ProjectChatsInline({
     () => new Set(activeJobsData?.activeJobIds ?? []),
     [activeJobsData?.activeJobIds],
   );
-  const { conversations, hasNext, isLoading } = useConversationsInfiniteQuery(
+  const { data, isLoading } = useConversationsInfiniteQuery(
     { projectId, sortBy: 'updatedAt', sortDirection: 'desc' },
     { staleTime: 30000, cacheTime: 300000 },
   );
 
+  const conversations = useMemo<TConversation[]>(
+    () =>
+      (data?.pages.flatMap((page) => page.conversations) ?? []).filter(Boolean) as TConversation[],
+    [data?.pages],
+  );
   const hasMore =
-    conversations.length > INLINE_CHAT_LIMIT || hasNext;
+    conversations.length > INLINE_CHAT_LIMIT ||
+    (data?.pages[data.pages.length - 1]?.nextCursor ?? null) != null;
   const visible = conversations.slice(0, INLINE_CHAT_LIMIT);
 
   if (isLoading && conversations.length === 0) {

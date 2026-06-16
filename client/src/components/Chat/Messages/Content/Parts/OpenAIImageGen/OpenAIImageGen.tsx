@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { PixelCard } from '@librechat/client';
-import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
+import type { TAttachment, PublicFileAssetDescriptor, TAttachmentMetadata } from 'librechat-data-provider';
 import { ToolIcon, isError } from '~/components/Chat/Messages/Content/ToolOutput';
 import Image from '~/components/Chat/Messages/Content/Image';
 import { useProgress, useLocalize } from '~/hooks';
@@ -98,9 +98,9 @@ export default function OpenAIImageGen({
   const {
     width: imageWidth,
     height: imageHeight,
-    filepath = null,
+    url: imageUrl = null,
     filename = '',
-  } = (attachment as TFile & TAttachmentMetadata) || {};
+  } = (attachment as PublicFileAssetDescriptor & TAttachmentMetadata) || {};
 
   let origWidth = width ?? imageWidth;
   let origHeight = height ?? imageHeight;
@@ -240,10 +240,10 @@ export default function OpenAIImageGen({
                 height={dimensions.height}
               />
             )}
-            {filepath && (
+            {imageUrl && (
               <Image
                 altText={filename}
-                imagePath={filepath}
+                imagePath={imageUrl}
                 width={Number(dimensions.width?.split('px')[0])}
                 height={Number(dimensions.height?.split('px')[0])}
                 args={parsedArgs}

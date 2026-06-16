@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef } from 'react';
 import { v4 } from 'uuid';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Constants, EndpointURLs, ContentTypes, tPresetSchema, tMessageSchema, tConvoUpdateSchema, isAssistantsEndpoint, } from 'librechat-data-provider';
-import { logger, setDraft, scrollToEnd, getAllContentText, upsertConvoInAllQueries, } from '~/utils';
-import { startupConfigKey, queueTitleGeneration, markTitleGenerationProcessed, useConversationCache, } from '~/data-provider';
+import { QueryKeys, Constants, EndpointURLs, ContentTypes, tPresetSchema, tMessageSchema, tConvoUpdateSchema, isAssistantsEndpoint, } from 'librechat-data-provider';
+import { logger, setDraft, scrollToEnd, getAllContentText, upsertConvoInAllQueries, updateConvoInAllQueries, removeConvoFromAllQueries, findConversationInInfinite, } from '~/utils';
+import { startupConfigKey, queueTitleGeneration, markTitleGenerationProcessed, } from '~/data-provider';
 import { shouldResetSubagentAtomsOnConversationChange } from './cleanup';
 import useAttachmentHandler from '~/hooks/SSE/useAttachmentHandler';
 import useContentHandler from '~/hooks/SSE/useContentHandler';
@@ -111,21 +111,26 @@ const createErrorMessage = ({ errorMetadata, getMessages, submission, error, }) 
     }
     return tMessageSchema.parse(errorMessage);
 };
-export const getConvoTitle = ({ parentId, cache, currentTitle, conversationId, }) => {
+export const getConvoTitle = ({ parentId, queryClient, currentTitle, conversationId, }) => {
     if (parentId !== Constants.NO_PARENT &&
         (currentTitle?.toLowerCase().includes('new chat') ?? false)) {
-        const currentConvo = conversationId ? cache.getSingleConversation(conversationId) : undefined;
+        const currentConvo = queryClient.getQueryData([
+            QueryKeys.conversation,
+            conversationId,
+        ]);
         if (currentConvo?.title) {
             return currentConvo.title;
         }
-        const cachedConvo = conversationId ? cache.findConversation(conversationId) : undefined;
+        const convos = queryClient.getQueryData([
+            QueryKeys.allConversations,
+        ]);
+        const cachedConvo = findConversationInInfinite(convos, conversationId ?? '');
         return cachedConvo?.title ?? currentConvo?.title ?? null;
     }
     return currentTitle;
 };
-export default function useEventHandlers({ setMessages, getMessages, setCompleted, isAddedRequest = false, setConversation, newConversation, runIndex = 0, setShowStopButton, }) {
+export default function useEventHandlers({ setMessages, getMessages, setCompleted, isAddedRequest = false, setConversation, newConversation, runIndex = 0, }) {
     const queryClient = useQueryClient();
-    const cache = useConversationCache();
     const { announcePolite } = useLiveAnnouncer();
     const applyAgentTemplate = useApplyAgentTemplate();
     const navigate = useNavigate();
@@ -186,7 +191,6 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
     const messageHandler = useCallback((data, submission) => {
         const { messages, userMessage, initialResponse, isRegenerate = false } = submission;
         const text = data ?? '';
-        setIsSubmitting(true);
         const currentTime = Date.now();
         if (currentTime - lastAnnouncementTimeRef.current > MESSAGE_UPDATE_INTERVAL) {
             announcePolite({ message: 'composing', isStatus: true });
@@ -211,7 +215,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 },
             ]);
         }
-    }, [setMessages, announcePolite, setIsSubmitting]);
+    }, [setMessages, announcePolite]);
     const cancelHandler = useCallback((data, submission) => {
         const { requestMessage, responseMessage, conversation } = data;
         const { messages, isRegenerate = false } = submission;
@@ -227,7 +231,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
         }
         const isNewConvo = conversation.conversationId !== submission.conversation.conversationId;
         if (isNewConvo) {
-            cache.removeConversation(submission.conversation.conversationId);
+            removeConvoFromAllQueries(queryClient, submission.conversation.conversationId);
         }
         if (setConversation && !isAddedRequest) {
             setConversation((prevState) => {
@@ -235,9 +239,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 return update;
             });
         }
-
-        setIsSubmitting(false);
-    }, [setMessages, setConversation, isAddedRequest, queryClient, setIsSubmitting, cache]);
+    }, [setMessages, setConversation, isAddedRequest, queryClient]);
     const syncHandler = useCallback((data, submission) => {
         const { conversationId, thread_id, responseMessage, requestMessage } = data;
         const { initialResponse, messages: _messages, userMessage } = submission;
@@ -265,7 +267,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 const parentId = requestMessage.parentMessageId;
                 const title = getConvoTitle({
                     parentId,
-                    cache,
+                    queryClient,
                     conversationId,
                     currentTitle: prevState?.title,
                 });
@@ -282,7 +284,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 upsertConvoInAllQueries(queryClient, update);
             }
             else {
-                cache.updateConversation(update.conversationId, (_c) => update, true);
+                updateConvoInAllQueries(queryClient, update.conversationId, (_c) => update, true);
             }
             if (update.chatProjectId) {
                 queryClient.invalidateQueries([QueryKeys.projects]);
@@ -300,9 +302,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 return update;
             });
         }
-
-        setShowStopButton(true);
-    }, [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, setShowStopButton, chatStreamDispatch, cache]);
+    }, [queryClient, setMessages, isAddedRequest, announcePolite, setConversation, chatStreamDispatch]);
     const createdHandler = useCallback((data, submission) => {
         queryClient.invalidateQueries([QueryKeys.mcpConnectionStatus]);
         queryClient.invalidateQueries([QueryKeys.mcpTools]);
@@ -348,7 +348,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 const parentId = isRegenerate ? userMessage.overrideParentMessageId : parentMessageId;
                 const title = getConvoTitle({
                     parentId,
-                    cache,
+                    queryClient,
                     conversationId,
                     currentTitle: prevState?.title,
                 });
@@ -364,7 +364,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                     upsertConvoInAllQueries(queryClient, update);
                 }
                 else {
-                    cache.updateConversation(update.conversationId, (_c) => update, true);
+                    updateConvoInAllQueries(queryClient, update.conversationId, (_c) => update, true);
                 }
                 if (update.chatProjectId) {
                     queryClient.invalidateQueries([QueryKeys.projects]);
@@ -399,15 +399,14 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
         setConversation,
         applyAgentTemplate,
         chatStreamDispatch,
-        cache,
     ]);
     const titleHandler = useCallback((event) => {
         const { conversationId, title } = event.data ?? {};
         if (!conversationId || !hasRealTitle(title)) {
             return;
         }
-        cache.setSingleConversation(conversationId, (convo) => convo ? { ...convo, title } : convo);
-        cache.updateConversation(conversationId, (convo) => ({ ...convo, title }));
+        queryClient.setQueryData([QueryKeys.conversation, conversationId], (convo) => convo ? { ...convo, title } : convo);
+        updateConvoInAllQueries(queryClient, conversationId, (convo) => ({ ...convo, title }));
         markTitleGenerationProcessed(conversationId);
         if (location.pathname.includes(conversationId)) {
             document.title = title;
@@ -427,7 +426,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 };
             });
         }
-    }, [cache, location.pathname, setConversation, isAddedRequest]);
+    }, [queryClient, location.pathname, setConversation, isAddedRequest]);
     const finalHandler = useCallback((data, submission) => {
         const { requestMessage, responseMessage, conversation, runMessages } = data;
         const { messages, conversation: submissionConvo, isRegenerate = false, isTemporary: _isTemporary = false, } = submission;
@@ -453,8 +452,8 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                     return;
                 }
                 if (currentConvoId && currentConvoId !== Constants.NEW_CONVO) {
-                    cache.removeConversation(currentConvoId);
-                    cache.removeSingleConversation(currentConvoId);
+                    removeConvoFromAllQueries(queryClient, currentConvoId);
+                    queryClient.removeQueries({ queryKey: [QueryKeys.conversation, currentConvoId] });
                     queryClient.removeQueries({ queryKey: [QueryKeys.messages, currentConvoId] });
                 }
                 setMessages([]);
@@ -505,7 +504,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
             if (!conversation.conversationId && hasNoResponse) {
                 const currentConvoId = (submissionConvo.conversationId ?? conversation.conversationId) || Constants.NEW_CONVO;
                 if (isNewConvo && submissionConvo.conversationId) {
-                    cache.removeConversation(submissionConvo.conversationId);
+                    removeConvoFromAllQueries(queryClient, submissionConvo.conversationId);
                 }
                 const isNewChat = location.pathname === `/c/${Constants.NEW_CONVO}` &&
                     currentConvoId === Constants.NEW_CONVO;
@@ -553,7 +552,7 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                 queryClient.setQueryData([QueryKeys.messages, conversation.conversationId], [...currentMessages]);
             }
             if (isNewConvo && submissionConvo.conversationId) {
-                cache.removeConversation(submissionConvo.conversationId);
+                removeConvoFromAllQueries(queryClient, submissionConvo.conversationId);
             }
             /** A title applied locally (e.g. an immediate-mode title fetched while the
              *  response was still streaming) must survive the final event, whose
@@ -575,20 +574,17 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
                         update.title = prevTitle;
                     }
                     if (conversation.conversationId) {
-                        cache.setSingleConversation(
-                            conversation.conversationId,
-                            (cachedConvo) => {
-                                const merged = {
-                                    ...cachedConvo,
-                                    ...serverConversation,
-                                };
-                                const cachedTitle = cachedConvo?.title;
-                                if (!hasRealTitle(serverConversation.title) && hasRealTitle(cachedTitle)) {
-                                    merged.title = cachedTitle;
-                                }
-                                return merged;
-                            },
-                        );
+                        queryClient.setQueryData([QueryKeys.conversation, conversation.conversationId], (cachedConvo) => {
+                            const merged = {
+                                ...cachedConvo,
+                                ...serverConversation,
+                            };
+                            const cachedTitle = cachedConvo?.title;
+                            if (!hasRealTitle(serverConversation.title) && hasRealTitle(cachedTitle)) {
+                                merged.title = cachedTitle;
+                            }
+                            return merged;
+                        });
                     }
                     return update;
                 });
@@ -622,13 +618,10 @@ export default function useEventHandlers({ setMessages, getMessages, setComplete
         isAddedRequest,
         announcePolite,
         setConversation,
-        setIsSubmitting,
-        setShowStopButton,
         location.pathname,
         applyAgentTemplate,
         attachmentHandler,
         chatStreamDispatch,
-        cache,
     ]);
     const errorHandler = useCallback(({ data, submission }) => {
         const { messages, userMessage, initialResponse } = submission;

@@ -1,5 +1,5 @@
 import debounce from 'lodash/debounce';
-import { FileSources, EToolResources, removeNullishValues } from 'librechat-data-provider';
+import { EToolResources, removeNullishValues } from 'librechat-data-provider';
 import { useCallback, useState, useEffect } from 'react';
 import type * as t from 'librechat-data-provider';
 import type { UseMutateAsyncFunction } from '@tanstack/react-query';
@@ -51,20 +51,17 @@ const useFileDeletion = ({
   const debouncedDelete = useCallback(debounce(executeBatchDelete, 1000), []);
 
   useEffect(() => {
-    // Cleanup function for debouncedDelete when component unmounts or before re-render
     return () => debouncedDelete.cancel();
   }, [debouncedDelete]);
 
   const deleteFile = useCallback(
-    ({ file: _file, setFiles }: { file: ExtendedFile | t.TFile; setFiles?: FileMapSetter }) => {
+    ({ file: _file, setFiles }: { file: ExtendedFile | t.PublicFileAssetDescriptor; setFiles?: FileMapSetter }) => {
       const {
         file_id,
         temp_file_id = '',
-        filepath = '',
-        source = FileSources.local,
         embedded,
         attached = false,
-      } = _file as t.TFile & { attached?: boolean };
+      } = _file as ExtendedFile & { attached?: boolean };
 
       const progress = _file['progress'] ?? 1;
 
@@ -73,9 +70,7 @@ const useFileDeletion = ({
       }
       const file: t.BatchFile = {
         file_id,
-        embedded,
-        filepath,
-        source,
+        embedded: embedded ?? false,
       };
 
       if (setFiles) {
@@ -113,28 +108,22 @@ const useFileDeletion = ({
   );
 
   const deleteFiles = useCallback(
-    ({ files, setFiles }: { files: ExtendedFile[] | t.TFile[]; setFiles?: FileMapSetter }) => {
+    ({ files, setFiles }: { files: ExtendedFile[] | t.PublicFileAssetDescriptor[]; setFiles?: FileMapSetter }) => {
       const batchFiles: t.BatchFile[] = [];
       for (const _file of files) {
-        const {
-          file_id,
-          embedded,
-          temp_file_id,
-          filepath = '',
-          source = FileSources.local,
-        } = _file;
+        const file_id = _file.file_id;
+        const embedded = _file.embedded;
+        const temp_file_id = 'temp_file_id' in _file ? _file.temp_file_id : undefined;
 
         batchFiles.push({
-          source,
           file_id,
-          filepath,
           temp_file_id,
           embedded: embedded ?? false,
         });
 
         deletePreview(file_id);
         if (temp_file_id) {
-          deletePreview(temp_file_id);
+          deletePreview(temp_file_id as string);
         }
       }
 

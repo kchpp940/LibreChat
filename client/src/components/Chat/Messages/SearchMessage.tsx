@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { SearchHitType, type SearchHit } from 'librechat-data-provider';
+import { TOptions } from 'i18next';
 import { useAuthContext, useLocalize } from '~/hooks';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import MinimalHoverButtons from '~/components/Chat/Messages/MinimalHoverButtons';
@@ -13,7 +14,7 @@ import SubRow from './SubRow';
 import { cn } from '~/utils';
 import store from '~/store';
 
-const HitTypeBadge = ({ type, localize }: { type: SearchHitType; localize: (key: string) => string }) => {
+const HitTypeBadge = ({ type, localize }: { type: SearchHitType; localize: (key: string, options?: TOptions) => string }) => {
   const badgeStyles: Record<SearchHitType, string> = {
     [SearchHitType.TEXT]: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
     [SearchHitType.TOOL_CALL]: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
@@ -41,7 +42,7 @@ const HitTypeBadge = ({ type, localize }: { type: SearchHitType; localize: (key:
   );
 };
 
-const SearchHitsSummary = ({ hits, localize }: { hits: SearchHit[]; localize: (key: string) => string }) => {
+const SearchHitsSummary = ({ hits, localize }: { hits: SearchHit[]; localize: (key: string, options?: TOptions) => string }) => {
   if (!hits || hits.length === 0) {
     return null;
   }
@@ -86,7 +87,7 @@ const MessageAvatar = ({ iconData }: { iconData: TMessageIcon }) => (
   </div>
 );
 
-const MessageBody = ({ message, messageLabel, fontSize, searchHits, localize }) => (
+const MessageBody = ({ message, messageLabel, fontSize, searchHits, localize }: { message: any; messageLabel: string; fontSize: string; searchHits?: SearchHit[]; localize: (key: string, options?: TOptions) => string }) => (
   <div
     className={cn('relative flex w-11/12 flex-col', message.isCreatedByUser ? '' : 'agent-turn')}
   >
@@ -149,7 +150,7 @@ export default function SearchMessage({
             messageLabel={messageLabel}
             fontSize={fontSize}
             searchHits={searchHits}
-            localize={localize}
+            localize={localize as (key: string, options?: TOptions) => string}
           />
         </div>
       </div>

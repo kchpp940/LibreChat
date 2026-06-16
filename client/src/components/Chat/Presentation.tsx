@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
-import { FileSources, LocalStorageKeys } from 'librechat-data-provider';
+import { LocalStorageKeys } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import useResetArtifactsOnConversationChange from '~/hooks/Artifacts/useResetArtifactsOnConversationChange';
 import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
@@ -43,12 +43,11 @@ export default function Presentation({ children }: { children: React.ReactNode }
     const files = Object.values(map)
       .filter(
         (file) =>
-          file.filepath != null && file.source && !(file.embedded ?? false) && file.temp_file_id,
+          file.url != null && !(file.embedded ?? false) && file.temp_file_id,
       )
       .map((file) => ({
         file_id: file.file_id,
-        filepath: file.filepath as string,
-        source: file.source as FileSources,
+        filepath: file.url,
         embedded: !!(file.embedded ?? false),
       }));
 

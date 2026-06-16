@@ -61,7 +61,7 @@ const baseAttachment = (overrides: Partial<TAttachment> = {}): TAttachment =>
   ({
     file_id: 'file-1',
     filename: 'unset',
-    filepath: '/files/file-1',
+    url: '/files/file-1',
     type: 'application/octet-stream',
     ...overrides,
   }) as TAttachment;

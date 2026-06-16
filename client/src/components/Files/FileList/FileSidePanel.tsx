@@ -1,130 +1,39 @@
 import React from 'react';
 import FileList from './FileList';
 import { Button, Input } from '@librechat/client';
-import { TFile } from 'librechat-data-provider/dist/types';
+import { PublicFileAssetDescriptor } from 'librechat-data-provider';
+import type { TFile } from 'librechat-data-provider';
 import UploadFileButton from './UploadFileButton';
 import { ListFilter } from 'lucide-react';
 import { useLocalize } from '~/hooks';
 
-const fakeFiles = [
+const fakeFiles: PublicFileAssetDescriptor[] = [
   {
     filename: 'File1.jpg',
-    object: 'Description 1',
     bytes: 10000,
     createdAt: '2022-01-01T10:00:00',
-    _id: '1',
+    file_id: '1',
+    type: 'image/jpeg',
+    url: '/files/1',
+    embedded: false,
   },
   {
     filename: 'File2.jpg',
-    object: 'Description 2',
     bytes: 15000,
     createdAt: '2022-01-02T15:30:00',
-    _id: '2',
+    file_id: '2',
+    type: 'image/jpeg',
+    url: '/files/2',
+    embedded: false,
   },
   {
     filename: 'File3.jpg',
-    object: 'Description 3',
     bytes: 20000,
     createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
-  },
-  {
-    filename: 'File3.jpg',
-    object: 'Description 3',
-    bytes: 20000,
-    createdAt: '2022-01-03T09:45:00',
-    _id: '3',
+    file_id: '3',
+    type: 'image/jpeg',
+    url: '/files/3',
+    embedded: false,
   },
 ];
 
@@ -176,7 +85,7 @@ export default function FileSidePanel() {
       </div>
       <div className="mt-3">
         <FileList
-          files={fakeFiles as TFile[]}
+          files={fakeFiles as unknown as TFile[]}
           deleteFile={deleteFile}
           attachedVectorStores={attachedVectorStores}
         />

@@ -2,7 +2,6 @@ import { useRecoilCallback } from 'recoil';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataService, QueryKeys } from 'librechat-data-provider';
 import store from '~/store';
-import { useConversationCache } from '../Conversations';
 export const useCreateProjectMutation = () => {
     const queryClient = useQueryClient();
     return useMutation((payload) => dataService.createProject(payload), {
@@ -22,7 +21,6 @@ export const useUpdateProjectMutation = () => {
 };
 export const useDeleteProjectMutation = () => {
     const queryClient = useQueryClient();
-    const cache = useConversationCache();
     const clearActiveConversationProject = useRecoilCallback(({ snapshot, set }) => async (projectId) => {
         const conversation = await snapshot.getPromise(store.conversationByIndex(0));
         if (conversation?.conversationId && conversation.chatProjectId === projectId) {
@@ -35,16 +33,20 @@ export const useDeleteProjectMutation = () => {
     return useMutation((projectId) => dataService.deleteProject(projectId), {
         onSuccess: (_result, projectId) => {
             clearActiveConversationProject(projectId);
+            // Invalidate so an *active* project-detail observer refetches and settles into a
+            // not-found state — consumers (e.g. ChatRoute) can then react to the deletion.
+            // (Removing it instead leaves observers stuck loading under `refetchOnMount: false`.)
             queryClient.invalidateQueries([QueryKeys.project, projectId]);
+            // Drop any *inactive* cached detail so a later visit to the deleted project
+            // refetches (→ not-found) rather than rendering stale cache within `cacheTime`.
             queryClient.removeQueries([QueryKeys.project, projectId], { type: 'inactive' });
             queryClient.invalidateQueries([QueryKeys.projects]);
-            cache.invalidateLists({ refetchFirstPageOnly: false });
+            queryClient.invalidateQueries([QueryKeys.allConversations]);
         },
     });
 };
 export const useAssignConversationToProjectMutation = () => {
     const queryClient = useQueryClient();
-    const cache = useConversationCache();
     const updateActiveConversation = useRecoilCallback(({ set }) => (conversation) => {
         if (!conversation.conversationId) {
             return;
@@ -55,29 +57,17 @@ export const useAssignConversationToProjectMutation = () => {
         });
     }, []);
     return useMutation((payload) => dataService.assignConversationToProject(payload), {
-        onMutate: async (payload) => {
-            const context = await cache.optimisticUpdate(payload.conversationId, (c) => {
-                c.updateConversation(payload.conversationId, (convo) => ({ ...convo, chatProjectId: payload.projectId }), { moveToTop: true });
-            });
-            return context;
-        },
-        onError: (_err, _vars, context) => {
-            if (context?.rollback) {
-                context.rollback();
-            }
-        },
         onSuccess: (result) => {
             updateActiveConversation(result.conversation);
-            if (result.conversation.conversationId) {
-                cache.updateConversation(result.conversation.conversationId, () => result.conversation, { moveToTop: true });
-            }
+            queryClient.setQueryData([QueryKeys.conversation, result.conversation.conversationId], result.conversation);
             [result.previousProjectId, result.projectId].forEach((projectId) => {
                 if (projectId) {
-                    cache.invalidateProject(projectId);
+                    queryClient.invalidateQueries([QueryKeys.project, projectId]);
                 }
             });
             queryClient.invalidateQueries([QueryKeys.projects]);
-            cache.invalidateLists({ refetchFirstPageOnly: true, includeProjects: true });
+            queryClient.invalidateQueries([QueryKeys.allConversations]);
+            queryClient.invalidateQueries([QueryKeys.projectConversations]);
         },
     });
 };

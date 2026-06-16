@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, AlertCircle, Download, ChevronDown, Files as FilesIcon } from 'lucide-react';
 import { Tools } from 'librechat-data-provider';
-import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
+import type { TAttachment, PublicFileAssetDescriptor, TAttachmentMetadata } from 'librechat-data-provider';
 import type { ToolArtifactType } from '~/utils/artifacts';
 import {
   artifactTypeForAttachment,
@@ -52,13 +52,11 @@ const PreviewPlaceholderCard = memo(
     previewError?: string;
   }) => {
     const localize = useLocalize();
-    const file = attachment as TFile & TAttachmentMetadata;
+    const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
     const { handleDownload } = useAttachmentLink({
-      href: attachment.filepath ?? '',
+      href: (attachment as PublicFileAssetDescriptor).url ?? '',
       filename: attachment.filename ?? '',
       file_id: file.file_id,
-      user: file.user,
-      source: file.source,
     });
     const fileType = getFileType('artifact');
     const visibleFilename = displayFilename(attachment.filename);
@@ -120,13 +118,11 @@ PreviewPlaceholderCard.displayName = 'PreviewPlaceholderCard';
 
 const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   const { handleDownload } = useAttachmentLink({
-    href: attachment.filepath ?? '',
+    href: attachment.url ?? '',
     filename: attachment.filename ?? '',
     file_id: file.file_id,
-    user: file.user,
-    source: file.source,
   });
   const extension = attachment.filename?.split('.').pop();
   /* Bridge the deferred-preview lifecycle: poll the backend for the
@@ -142,7 +138,7 @@ const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> 
     return () => clearTimeout(timer);
   }, []);
 
-  if (!attachment.filepath) {
+  if (!attachment.url) {
     return null;
   }
   /* Pending or failed: render the card-shaped placeholder rather than
@@ -203,7 +199,7 @@ const FileAttachmentGroup = memo(({ attachments }: { attachments: TAttachment[] 
   const [isExpanded, setIsExpanded] = useState(false);
   const { style: expandStyle, ref: expandRef } = useExpandCollapse(isExpanded);
   const visibleAttachments = useMemo(
-    () => attachments.filter((attachment) => Boolean(attachment.filepath)),
+    () => attachments.filter((attachment) => Boolean(attachment.url)),
     [attachments],
   );
   const count = visibleAttachments.length;
@@ -325,13 +321,11 @@ const TextAttachment = memo(
     // height? Char count is a poor proxy (a 100-char file with many newlines can
     // overflow; 800 chars of dense single-line text may not), so we measure.
     const [overflowed, setOverflowed] = useState(false);
-    const file = attachment as TFile & TAttachmentMetadata;
+    const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
     const { handleDownload } = useAttachmentLink({
-      href: attachment.filepath ?? '',
+      href: (attachment as PublicFileAssetDescriptor).url ?? '',
       filename: attachment.filename ?? '',
       file_id: file.file_id,
-      user: file.user,
-      source: file.source,
     });
     const extension = attachment.filename?.split('.').pop();
     const text = file.text ?? '';
@@ -365,7 +359,7 @@ const TextAttachment = memo(
           WebkitFontSmoothing: 'subpixel-antialiased',
         }}
       >
-        {attachment.filepath && showFileChip && (
+        {attachment.url && showFileChip && (
           <FileContainer
             file={attachment}
             onClick={handleDownload}
@@ -381,7 +375,7 @@ const TextAttachment = memo(
               <span className="min-w-0 truncate text-sm font-medium" title={visibleFilename}>
                 {visibleFilename}
               </span>
-              {attachment.filepath && (
+              {attachment.url && (
                 <button
                   type="button"
                   onClick={handleDownload}
@@ -426,7 +420,7 @@ const TextAttachment = memo(
 
 const ImageAttachment = memo(({ attachment }: { attachment: TAttachment }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
+  const { width, height, url = null } = attachment;
 
   useEffect(() => {
     setIsLoaded(false);
@@ -449,7 +443,7 @@ const ImageAttachment = memo(({ attachment }: { attachment: TAttachment }) => {
     >
       <Image
         altText={attachment.filename || 'attachment image'}
-        imagePath={filepath ?? ''}
+        imagePath={url ?? ''}
         width={width}
         height={height}
         className="mb-4"
@@ -470,7 +464,7 @@ const PanelArtifact = memo(({ attachment, type }: PanelArtifactProps) => {
   const placeholder = localize('com_ui_artifact_preview_pending');
   const artifact = useMemo(
     () =>
-      fileToArtifact(attachment as TFile & TAttachmentMetadata, {
+      fileToArtifact(attachment as PublicFileAssetDescriptor & TAttachmentMetadata, {
         placeholder,
         preClassifiedType: type,
       }),
@@ -484,7 +478,7 @@ const PanelArtifact = memo(({ attachment, type }: PanelArtifactProps) => {
 PanelArtifact.displayName = 'PanelArtifact';
 
 const MermaidArtifact = memo(({ attachment }: { attachment: TAttachment }) => {
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   if (!file.text) {
     return null;
   }
@@ -522,7 +516,7 @@ export default function Attachment({ attachment }: { attachment?: TAttachment })
   if (isTextAttachment(attachment)) {
     return <TextAttachment attachment={attachment} />;
   }
-  if (!attachment.filepath) {
+  if (!attachment.url) {
     return null;
   }
   return <FileAttachment attachment={attachment} />;
@@ -554,7 +548,7 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
       imageAttachments.push(attachment);
       return;
     }
-    if ((attachment as Partial<TFile>).status === 'pending') {
+    if ((attachment as Partial<PublicFileAssetDescriptor>).status === 'pending') {
       panelRow.push({ attachment, type: null });
       return;
     }
@@ -590,12 +584,12 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
   imageAttachments.sort(bySalience);
 
   const downloadableFileAttachments = fileAttachments.filter((attachment) =>
-    Boolean(attachment.filepath),
+    Boolean(attachment.url),
   );
   const downloadableTextAttachments = textAttachments.filter((attachment) =>
-    Boolean(attachment.filepath),
+    Boolean(attachment.url),
   );
-  const textOnlyAttachments = textAttachments.filter((attachment) => !attachment.filepath);
+  const textOnlyAttachments = textAttachments.filter((attachment) => !attachment.url);
   const groupDownloadableFiles =
     downloadableFileAttachments.length + downloadableTextAttachments.length > 1;
   const groupedFileAttachments = groupDownloadableFiles
@@ -618,7 +612,7 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
             />
           ))}
           {pendingPanel.map(({ attachment }, index) =>
-            attachment.filepath ? (
+            attachment.url ? (
               <FileAttachment
                 attachment={attachment}
                 key={renderAttachmentKey('pending', attachment, index)}

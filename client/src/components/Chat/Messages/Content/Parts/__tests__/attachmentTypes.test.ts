@@ -13,7 +13,7 @@ const baseAttachment = (overrides: Partial<TAttachment> = {}): TAttachment =>
   ({
     file_id: 'file-1',
     filename: 'unset',
-    filepath: '/files/file-1',
+    url: '/files/file-1',
     type: 'application/octet-stream',
     ...overrides,
   }) as TAttachment;
@@ -24,7 +24,7 @@ describe('isImageAttachment', () => {
       filename: 'chart.png',
       width: 800,
       height: 600,
-      filepath: '/files/chart.png',
+      url: '/files/chart.png',
     } as Partial<TAttachment>);
     expect(isImageAttachment(attachment)).toBe(true);
   });
@@ -64,7 +64,7 @@ describe('isImageAttachment', () => {
       filename: 'chart.png',
       width: 800,
       height: 600,
-      filepath: null as unknown as string,
+      url: null as unknown as string,
     } as Partial<TAttachment>);
     expect(isImageAttachment(attachment)).toBe(false);
   });

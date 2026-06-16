@@ -1,7 +1,6 @@
 import { Spinner, FileIcon } from '@librechat/client';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
-import SourceIcon from './SourceIcon';
 import { cn } from '~/utils';
 
 const FilePreview = ({
@@ -9,7 +8,7 @@ const FilePreview = ({
   fileType,
   className = '',
 }: {
-  file?: Partial<ExtendedFile | TFile>;
+  file?: Partial<ExtendedFile | PublicFileAssetDescriptor>;
   fileType: {
     paths: React.FC;
     fill: string;
@@ -20,7 +19,6 @@ const FilePreview = ({
   return (
     <div className={cn('relative size-10 shrink-0 overflow-hidden rounded-xl', className)}>
       <FileIcon file={file} fileType={fileType} />
-      <SourceIcon source={file?.source} isCodeFile={!!file?.['metadata']?.fileIdentifier} />
       {typeof file?.['progress'] === 'number' && file?.['progress'] < 1 && (
         <Spinner
           bgOpacity={0.2}

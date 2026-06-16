@@ -28,7 +28,7 @@ import {
   TableHeader,
   useMediaQuery,
 } from '@librechat/client';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { ColumnVisibilityDropdown } from './ColumnVisibilityDropdown';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
 import { useLocalize, TranslationKeys } from '~/hooks';
@@ -101,7 +101,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
             const filesToDelete = table
               .getFilteredSelectedRowModel()
               .rows.map((row) => row.original);
-            deleteFiles({ files: filesToDelete as TFile[], setFiles });
+            deleteFiles({ files: filesToDelete as PublicFileAssetDescriptor[], setFiles });
             setRowSelection({});
           }}
           disabled={!table.getFilteredSelectedRowModel().rows.length || isDeleting}

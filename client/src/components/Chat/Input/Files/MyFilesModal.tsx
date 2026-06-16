@@ -1,5 +1,5 @@
-import { FileSources, FileContext } from 'librechat-data-provider';
-import type { TFile } from 'librechat-data-provider';
+import { FileContext } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '@librechat/client';
 import { useGetFiles } from '~/data-provider';
 import { DataTable, columns } from './Table';
@@ -16,13 +16,12 @@ export function MyFilesModal({
 }) {
   const localize = useLocalize();
 
-  const { data: files = [] } = useGetFiles<TFile[]>({
+  const { data: files = [] } = useGetFiles<PublicFileAssetDescriptor[]>({
     select: (files) =>
-      files.map((file) => {
-        file.context = file.context ?? FileContext.unknown;
-        file.filterSource = file.source === FileSources.firebase ? FileSources.local : file.source;
-        return file;
-      }),
+      files.map((file) => ({
+        ...file,
+        context: file.context ?? FileContext.unknown,
+      })),
   });
 
   return (

@@ -31,7 +31,7 @@ import {
   getEndpointFileConfig,
   fileConfig as defaultFileConfig,
 } from 'librechat-data-provider';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { MyFilesModal } from '~/components/Chat/Input/Files/MyFilesModal';
 import { useFileMapContext, useChatContext } from '~/Providers';
 import { useLocalize, useUpdateFiles } from '~/hooks';
@@ -93,7 +93,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
   const { addFile } = useUpdateFiles(setFiles);
 
   const handleFileClick = useCallback(
-    (file: TFile) => {
+    (file: PublicFileAssetDescriptor) => {
       if (!fileMap?.[file.file_id] || !conversation?.endpoint) {
         showToast({
           message: localize('com_ui_attach_error'),
@@ -106,11 +106,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
       const endpoint = conversation.endpoint;
       const endpointType = conversation.endpointType;
 
-      if (!fileData.source) {
-        return;
-      }
-
-      const isOpenAIStorage = checkOpenAIStorage(fileData.source);
+      const isOpenAIStorage = checkOpenAIStorage(file.filterSource ?? '');
       const isAssistants = isAssistantsEndpoint(endpoint);
 
       if (isOpenAIStorage && !isAssistants) {
@@ -188,15 +184,14 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
         progress: 1,
         attached: true,
         file_id: fileData.file_id,
-        filepath: fileData.filepath,
-        preview: fileData.filepath,
+        url: fileData.url ?? fileData.thumbnailUrl,
+        thumbnailUrl: fileData.thumbnailUrl,
         type: fileData.type,
         height: fileData.height,
         width: fileData.width,
         filename: fileData.filename,
-        source: fileData.source,
         size: fileData.bytes,
-        metadata: fileData.metadata,
+        embedded: fileData.embedded,
       });
     },
     [addFile, files, fileMap, conversation, localize, showToast, fileConfig],
@@ -274,7 +269,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
                               ) {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleFileClick(row.original as TFile);
+                                handleFileClick(row.original as PublicFileAssetDescriptor);
                               }
                             }
                           }}
@@ -287,7 +282,7 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
                               ) {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleFileClick(row.original as TFile);
+                                handleFileClick(row.original as PublicFileAssetDescriptor);
                               }
                             }
                           }}

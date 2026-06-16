@@ -11,6 +11,7 @@ import type {
   UseInfiniteQueryOptions,
   QueryObserverResult,
   UseQueryOptions,
+  InfiniteData,
 } from '@tanstack/react-query';
 import type t from 'librechat-data-provider';
 import type {
@@ -29,11 +30,8 @@ import type {
   SharedLinksListParams,
   SharedLinksResponse,
 } from 'librechat-data-provider';
-import {
-  useConversationListQuery,
-  useConversationByIdQuery,
-  convoQueryKeys,
-} from './Conversations';
+import type { ConversationCursorData } from '~/utils/convos';
+import { findConversationInInfinite, isNotFoundError } from '~/utils';
 
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
@@ -51,14 +49,66 @@ export const useGetConvoIdQuery = (
   id: string,
   config?: UseQueryOptions<t.TConversation>,
 ): QueryObserverResult<t.TConversation> => {
-  return useConversationByIdQuery(id, config);
+  const queryClient = useQueryClient();
+
+  return useQuery<t.TConversation>(
+    [QueryKeys.conversation, id],
+    () => {
+      // Try to find in all fetched infinite pages
+      const convosQuery = queryClient.getQueryData<InfiniteData<ConversationCursorData>>(
+        [QueryKeys.allConversations],
+        { exact: false },
+      );
+      const found = findConversationInInfinite(convosQuery, id);
+
+      if (found && found.messages != null) {
+        return found;
+      }
+      // Otherwise, fetch from API
+      return dataService.getConversationById(id);
+    },
+    {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      retry: (failureCount, error) => {
+        if (isNotFoundError(error)) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+      ...config,
+    },
+  );
 };
 
 export const useConversationsInfiniteQuery = (
   params: ConversationListParams,
-  config?: UseInfiniteQueryOptions<ConversationListResponse>,
+  config?: UseInfiniteQueryOptions<ConversationListResponse, unknown>,
 ) => {
-  return useConversationListQuery(params, config);
+  const { isArchived, sortBy, sortDirection, tags, search, projectId } = params;
+
+  return useInfiniteQuery<ConversationListResponse>({
+    queryKey: [
+      isArchived ? QueryKeys.archivedConversations : QueryKeys.allConversations,
+      { isArchived, sortBy, sortDirection, tags, search, projectId },
+    ],
+    queryFn: ({ pageParam }) =>
+      dataService.listConversations({
+        isArchived,
+        sortBy,
+        sortDirection,
+        tags,
+        search,
+        projectId,
+        cursor: pageParam?.toString(),
+      }),
+    getNextPageParam: (lastPage) => lastPage?.nextCursor ?? undefined,
+    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 30 * 60 * 1000, // 30 minutes
+    ...config,
+  });
 };
 
 export const useMessagesInfiniteQuery = (
@@ -119,7 +169,7 @@ export const useConversationTagsQuery = (
   config?: UseQueryOptions<t.TConversationTagsResponse>,
 ): QueryObserverResult<t.TConversationTagsResponse> => {
   return useQuery<t.TConversationTag[]>(
-    convoQueryKeys.tags(),
+    [QueryKeys.conversationTags],
     () => dataService.getConversationTags(),
     {
       refetchOnWindowFocus: false,

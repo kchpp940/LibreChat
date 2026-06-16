@@ -24,7 +24,7 @@ const ConversationsSection = memo(() => {
         permission: Permissions.USE,
     });
     const search = useRecoilValue(store.search);
-    const { conversations, hasNext, fetchNextPage, isFetchingNextPage, isLoading, isFetching } = useConversationsInfiniteQuery({
+    const { data, fetchNextPage, isFetchingNextPage, isLoading, isFetching } = useConversationsInfiniteQuery({
         tags: tags.length === 0 ? undefined : tags,
         search: search.debouncedQuery || undefined,
     }, {
@@ -32,28 +32,38 @@ const ConversationsSection = memo(() => {
         staleTime: 30000,
         cacheTime: 300000,
     });
+    const computedHasNextPage = useMemo(() => {
+        if (data?.pages && data.pages.length > 0) {
+            const lastPage = data.pages[data.pages.length - 1];
+            return lastPage.nextCursor !== null;
+        }
+        return false;
+    }, [data?.pages]);
     const conversationsRef = useRef(null);
     const { moveToTop } = useNavScrolling({
         setShowLoading,
         fetchNextPage: async (options) => {
-            if (hasNext) {
+            if (computedHasNextPage) {
                 return fetchNextPage(options);
             }
             return Promise.resolve({});
         },
         isFetchingNext: isFetchingNextPage,
     });
+    const conversations = useMemo(() => {
+        return data ? data.pages.flatMap((page) => page.conversations) : [];
+    }, [data]);
     const toggleNav = useCallback(() => {
         if (isSmallScreen) {
             setSidebarExpanded(false);
         }
     }, [isSmallScreen, setSidebarExpanded]);
     const loadMoreConversations = useCallback(() => {
-        if (isFetchingNextPage || !hasNext) {
+        if (isFetchingNextPage || !computedHasNextPage) {
             return;
         }
         fetchNextPage();
-    }, [isFetchingNextPage, hasNext, fetchNextPage]);
+    }, [isFetchingNextPage, computedHasNextPage, fetchNextPage]);
     const [isSearchLoading, setIsSearchLoading] = useState(!!search.query && (search.isTyping || isLoading || isFetching));
     useEffect(() => {
         if (search.isTyping) {

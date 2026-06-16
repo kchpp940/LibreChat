@@ -25,8 +25,8 @@ export function mapAttachments(attachments: Array<t.TAttachment | null | undefin
 }
 
 /** Maps Files by `file_id` for quick lookup */
-export function mapFiles(files: t.TFile[]) {
-  const fileMap = {} as Record<string, t.TFile>;
+export function mapFiles(files: t.PublicFileAssetDescriptor[]) {
+  const fileMap = {} as Record<string, t.PublicFileAssetDescriptor>;
 
   for (const file of files) {
     fileMap[file.file_id] = file;

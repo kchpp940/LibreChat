@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from '@librechat/client';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { AugmentedColumnDef } from '~/common';
 import ActionButton from '~/components/Files/ActionButton';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
@@ -108,7 +108,7 @@ export default function DataTableFile<TData, TValue>({
                 const filesToDelete = table
                   .getFilteredSelectedRowModel()
                   .rows.map((row) => row.original);
-                deleteFiles({ files: filesToDelete as TFile[], setFiles });
+                deleteFiles({ files: filesToDelete as PublicFileAssetDescriptor[], setFiles });
                 setRowSelection({});
               }}
               className="ml-1 gap-2 dark:hover:bg-gray-850/25 sm:ml-0"

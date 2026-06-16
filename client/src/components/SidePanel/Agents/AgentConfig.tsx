@@ -9,6 +9,7 @@ import {
   getEndpointField,
 } from 'librechat-data-provider';
 import type { AgentForm, IconComponentTypes } from '~/common';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import {
   removeFocusOutlines,
   processAgentOption,
@@ -115,9 +116,9 @@ export default function AgentConfig() {
 
   const mergedFileMap = useMemo(() => {
     const newFileMap = { ...fileMap };
-    agentFiles.forEach((file) => {
+    agentFiles.forEach((file: PublicFileAssetDescriptor) => {
       if (file.file_id) {
-        newFileMap[file.file_id] = file;
+        newFileMap[file.file_id] = file as unknown as (typeof newFileMap)[string];
       }
     });
     return newFileMap;

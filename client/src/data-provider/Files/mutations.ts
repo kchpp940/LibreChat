@@ -41,7 +41,7 @@ export const useUploadFileMutation = (
     },
     ...options,
     onSuccess: (data, formData, context) => {
-      queryClient.setQueryData<t.TFile[] | undefined>([QueryKeys.files], (_files) => [
+      queryClient.setQueryData<t.PublicFileAssetDescriptor[] | undefined>([QueryKeys.files], (_files) => [
         data,
         ...(_files ?? []),
       ]);
@@ -166,7 +166,7 @@ export const useDeleteFilesMutation = (
       onError?.(error, vars, context);
     },
     onSuccess: (data, vars, context) => {
-      queryClient.setQueryData<t.TFile[] | undefined>([QueryKeys.files], (cachefiles) => {
+      queryClient.setQueryData<t.PublicFileAssetDescriptor[] | undefined>([QueryKeys.files], (cachefiles) => {
         const { files: filesDeleted } = vars;
 
         const fileMap = filesDeleted.reduce((acc, file) => {

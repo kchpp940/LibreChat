@@ -7,11 +7,11 @@ import { isEphemeralAgent } from '~/common';
 import { addFileToCache } from '~/utils';
 import store from '~/store';
 
-export const useGetFiles = <TData = t.TFile[] | boolean>(
-  config?: UseQueryOptions<t.TFile[], unknown, TData>,
+export const useGetFiles = <TData = t.PublicFileAssetDescriptor[] | boolean>(
+  config?: UseQueryOptions<t.PublicFileAssetDescriptor[], unknown, TData>,
 ): QueryObserverResult<TData, unknown> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TFile[], unknown, TData>([QueryKeys.files], () => dataService.getFiles(), {
+  return useQuery<t.PublicFileAssetDescriptor[], unknown, TData>([QueryKeys.files], () => dataService.getFiles(), {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
@@ -20,12 +20,12 @@ export const useGetFiles = <TData = t.TFile[] | boolean>(
   });
 };
 
-export const useGetAgentFiles = <TData = t.TFile[]>(
+export const useGetAgentFiles = <TData = t.PublicFileAssetDescriptor[]>(
   agentId: string | undefined,
-  config?: UseQueryOptions<t.TFile[], unknown, TData>,
+  config?: UseQueryOptions<t.PublicFileAssetDescriptor[], unknown, TData>,
 ): QueryObserverResult<TData, unknown> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TFile[], unknown, TData>(
+  return useQuery<t.PublicFileAssetDescriptor[], unknown, TData>(
     DynamicQueryKeys.agentFiles(agentId ?? ''),
     () => (agentId ? dataService.getAgentFiles(agentId) : Promise.resolve([])),
     {
@@ -96,7 +96,7 @@ export const useFileDownload = (
       const blob = response.data;
       const downloadURL = window.URL.createObjectURL(blob);
       try {
-        const metadata: t.TFile | undefined = JSON.parse(
+        const metadata: t.PublicFileAssetDescriptor | undefined = JSON.parse(
           decodeURIComponent(response.headers['x-file-metadata']),
         );
         if (!metadata) {

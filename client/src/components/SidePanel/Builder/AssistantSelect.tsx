@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react';
 import { SelectDropDown } from '@librechat/client';
 import {
   Tools,
-  FileSources,
   Capabilities,
   EModelEndpoint,
   LocalStorageKeys,
@@ -76,8 +75,6 @@ export default function AssistantSelect({
   const query = useListAssistantsQuery(endpoint, undefined, {
     select: (res) =>
       res.data.map((_assistant) => {
-        const source =
-          endpoint === EModelEndpoint.assistants ? FileSources.openai : FileSources.azure;
         const assistant: TAssistantOption = {
           ..._assistant,
           label: _assistant.name ?? '',
@@ -96,14 +93,13 @@ export default function AssistantSelect({
               {
                 file_id: file.file_id,
                 type: file.type,
-                filepath: file.filepath,
+                url: file.url,
                 filename: file.filename,
                 width: file.width,
                 height: file.height,
                 size: file.bytes,
-                preview: file.filepath,
+                thumbnailUrl: file.thumbnailUrl ?? file.url,
                 progress: 1,
-                source,
               },
             ]);
           } else {
@@ -115,8 +111,7 @@ export default function AssistantSelect({
                 filename: '',
                 size: 1,
                 progress: 1,
-                filepath: endpoint,
-                source,
+                url: endpoint,
               },
             ]);
           }

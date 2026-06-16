@@ -43,7 +43,7 @@ export default function ConvoIcon({
 
   const name = entity?.name ?? '';
   const avatar = isAgent
-    ? (entity as t.Agent | undefined)?.avatar?.filepath
+    ? (entity as t.Agent | undefined)?.avatar?.url ?? (entity as t.Agent | undefined)?.avatar?.filepath
     : ((entity as t.Assistant | undefined)?.metadata?.avatar as string);
 
   const endpointIconURL = getEndpointField(endpointsConfig, endpoint, 'iconURL');

@@ -28,6 +28,7 @@ import type { TResData } from '~/common';
 import {
   clearAllDrafts,
   removeConvoFromAllQueries,
+  upsertConvoInAllQueries,
   markStreamStartFailedMetadata,
 } from '~/utils';
 import {
@@ -35,7 +36,6 @@ import {
   useGetStartupConfig,
   queueTitleGeneration,
   streamStatusQueryKey,
-  useConversationCache,
 } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -370,7 +370,6 @@ export default function useResumableSSE(
   runIndex = 0,
 ) {
   const queryClient = useQueryClient();
-  const cache = useConversationCache();
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
 
   const { token, isAuthenticated } = useAuthContext();
@@ -416,11 +415,10 @@ export default function useResumableSSE(
         getMessages(),
       );
 
-      cache.setSingleConversation(
-        conversationId,
+      queryClient.setQueryData<TConversation>(
+        [QueryKeys.conversation, conversationId],
         (current) => current ?? optimisticConversation,
       );
-      cache.addConversation(optimisticConversation);
       queryClient.setQueryData<TMessage[]>(
         [QueryKeys.messages, conversationId],
         optimisticMessages,
@@ -429,10 +427,11 @@ export default function useResumableSSE(
         [QueryKeys.messages, Constants.NEW_CONVO],
         optimisticMessages,
       );
+      upsertConvoInAllQueries(queryClient, optimisticConversation);
 
       return hydrateSubmissionMessages(currentSubmission, conversationId);
     },
-    [getMessages, cache, queryClient],
+    [getMessages, queryClient],
   );
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);

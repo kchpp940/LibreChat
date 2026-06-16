@@ -1,6 +1,5 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { FileSources } from 'librechat-data-provider';
 import LogLink from '../LogLink';
 
 const mockShowToast = jest.fn();
@@ -54,10 +53,8 @@ describe('LogLink download routing', () => {
 
     render(
       <LogLink
-        user="user-1"
         file_id="file-1"
         filename={filename}
-        source={FileSources.cloudfront}
         href="https://cdn.example.com/uploads/file.pdf"
       >
         {filename}
@@ -84,7 +81,6 @@ describe('LogLink download routing', () => {
       <LogLink
         href="/api/files/code/download/session-1/file-1"
         filename={filename}
-        source={FileSources.execute_code}
       >
         {filename}
       </LogLink>,

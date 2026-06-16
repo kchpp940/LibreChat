@@ -14,7 +14,7 @@ import {
   EToolResources,
   fileConfig as defaultFileConfig,
 } from 'librechat-data-provider';
-import type { TFile, EndpointFileConfig, FileConfig } from 'librechat-data-provider';
+import type { TFile, PublicFileAssetDescriptor, EndpointFileConfig, FileConfig } from 'librechat-data-provider';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ExtendedFile } from '~/common';
 
@@ -182,8 +182,8 @@ export function formatDate(dateString: string, isSmallScreen = false) {
 /**
  * Adds a file to the query cache
  */
-export function addFileToCache(queryClient: QueryClient, newfile: TFile) {
-  const currentFiles = queryClient.getQueryData<TFile[]>([QueryKeys.files]);
+export function addFileToCache(queryClient: QueryClient, newfile: PublicFileAssetDescriptor) {
+  const currentFiles = queryClient.getQueryData<PublicFileAssetDescriptor[]>([QueryKeys.files]);
 
   if (!currentFiles) {
     console.warn('No current files found in cache, skipped updating file query cache');
@@ -197,7 +197,7 @@ export function addFileToCache(queryClient: QueryClient, newfile: TFile) {
     return;
   }
 
-  queryClient.setQueryData<TFile[]>(
+  queryClient.setQueryData<PublicFileAssetDescriptor[]>(
     [QueryKeys.files],
     [
       {

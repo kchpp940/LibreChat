@@ -4,7 +4,6 @@ import { useGetModelsQuery } from 'librechat-data-provider/react-query';
 import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import {
   Constants,
-  FileSources,
   Permissions,
   EModelEndpoint,
   isParamEndpoint,
@@ -344,17 +343,14 @@ const useNewConvo = (index = 0) => {
         const filesToDelete = Array.from(files.values())
           .filter(
             (file) =>
-              file.filepath != null &&
-              file.filepath !== '' &&
-              file.source &&
+              file.url != null &&
+              file.url !== '' &&
               !(file.embedded ?? false) &&
               file.temp_file_id,
           )
           .map((file) => ({
             file_id: file.file_id,
             embedded: !!(file.embedded ?? false),
-            filepath: file.filepath as string,
-            source: file.source as FileSources, // Ensure that the source is of type FileSources
           }));
 
         setFiles(new Map());

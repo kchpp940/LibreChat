@@ -102,6 +102,28 @@ export type FileConfigInput = {
   checkType?: (fileType: string, supportedTypes: RegExp[]) => boolean;
 };
 
+export type PublicFileAssetDescriptor = {
+  file_id: string;
+  filename: string;
+  type: string;
+  bytes: number;
+  url: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  context?: FileContext;
+  embedded: boolean;
+  filterSource?: FileSources;
+  expiresAt?: string | Date;
+  status?: 'pending' | 'ready' | 'failed';
+  previewError?: string;
+  text?: string;
+  textFormat?: 'html' | 'text' | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+  conversationId?: string;
+};
+
 export type TFile = {
   _id?: string;
   __v?: number;
@@ -128,43 +150,18 @@ export type TFile = {
   expiresAt?: string | Date;
   preview?: string;
   text?: string;
-  /**
-   * Format of the `text` field. `'html'` means the backend produced
-   * a sanitized full-document HTML preview the client may inject as
-   * `index.html` inside the office artifact iframe. `'text'` (or
-   * `undefined` for legacy records) is plain text and MUST NOT be
-   * injected as HTML — render through the markdown/escaping path.
-   * See Codex P1 review on PR #12934.
-   */
   textFormat?: 'html' | 'text' | null;
-  /**
-   * Lifecycle of the inline preview rendered from `text`. `'pending'`
-   * while background HTML extraction is in flight (deferred-preview
-   * code-execution flow), `'ready'` once `text`/`textFormat` are set,
-   * `'failed'` if extraction errored or hit the 60s ceiling. `undefined`
-   * for legacy records and for files that never expect a preview —
-   * clients MUST treat that as `'ready'`.
-   */
   status?: 'pending' | 'ready' | 'failed';
-  /**
-   * Short machine-readable failure reason when `status === 'failed'`.
-   * Suitable for tooltip text but not user-facing prose.
-   */
   previewError?: string;
   metadata?: {
     fileIdentifier?: string;
-    /**
-     * Structured form of `fileIdentifier`. Persisted alongside the
-     * legacy string during the dual-write transition; readers should
-     * resolve via `resolveCodeEnvRef`.
-     */
     codeEnvRef?: CodeEnvRef;
   };
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
 
-export type TFileUpload = TFile & {
+export type TFileUpload = PublicFileAssetDescriptor & {
   temp_file_id: string;
 };
 
@@ -190,15 +187,13 @@ export type TFilePreview = {
   previewError?: string;
 };
 
-export type AvatarUploadResponse = {
-  url: string;
-};
+export type AvatarUploadResponse = PublicFileAssetDescriptor;
 
 export type FileDownloadURLResponse = {
   url: string;
   filename: string;
   type: string;
-  metadata: Partial<TFile>;
+  metadata: PublicFileAssetDescriptor;
 };
 
 export type SpeechToTextResponse = {
@@ -244,11 +239,11 @@ export type DeleteFilesResponse = {
 
 export type BatchFile = {
   file_id: string;
-  filepath: string;
+  filepath?: string;
   storageRegion?: string;
   storageKey?: string;
   embedded: boolean;
-  source: FileSources;
+  source?: FileSources;
   temp_file_id?: string;
 };
 

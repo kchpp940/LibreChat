@@ -676,8 +676,9 @@ export const hostImageIdSuffix = '_host_copy';
 export const hostImageNamePrefix = 'host_copy_';
 
 export type AssistantAvatar = {
-  filepath: string;
-  source: string;
+  url?: string;
+  filepath?: string;
+  source?: string;
 };
 
 export type AssistantDocument = {
@@ -696,8 +697,9 @@ export type AssistantDocument = {
 /* Agent types */
 
 export type AgentAvatar = {
-  filepath: string;
-  source: string;
+  url?: string;
+  filepath?: string;
+  source?: string;
 };
 
 export enum FilePurpose {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FileSources } from 'librechat-data-provider';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import DataTable from '../PanelTable';
 import { columns } from '../PanelColumns';
@@ -9,7 +9,7 @@ import { columns } from '../PanelColumns';
 const mockShowToast = jest.fn();
 const mockAddFile = jest.fn();
 
-let mockFileMap: Record<string, TFile> = {};
+let mockFileMap: Record<string, PublicFileAssetDescriptor> = {};
 let mockFiles: Map<string, ExtendedFile> = new Map();
 let mockConversation: Record<string, unknown> | null = { endpoint: 'openAI' };
 let mockRawFileConfig: Record<string, unknown> | null = {
@@ -74,22 +74,19 @@ jest.mock('~/components/Chat/Input/Files/MyFilesModal', () => ({
   MyFilesModal: () => null,
 }));
 
-jest.mock('../PanelFileCell', () => ({ row }: { row: { original: TFile } }) => (
+jest.mock('../PanelFileCell', () => ({ row }: { row: { original: PublicFileAssetDescriptor } }) => (
   <span>{row.original?.filename}</span>
 ));
 
-function makeFile(overrides: Partial<TFile> = {}): TFile {
+function makeFile(overrides: Partial<PublicFileAssetDescriptor> = {}): PublicFileAssetDescriptor {
   return {
-    user: 'user-1',
     file_id: 'file-1',
     bytes: 1024,
     embedded: false,
     filename: 'test.pdf',
-    filepath: '/files/test.pdf',
-    object: 'file',
+    url: '/files/test.pdf',
     type: 'application/pdf',
-    usage: 0,
-    source: FileSources.local,
+    filterSource: FileSources.local,
     ...overrides,
   };
 }
@@ -99,12 +96,11 @@ function makeExtendedFile(overrides: Partial<ExtendedFile> = {}): ExtendedFile {
     file_id: 'ext-1',
     size: 1024,
     progress: 1,
-    source: FileSources.local,
     ...overrides,
   };
 }
 
-function renderTable(data: TFile[]) {
+function renderTable(data: PublicFileAssetDescriptor[]) {
   return render(<DataTable columns={columns} data={data} />);
 }
 

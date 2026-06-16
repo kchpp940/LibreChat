@@ -1,7 +1,7 @@
 import { memo, useId, useLayoutEffect } from 'react';
 import { Download } from 'lucide-react';
 import { useRecoilState } from 'recoil';
-import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
+import type { TAttachment, PublicFileAssetDescriptor, TAttachmentMetadata } from 'librechat-data-provider';
 import Mermaid from '~/components/Messages/Content/Mermaid/Mermaid';
 import { toolArtifactKey } from '~/utils/artifacts';
 import { displayFilename } from './attachmentTypes';
@@ -26,7 +26,7 @@ interface ToolMermaidArtifactProps {
  */
 const ToolMermaidArtifact = memo(({ attachment, text }: ToolMermaidArtifactProps) => {
   const localize = useLocalize();
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   const claimKey = useId();
   const [claim, setClaim] = useRecoilState(store.toolArtifactClaim(toolArtifactKey(file)));
   const isMyClaim = claim === claimKey;
@@ -39,11 +39,9 @@ const ToolMermaidArtifact = memo(({ attachment, text }: ToolMermaidArtifactProps
   }, [claimKey, setClaim]);
 
   const { handleDownload } = useAttachmentLink({
-    href: attachment.filepath ?? '',
+    href: attachment.url ?? '',
     filename: attachment.filename ?? '',
     file_id: file.file_id,
-    user: file.user,
-    source: file.source,
   });
 
   if (claim != null && !isMyClaim) {
@@ -54,7 +52,7 @@ const ToolMermaidArtifact = memo(({ attachment, text }: ToolMermaidArtifactProps
 
   return (
     <div className="my-2 flex w-full flex-col gap-1">
-      {(attachment.filename || attachment.filepath) && (
+      {(attachment.filename || attachment.url) && (
         <div className="flex items-center justify-between gap-2">
           {attachment.filename && (
             <div
@@ -64,7 +62,7 @@ const ToolMermaidArtifact = memo(({ attachment, text }: ToolMermaidArtifactProps
               {visibleFilename}
             </div>
           )}
-          {attachment.filepath && (
+          {attachment.url && (
             <button
               type="button"
               onClick={handleDownload}

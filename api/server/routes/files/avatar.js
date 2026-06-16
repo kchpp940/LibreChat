@@ -1,10 +1,12 @@
 const fs = require('fs').promises;
 const express = require('express');
+const { FileContext } = require('librechat-data-provider');
 const { logger } = require('@librechat/data-schemas');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { resizeAvatar } = require('~/server/services/Files/images/avatar');
 const { getFileStrategy } = require('~/server/utils/getFileStrategy');
 const { filterFile } = require('~/server/services/Files/process');
+const { toPublicFileDescriptor } = require('~/server/utils/files');
 
 const router = express.Router();
 
@@ -36,7 +38,17 @@ router.post('/', async (req, res) => {
       tenantId: req.user.tenantId,
     });
 
-    res.json({ url });
+    const descriptor = {
+      file_id: `avatar-${userId}`,
+      filename: 'avatar',
+      type: `image/${appConfig.imageOutputType}`,
+      bytes: resizedBuffer.length,
+      url,
+      context: FileContext.avatar,
+      embedded: false,
+    };
+
+    res.json(descriptor);
   } catch (error) {
     const message = 'An error occurred while uploading the profile picture';
     logger.error(message, error);

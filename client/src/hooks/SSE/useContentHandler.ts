@@ -66,7 +66,19 @@ export default function useContentHandler({ setMessages, getMessages }: TUseCont
         textPart != null && typeof textPart === 'string' ? { value: textPart } : data[type];
 
       if (type === ContentTypes.IMAGE_FILE) {
-        addFileToCache(queryClient, part as ImageFile & PartMetadata);
+        const imgFile = part as ImageFile & PartMetadata;
+        addFileToCache(queryClient, {
+          file_id: imgFile.file_id,
+          filename: imgFile.filename,
+          type: imgFile.type,
+          bytes: imgFile.bytes,
+          url: imgFile.filepath,
+          thumbnailUrl: imgFile.preview ?? imgFile.filepath,
+          width: imgFile.width,
+          height: imgFile.height,
+          embedded: imgFile.embedded ?? false,
+          context: imgFile.context,
+        });
       }
 
       /* spreading the content array to avoid mutation */

@@ -1,13 +1,12 @@
 import { EarthIcon } from 'lucide-react';
 import {
-  FileSources,
   alternateName,
   EModelEndpoint,
   EToolResources,
   LocalStorageKeys,
   defaultAgentFormValues,
 } from 'librechat-data-provider';
-import type { Agent, TFile } from 'librechat-data-provider';
+import type { Agent, PublicFileAssetDescriptor } from 'librechat-data-provider';
 import type { DropdownValueSetter, TAgentOption, ExtendedFile } from '~/common';
 
 /**
@@ -62,7 +61,7 @@ export const processAgentOption = ({
   fileMap,
 }: {
   agent?: Agent;
-  fileMap?: Record<string, TFile | undefined>;
+  fileMap?: Record<string, PublicFileAssetDescriptor | undefined>;
 }): TAgentOption => {
   const isGlobal = _agent?.isPublic ?? false;
 
@@ -100,10 +99,6 @@ export const processAgentOption = ({
     list?: Array<[string, ExtendedFile]>;
   }) => {
     const file = fileMap[file_id];
-    const source =
-      tool_resource === EToolResources.file_search
-        ? FileSources.vectordb
-        : (file?.source ?? FileSources.local);
 
     if (file) {
       list?.push([
@@ -111,15 +106,13 @@ export const processAgentOption = ({
         {
           file_id: file.file_id,
           type: file.type,
-          filepath: file.filepath,
+          url: file.url,
           filename: file.filename,
           width: file.width,
           height: file.height,
           size: file.bytes,
-          preview: file.filepath,
-          metadata: file.metadata,
+          thumbnailUrl: file.thumbnailUrl ?? file.url,
           progress: 1,
-          source,
         },
       ]);
     } else {
@@ -131,8 +124,7 @@ export const processAgentOption = ({
           filename: '',
           size: 1,
           progress: 1,
-          filepath: EModelEndpoint.agents,
-          source,
+          url: EModelEndpoint.agents,
         },
       ]);
     }

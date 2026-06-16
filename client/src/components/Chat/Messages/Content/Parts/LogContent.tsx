@@ -1,7 +1,7 @@
 import { isAfter } from 'date-fns';
 import React, { useMemo } from 'react';
 import { imageExtRegex } from 'librechat-data-provider';
-import type { TFile, TAttachment, TAttachmentMetadata } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor, TAttachment, TAttachmentMetadata } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 import {
   artifactTypeForAttachment,
@@ -35,7 +35,7 @@ interface LogContentProps {
   attachments?: TAttachment[];
 }
 
-type ImageAttachment = TFile & TAttachmentMetadata;
+type ImageAttachment = PublicFileAssetDescriptor & TAttachmentMetadata;
 
 const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, attachments }) => {
   const localize = useLocalize();
@@ -58,7 +58,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
     nonInlineAttachments,
   } = useMemo(() => {
     const imageAtts: ImageAttachment[] = [];
-    const textAtts: Array<TFile & TAttachmentMetadata> = [];
+    const textAtts: Array<PublicFileAssetDescriptor & TAttachmentMetadata> = [];
     const panelAtts: PanelEntry[] = [];
     const mermaidAtts: MermaidEntry[] = [];
     const otherAtts: TAttachment[] = [];
@@ -70,11 +70,11 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       if (isInternalSandboxArtifact(attachment)) {
         return;
       }
-      const fileData = attachment as TFile & TAttachmentMetadata;
-      const { filepath = null } = fileData;
+      const fileData = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
+      const { url = null } = fileData;
       // LogContent uses a looser image check than Attachment.tsx (no
       // width/height requirement) to keep parity with the legacy log surface.
-      const isImage = imageExtRegex.test(attachment.filename ?? '') && filepath != null;
+      const isImage = imageExtRegex.test(attachment.filename ?? '') && url != null;
       if (isImage) {
         imageAtts.push(attachment as ImageAttachment);
         return;
@@ -149,16 +149,14 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
       return `${visibleName} ${localize('com_download_expired')}`;
     }
 
-    const fileData = file as TFile & TAttachmentMetadata;
-    const filepath = file.filepath || '';
+    const fileData = file as PublicFileAssetDescriptor & TAttachmentMetadata;
+    const filepath = file.url || '';
 
     return (
       <LogLink
         href={filepath}
         filename={filename}
         file_id={fileData.file_id}
-        user={fileData.user}
-        source={fileData.source}
       >
         {'- '}
         {visibleName} {localize('com_click_to_download')}
@@ -211,13 +209,11 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
             >
               {file.filename && (
                 <div className="mb-1 truncate text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                  {file.filepath ? (
+                  {file.url ? (
                     <LogLink
-                      href={file.filepath}
+                      href={file.url}
                       filename={file.filename}
                       file_id={file.file_id}
-                      user={file.user}
-                      source={file.source}
                     >
                       {displayFilename(file.filename)}
                     </LogLink>
@@ -239,7 +235,7 @@ const LogContent: React.FC<LogContentProps> = ({ output = '', renderImages, atta
           height={attachment.height}
           key={renderAttachmentKey('image', attachment, index)}
           altText={attachment.filename}
-          imagePath={attachment.filepath}
+          imagePath={attachment.url ?? ''}
         />
       ))}
     </>

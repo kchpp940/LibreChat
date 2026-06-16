@@ -269,7 +269,7 @@ export default function AgentPanel() {
     onSuccess: (updatedAgent) => {
       showToast({ message: localize('com_ui_upload_agent_avatar') });
 
-      setValue('avatar_preview', updatedAgent.avatar?.filepath ?? '', { shouldDirty: false });
+      setValue('avatar_preview', updatedAgent.avatar?.url ?? updatedAgent.avatar?.filepath ?? '', { shouldDirty: false });
       setValue('avatar_file', null, { shouldDirty: false });
       setValue('avatar_action', null, { shouldDirty: false });
 

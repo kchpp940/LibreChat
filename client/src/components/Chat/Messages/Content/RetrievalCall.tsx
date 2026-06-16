@@ -3,7 +3,7 @@ import { useRecoilValue } from 'recoil';
 import { Tools } from 'librechat-data-provider';
 import { TooltipAnchor } from '@librechat/client';
 import { FileText, FileSpreadsheet, FileCode, FileImage, File } from 'lucide-react';
-import type { TAttachment, TFile } from 'librechat-data-provider';
+import type { TAttachment, PublicFileAssetDescriptor } from 'librechat-data-provider';
 import { useLocalize, useProgress, useExpandCollapse } from '~/hooks';
 import { ToolIcon, OutputRenderer, isError } from './ToolOutput';
 import FilePreviewDialog from './FilePreviewDialog';
@@ -130,7 +130,7 @@ function addFileMatch(
 
 function buildFileLookup(
   fileSources: FileSource[],
-  files?: TFile[],
+  files?: PublicFileAssetDescriptor[],
 ): Map<string, FileMatch | null> {
   const lookup = new Map<string, FileMatch | null>();
 
@@ -167,7 +167,7 @@ function buildFileLookup(
 function mergeRetrievalResults(
   fileSources: FileSource[],
   parsedResults: ParsedResult[],
-  files?: TFile[],
+  files?: PublicFileAssetDescriptor[],
 ): DisplayResult[] {
   if (parsedResults.length === 0) {
     return fileSources.map((source) => ({
@@ -353,7 +353,7 @@ export default function RetrievalCall({
     () => new Set(fileSources.map((s) => s.fileId).filter(Boolean)),
     [fileSources],
   );
-  const { data: availableFiles = [] } = useGetFiles<TFile[]>({
+  const { data: availableFiles = [] } = useGetFiles<PublicFileAssetDescriptor[]>({
     enabled: hasOutput && parsedResults.length > 0 && fileIds.size > 0,
     select: (files) => files.filter((f) => fileIds.has(f.file_id)),
   });

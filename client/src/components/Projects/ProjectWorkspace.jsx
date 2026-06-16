@@ -46,7 +46,7 @@ export default function ProjectWorkspace() {
             render: renderSortMenuItem(option.label, isSelected),
         };
     }), [sortBy, sortOptions]);
-    const { conversations, hasNext: hasNextPage, fetchNextPage, isFetchingNextPage, isLoading: isConversationsLoading, } = useConversationsInfiniteQuery({
+    const { data, fetchNextPage, isFetchingNextPage, isLoading: isConversationsLoading, } = useConversationsInfiniteQuery({
         projectId: activeProjectId,
         sortBy,
         sortDirection: 'desc',
@@ -55,6 +55,15 @@ export default function ProjectWorkspace() {
         staleTime: 30000,
         cacheTime: 300000,
     });
+    const conversations = useMemo(() => data?.pages.flatMap((page) => page.conversations) ?? [], [data?.pages]);
+    const hasNextPage = useMemo(() => {
+        const pages = data?.pages;
+        if (!pages?.length) {
+            return false;
+        }
+        const lastPage = pages[pages.length - 1];
+        return lastPage.nextCursor !== null;
+    }, [data?.pages]);
     const startProjectChat = useCallback(() => {
         if (!activeProjectId) {
             return;

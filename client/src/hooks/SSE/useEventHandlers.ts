@@ -4,6 +4,7 @@ import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
+  QueryKeys,
   Constants,
   EndpointURLs,
   ContentTypes,
@@ -18,20 +19,24 @@ import type {
   EventSubmission,
   TStartupConfig,
 } from 'librechat-data-provider';
+import type { InfiniteData } from '@tanstack/react-query';
 import type { SetterOrUpdater } from 'recoil';
 import type { TResData, TFinalResData, ConvoGenerator } from '~/common';
+import type { ConversationCursorData } from '~/utils';
 import {
   logger,
   setDraft,
   scrollToEnd,
   getAllContentText,
   upsertConvoInAllQueries,
+  updateConvoInAllQueries,
+  removeConvoFromAllQueries,
+  findConversationInInfinite,
 } from '~/utils';
 import {
   startupConfigKey,
   queueTitleGeneration,
   markTitleGenerationProcessed,
-  useConversationCache,
 } from '~/data-provider';
 import { shouldResetSubagentAtomsOnConversationChange } from './cleanup';
 import useAttachmentHandler from '~/hooks/SSE/useAttachmentHandler';
@@ -221,15 +226,12 @@ const createErrorMessage = ({
 
 export const getConvoTitle = ({
   parentId,
-  cache,
+  queryClient,
   currentTitle,
   conversationId,
 }: {
   parentId?: string | null;
-  cache: {
-    getSingleConversation: (id: string) => TConversation | undefined;
-    findConversation: (id: string) => TConversation | undefined;
-  };
+  queryClient: ReturnType<typeof useQueryClient>;
   currentTitle?: string | null;
   conversationId?: string | null;
 }): string | null | undefined => {
@@ -237,11 +239,17 @@ export const getConvoTitle = ({
     parentId !== Constants.NO_PARENT &&
     (currentTitle?.toLowerCase().includes('new chat') ?? false)
   ) {
-    const currentConvo = conversationId ? cache.getSingleConversation(conversationId) : undefined;
+    const currentConvo = queryClient.getQueryData<TConversation>([
+      QueryKeys.conversation,
+      conversationId,
+    ]);
     if (currentConvo?.title) {
       return currentConvo.title;
     }
-    const cachedConvo = conversationId ? cache.findConversation(conversationId) : undefined;
+    const convos = queryClient.getQueryData<InfiniteData<ConversationCursorData>>([
+      QueryKeys.allConversations,
+    ]);
+    const cachedConvo = findConversationInInfinite(convos, conversationId ?? '');
     return cachedConvo?.title ?? currentConvo?.title ?? null;
   }
   return currentTitle;
@@ -258,7 +266,6 @@ export default function useEventHandlers({
   setShowStopButton,
 }: EventHandlerParams) {
   const queryClient = useQueryClient();
-  const cache = useConversationCache();
   const { announcePolite } = useLiveAnnouncer();
   const applyAgentTemplate = useApplyAgentTemplate();
   const setAbortScroll = useSetRecoilState(store.abortScroll);
@@ -422,7 +429,7 @@ export default function useEventHandlers({
           const parentId = requestMessage.parentMessageId;
           const title = getConvoTitle({
             parentId,
-            cache,
+            queryClient,
             conversationId,
             currentTitle: prevState?.title,
           });
@@ -501,7 +508,7 @@ export default function useEventHandlers({
           const parentId = isRegenerate ? userMessage.overrideParentMessageId : parentMessageId;
           const title = getConvoTitle({
             parentId,
-            cache,
+            queryClient,
             conversationId,
             currentTitle: prevState?.title,
           });
@@ -564,10 +571,10 @@ export default function useEventHandlers({
         return;
       }
 
-      cache.setSingleConversation(conversationId, (convo) =>
+      queryClient.setQueryData<TConversation>([QueryKeys.conversation, conversationId], (convo) =>
         convo ? { ...convo, title } : convo,
       );
-      cache.updateConversation(conversationId, (convo) => ({ ...convo, title }));
+      updateConvoInAllQueries(queryClient, conversationId, (convo) => ({ ...convo, title }));
       markTitleGenerationProcessed(conversationId);
 
       if (location.pathname.includes(conversationId)) {
@@ -632,8 +639,8 @@ export default function useEventHandlers({
           }
 
           if (currentConvoId && currentConvoId !== Constants.NEW_CONVO) {
-            cache.removeConversation(currentConvoId);
-            cache.removeSingleConversation(currentConvoId);
+            removeConvoFromAllQueries(queryClient, currentConvoId);
+            queryClient.removeQueries({ queryKey: [QueryKeys.conversation, currentConvoId] });
             queryClient.removeQueries({ queryKey: [QueryKeys.messages, currentConvoId] });
           }
           setMessages([]);
@@ -776,8 +783,8 @@ export default function useEventHandlers({
               update.title = prevTitle;
             }
             if (conversation.conversationId) {
-              cache.setSingleConversation(
-                conversation.conversationId,
+              queryClient.setQueryData<TConversation>(
+                [QueryKeys.conversation, conversation.conversationId],
                 (cachedConvo) => {
                   const merged = {
                     ...cachedConvo,

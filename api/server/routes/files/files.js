@@ -30,7 +30,7 @@ const { getOpenAIClient } = require('~/server/controllers/assistants/helpers');
 const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { checkPermission } = require('~/server/services/PermissionService');
 const { hasAccessToFilesViaAgent } = require('~/server/services/Files');
-const { cleanFileName, getContentDisposition } = require('~/server/utils/files');
+const { cleanFileName, getContentDisposition, toPublicFileDescriptor } = require('~/server/utils/files');
 const { getLogStores } = require('~/cache');
 const { Readable } = require('stream');
 const db = require('~/models');
@@ -53,7 +53,9 @@ router.get('/', async (req, res) => {
         logger.warn('[/files] Error refreshing S3 file URLs:', error);
       }
     }
-    res.status(200).send(files);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const publicFiles = (files || []).map((file) => toPublicFileDescriptor(file, baseUrl));
+    res.status(200).send(publicFiles);
   } catch (error) {
     logger.error('[/files] Error getting files:', error);
     res.status(400).json({ message: 'Error in request', error: error.message });
@@ -111,7 +113,9 @@ router.get('/agent/:agent_id', async (req, res) => {
       text: 0,
     });
 
-    res.status(200).json(files);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const publicFiles = (files || []).map((file) => toPublicFileDescriptor(file, baseUrl));
+    res.status(200).json(publicFiles);
   } catch (error) {
     logger.error('[/files/agent/:agent_id] Error fetching agent files:', error);
     res.status(500).json({ error: 'Failed to fetch agent files' });
@@ -135,9 +139,6 @@ router.delete('/', async (req, res) => {
     /** @type {MongoFile[]} */
     const files = _files.filter((file) => {
       if (!file.file_id) {
-        return false;
-      }
-      if (!file.filepath) {
         return false;
       }
 
@@ -439,45 +440,8 @@ const getDirectDownloadURL = async ({
   });
 };
 
-// Security allowlist: excludes internal ids, owner/tenant identifiers, and extracted text.
-// `filepath` stays included because cached TFile records need it for previews/deletes.
-const DOWNLOAD_METADATA_FIELDS = [
-  'conversationId',
-  'message',
-  'file_id',
-  'temp_file_id',
-  'bytes',
-  'model',
-  'embedded',
-  'filename',
-  'filepath',
-  'storageKey',
-  'storageRegion',
-  'object',
-  'type',
-  'usage',
-  'context',
-  'source',
-  'filterSource',
-  'width',
-  'height',
-  'expiresAt',
-  'preview',
-  'textFormat',
-  'status',
-  'previewError',
-  'createdAt',
-  'updatedAt',
-];
-
-const getDownloadFileMetadata = (file) => {
-  const rawFile = typeof file.toObject === 'function' ? file.toObject() : file;
-  return DOWNLOAD_METADATA_FIELDS.reduce((metadata, field) => {
-    if (rawFile[field] !== undefined) {
-      metadata[field] = rawFile[field];
-    }
-    return metadata;
-  }, {});
+const getDownloadFileMetadata = (file, baseUrl) => {
+  return toPublicFileDescriptor(file, baseUrl);
 };
 
 router.get('/download-url/:userId/:file_id', fileAccess, async (req, res) => {
@@ -506,11 +470,12 @@ router.get('/download-url/:userId/:file_id', fileAccess, async (req, res) => {
     }
 
     res.setHeader('Cache-Control', 'no-store');
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     return res.status(200).json({
       url: downloadURL,
       filename,
       type: file.type || 'application/octet-stream',
-      metadata: getDownloadFileMetadata(file),
+      metadata: getDownloadFileMetadata(file, baseUrl),
     });
   } catch (error) {
     logger.error('[DOWNLOAD URL ROUTE] Error generating file download URL:', error);
@@ -539,12 +504,13 @@ router.get('/download/:userId/:file_id', fileAccess, async (req, res) => {
       return res.status(501).send('Not Implemented');
     }
 
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const setHeaders = () => {
       res.setHeader('Content-Disposition', getContentDisposition(file.filename));
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader(
         'X-File-Metadata',
-        encodeURIComponent(JSON.stringify(getDownloadFileMetadata(file))),
+        encodeURIComponent(JSON.stringify(getDownloadFileMetadata(file, baseUrl))),
       );
     };
 

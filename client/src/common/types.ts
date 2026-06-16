@@ -568,18 +568,16 @@ export interface ExtendedFile {
   file_id: string;
   temp_file_id?: string;
   type?: string;
-  filepath?: string;
+  url?: string;
   filename?: string;
   width?: number;
   height?: number;
   size: number;
-  preview?: string;
+  thumbnailUrl?: string;
   progress: number;
-  source?: FileSources;
   attached?: boolean;
   embedded?: boolean;
   tool_resource?: string;
-  metadata?: t.TFile['metadata'];
 }
 
 export interface ModelItemProps {

@@ -80,12 +80,11 @@ describe('FileRow', () => {
   const createMockFile = (overrides: Partial<ExtendedFile> = {}): ExtendedFile => ({
     file_id: 'test-file-id',
     type: 'image/png',
-    preview: 'blob:http://localhost:3080/preview-blob-url',
-    filepath: '/images/user123/test-file-id__image.png',
+    thumbnailUrl: 'blob:http://localhost:3080/preview-blob-url',
+    url: '/images/user123/test-file-id__image.png',
     filename: 'test-image.png',
     progress: 1,
     size: 1024,
-    source: FileSources.local,
     ...overrides,
   });
 
@@ -99,8 +98,8 @@ describe('FileRow', () => {
     it('should prefer cached preview over filepath when upload is complete', () => {
       const file = createMockFile({
         file_id: 'uploaded-file',
-        preview: 'blob:http://localhost:3080/temp-preview',
-        filepath: '/images/user123/uploaded-file__image.png',
+        thumbnailUrl: 'blob:http://localhost:3080/temp-preview',
+        url: '/images/user123/uploaded-file__image.png',
         progress: 1,
       });
 
@@ -116,8 +115,8 @@ describe('FileRow', () => {
     it('should use preview when progress is less than 1 (uploading)', () => {
       const file = createMockFile({
         file_id: 'uploading-file',
-        preview: 'blob:http://localhost:3080/temp-preview',
-        filepath: undefined,
+        thumbnailUrl: 'blob:http://localhost:3080/temp-preview',
+        url: undefined,
         progress: 0.5,
       });
 
@@ -133,8 +132,8 @@ describe('FileRow', () => {
     it('should fallback to filepath when preview is undefined and progress is less than 1', () => {
       const file = createMockFile({
         file_id: 'file-without-preview',
-        preview: undefined,
-        filepath: '/images/user123/file-without-preview__image.png',
+        thumbnailUrl: undefined,
+        url: '/images/user123/file-without-preview__image.png',
         progress: 0.7,
       });
 
@@ -150,8 +149,8 @@ describe('FileRow', () => {
     it('should prefer preview over filepath when both exist and progress is 1', () => {
       const file = createMockFile({
         file_id: 'complete-file',
-        preview: 'blob:http://localhost:3080/old-blob',
-        filepath: '/images/user123/complete-file__image.png',
+        thumbnailUrl: 'blob:http://localhost:3080/old-blob',
+        url: '/images/user123/complete-file__image.png',
         progress: 1.0,
       });
 
@@ -197,9 +196,7 @@ describe('FileRow', () => {
 
   describe('File Source', () => {
     it('should pass local source to Image component', () => {
-      const file = createMockFile({
-        source: FileSources.local,
-      });
+      const file = createMockFile({});
 
       const filesMap = new Map<string, ExtendedFile>();
       filesMap.set(file.file_id, file);
@@ -211,9 +208,7 @@ describe('FileRow', () => {
     });
 
     it('should pass openai source to Image component', () => {
-      const file = createMockFile({
-        source: FileSources.openai,
-      });
+      const file = createMockFile({});
 
       const filesMap = new Map<string, ExtendedFile>();
       filesMap.set(file.file_id, file);
@@ -262,15 +257,15 @@ describe('FileRow', () => {
 
       const uploadingFile = createMockFile({
         file_id: 'file-1',
-        preview: 'blob:http://localhost:3080/preview-1',
-        filepath: undefined,
+        thumbnailUrl: 'blob:http://localhost:3080/preview-1',
+        url: undefined,
         progress: 0.3,
       });
 
       const completedFile = createMockFile({
         file_id: 'file-2',
-        preview: 'blob:http://localhost:3080/preview-2',
-        filepath: '/images/user123/file-2__image.png',
+        thumbnailUrl: 'blob:http://localhost:3080/preview-2',
+        url: '/images/user123/file-2__image.png',
         progress: 1,
       });
 
@@ -325,8 +320,8 @@ describe('FileRow', () => {
     it('should prefer preview blob URL over filepath for zero-flicker rendering', () => {
       const file = createMockFile({
         file_id: 'cache-test',
-        preview: 'blob:http://localhost:3080/d25f730c-152d-41f7-8d79-c9fa448f606b',
-        filepath:
+        thumbnailUrl: 'blob:http://localhost:3080/d25f730c-152d-41f7-8d79-c9fa448f606b',
+        url:
           '/images/68c98b26901ebe2d87c193a2/c0fe1b93-ba3d-456c-80be-9a492bfd9ed0__image.png',
         progress: 1,
       });
@@ -343,8 +338,8 @@ describe('FileRow', () => {
     it('should fall back to filepath when no preview exists', () => {
       const file = createMockFile({
         file_id: 'no-preview',
-        preview: undefined,
-        filepath:
+        thumbnailUrl: undefined,
+        url:
           '/images/68c98b26901ebe2d87c193a2/c0fe1b93-ba3d-456c-80be-9a492bfd9ed0__image.png',
         progress: 1,
       });

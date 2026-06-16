@@ -116,7 +116,7 @@ export default function useMentions({
             conversation: {
               agent_id: id,
               endpoint: EModelEndpoint.agents,
-              iconURL: avatar?.filepath,
+              iconURL: avatar?.url ?? avatar?.filepath,
             },
             containerClassName: 'shadow-stroke overflow-hidden rounded-full',
             endpointsConfig: endpointsConfig,

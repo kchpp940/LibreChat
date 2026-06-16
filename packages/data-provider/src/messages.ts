@@ -1,4 +1,4 @@
-import type { TFile } from './types/files';
+import type { TFile, PublicFileAssetDescriptor } from './types/files';
 import type { TMessage } from './types';
 
 export type ParentMessage = TMessage & { children: TMessage[]; depth: number };
@@ -7,7 +7,7 @@ export function buildTree({
   fileMap,
 }: {
   messages: (TMessage | undefined)[] | null;
-  fileMap?: Record<string, TFile>;
+  fileMap?: Record<string, TFile | PublicFileAssetDescriptor>;
 }) {
   if (messages === null) {
     return null;

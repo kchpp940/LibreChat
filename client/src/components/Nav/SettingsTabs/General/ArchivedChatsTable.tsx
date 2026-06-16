@@ -56,7 +56,7 @@ export default function ArchivedChatsTable({
   const [queryParams, setQueryParams] = useState<ConversationListParams>(DEFAULT_PARAMS);
   const [deleteConversation, setDeleteConversation] = useState<TConversation | null>(null);
 
-  const { conversations, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, isLoading } =
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, isLoading } =
     useConversationsInfiniteQuery(queryParams, {
       staleTime: 0,
       cacheTime: 5 * 60 * 1000,
@@ -83,7 +83,12 @@ export default function ArchivedChatsTable({
     };
   }, [debouncedFilterChange]);
 
-  const allConversations = conversations.filter(Boolean);
+  const allConversations = useMemo(() => {
+    if (!data?.pages) {
+      return [];
+    }
+    return data.pages.flatMap((page) => page?.conversations?.filter(Boolean) ?? []);
+  }, [data?.pages]);
 
   const deleteMutation = useDeleteConversationMutation({
     onSuccess: async () => {

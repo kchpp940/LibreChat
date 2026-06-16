@@ -7,7 +7,7 @@ import {
   useResetRecoilState,
   useSetRecoilState,
 } from 'recoil';
-import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
+import type { TAttachment, PublicFileAssetDescriptor, TAttachmentMetadata } from 'librechat-data-provider';
 import type { Artifact } from '~/common';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { isCodeOnlyArtifact } from '~/utils/artifacts';
@@ -70,7 +70,7 @@ interface ToolArtifactCardProps {
 const ToolArtifactCard = memo(({ attachment, artifact }: ToolArtifactCardProps) => {
   const localize = useLocalize();
   const claimKey = useId();
-  const file = attachment as TFile & TAttachmentMetadata;
+  const file = attachment as PublicFileAssetDescriptor & TAttachmentMetadata;
   const fileId = file.file_id;
   const setVisible = useSetRecoilState(store.artifactsVisibility);
   const setArtifacts = useSetRecoilState(store.artifactsState);
@@ -192,11 +192,9 @@ const ToolArtifactCard = memo(({ attachment, artifact }: ToolArtifactCardProps) 
   }, [artifact.id, artifact.type, fileId, consumeJustResolved, setCurrentArtifactId, setVisible]);
 
   const { handleDownload } = useAttachmentLink({
-    href: attachment.filepath ?? '',
+    href: attachment.url ?? '',
     filename: attachment.filename ?? '',
     file_id: file.file_id,
-    user: file.user,
-    source: file.source,
   });
 
   const handleOpen = () => {

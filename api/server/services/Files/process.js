@@ -41,6 +41,7 @@ const { LB_QueueAsyncCall } = require('~/server/utils/queue');
 const { getRetentionExpiry, getAgentFileRetentionExpiry } = require('./retention');
 const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
+const { toPublicFileDescriptor } = require('~/server/utils/files');
 const { STTService } = require('./Audio/STTService');
 const db = require('~/models');
 
@@ -486,7 +487,8 @@ const processImageFile = async ({ req, res, metadata, returnFile = false }) => {
   if (returnFile) {
     return result;
   }
-  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.status(200).json({ message: 'File uploaded and processed successfully', ...toPublicFileDescriptor(result, baseUrl) });
 };
 
 /**
@@ -648,7 +650,8 @@ const processFileUpload = async ({ req, res, metadata }) => {
     },
     true,
   );
-  res.status(200).json({ message: 'File uploaded and processed successfully', ...result });
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.status(200).json({ message: 'File uploaded and processed successfully', ...toPublicFileDescriptor(result, baseUrl) });
 };
 
 /**
@@ -658,7 +661,7 @@ const processFileUpload = async ({ req, res, metadata }) => {
  *
  * @param {Object} params - The parameters object.
  * @param {ServerRequest} params.req - The Express request object.
- * @param {Express.Response} params.res - The Express response object.
+ * @param {Express.Response} params.res - The response object.
  * @param {FileMetadata} params.metadata - Additional metadata for the file.
  * @returns {Promise<void>}
  */
@@ -786,9 +789,10 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
         });
       }
       const result = await db.createFile(fileInfo, true);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
       return res
         .status(200)
-        .json({ message: 'Agent file uploaded and processed successfully', ...result });
+        .json({ message: 'Agent file uploaded and processed successfully', ...toPublicFileDescriptor(result, baseUrl) });
     };
 
     const fileConfig = mergeFileConfig(appConfig.fileConfig);
@@ -985,7 +989,8 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
 
   const result = await db.createFile(fileInfo, true);
 
-  res.status(200).json({ message: 'Agent file uploaded and processed successfully', ...result });
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.status(200).json({ message: 'Agent file uploaded and processed successfully', ...toPublicFileDescriptor(result, baseUrl) });
 };
 
 /**

@@ -128,7 +128,7 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
           data.temp_file_id,
           {
             progress: 0.9,
-            filepath: data.filepath,
+            url: data.url,
           },
           assistant_id ? true : false,
         );
@@ -145,12 +145,11 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
               progress: 1,
               file_id: data.file_id,
               temp_file_id: data.temp_file_id,
-              filepath: data.filepath,
+              url: data.url,
               type: data.type,
               height: data.height,
               width: data.width,
               filename: data.filename,
-              source: data.source,
               embedded: data.embedded,
             },
             assistant_id ? true : false,
@@ -326,7 +325,7 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
           file_id,
           file: originalFile,
           type: originalFile.type,
-          preview: initialPreview,
+          thumbnailUrl: initialPreview,
           progress: 0.1, // Show as processing
           size: originalFile.size,
         };
@@ -403,7 +402,7 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
             ...initialExtendedFile,
             file: finalProcessedFile,
             type: finalProcessedFile.type,
-            preview: newPreview,
+            thumbnailUrl: newPreview,
             progress: 0.5, // Processing complete, ready for upload
             size: finalProcessedFile.size,
           };

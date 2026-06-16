@@ -12,7 +12,6 @@ import type {
   TAssignConversationToProjectResponse,
 } from 'librechat-data-provider';
 import store from '~/store';
-import { useConversationCache } from '../Conversations';
 
 export const useCreateProjectMutation = (): UseMutationResult<
   TChatProject,
@@ -44,12 +43,12 @@ export const useUpdateProjectMutation = (): UseMutationResult<
 };
 
 export const useDeleteProjectMutation = (): UseMutationResult<
+  TDeleteChatProjectResponse,
   unknown,
-  unknown,
-  string
+  string,
+  unknown
 > => {
   const queryClient = useQueryClient();
-  const cache = useConversationCache();
   const clearActiveConversationProject = useRecoilCallback(
     ({ snapshot, set }) =>
       async (projectId: string) => {
@@ -74,7 +73,7 @@ export const useDeleteProjectMutation = (): UseMutationResult<
       // refetches (→ not-found) rather than rendering stale cache within `cacheTime`.
       queryClient.removeQueries([QueryKeys.project, projectId], { type: 'inactive' });
       queryClient.invalidateQueries([QueryKeys.projects]);
-      cache.invalidateLists({ refetchFirstPageOnly: false });
+      queryClient.invalidateQueries([QueryKeys.allConversations]);
     },
   });
 };
@@ -86,7 +85,6 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
   unknown
 > => {
   const queryClient = useQueryClient();
-  const cache = useConversationCache();
   const updateActiveConversation = useRecoilCallback(
     ({ set }) =>
       (conversation: TConversation) => {
@@ -105,40 +103,20 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
     (payload: TAssignConversationToProjectRequest) =>
       dataService.assignConversationToProject(payload),
     {
-      onMutate: async (payload) => {
-        const context = await cache.optimisticUpdate(
-          payload.conversationId,
-          (c) => {
-            c.updateConversation(
-              payload.conversationId,
-              (convo) => ({ ...convo, chatProjectId: payload.projectId }),
-              { moveToTop: true },
-            );
-          },
-        );
-        return context;
-      },
-      onError: (_err, _vars, context) => {
-        if (context?.rollback) {
-          context.rollback();
-        }
-      },
       onSuccess: (result) => {
         updateActiveConversation(result.conversation);
-        if (result.conversation.conversationId) {
-          cache.updateConversation(
-            result.conversation.conversationId,
-            () => result.conversation,
-            { moveToTop: true },
-          );
-        }
+        queryClient.setQueryData(
+          [QueryKeys.conversation, result.conversation.conversationId],
+          result.conversation,
+        );
         [result.previousProjectId, result.projectId].forEach((projectId) => {
           if (projectId) {
-            cache.invalidateProject(projectId);
+            queryClient.invalidateQueries([QueryKeys.project, projectId]);
           }
         });
         queryClient.invalidateQueries([QueryKeys.projects]);
-        cache.invalidateLists({ refetchFirstPageOnly: true, includeProjects: true });
+        queryClient.invalidateQueries([QueryKeys.allConversations]);
+        queryClient.invalidateQueries([QueryKeys.projectConversations]);
       },
     },
   );

@@ -2,12 +2,12 @@
 import { ArrowUpDown } from 'lucide-react';
 import { Button } from '@librechat/client';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { TFile } from 'librechat-data-provider';
+import type { PublicFileAssetDescriptor } from 'librechat-data-provider';
 import PanelFileCell from './PanelFileCell';
 import { useLocalize } from '~/hooks';
 import { formatDate } from '~/utils';
 
-export const columns: ColumnDef<TFile | undefined>[] = [
+export const columns: ColumnDef<PublicFileAssetDescriptor | undefined>[] = [
   {
     accessorKey: 'filename',
     header: ({ column }) => {

@@ -59,7 +59,7 @@ const baseAttachment = (overrides: Partial<TAttachment> = {}): TAttachment =>
   ({
     file_id: 'file-1',
     filename: 'unset',
-    filepath: '/files/file-1',
+    url: '/files/file-1',
     type: 'application/octet-stream',
     ...overrides,
   }) as TAttachment;
@@ -165,7 +165,7 @@ describe('LogContent attachment routing', () => {
       file_id: 'x-expired',
       filename: 'slides.pptx',
       text: '<!DOCTYPE html><body><ol><li>Slide 1</li></ol></body>',
-      expiresAt: Date.now() - 60_000,
+      expiresAt: new Date(Date.now() - 60_000),
     });
     renderWith(<LogContent output="" attachments={[expired]} />);
     // No panel card and no log-link (the expired branch returns plain text).
@@ -181,7 +181,7 @@ describe('LogContent attachment routing', () => {
       file_id: 'x-fresh',
       filename: 'index.html',
       text: '<h1>hi</h1>',
-      expiresAt: Date.now() + 60_000,
+      expiresAt: new Date(Date.now() + 60_000),
     } as Partial<TAttachment>);
     renderWith(<LogContent output="" attachments={[fresh]} />);
     expect(screen.getByRole('button', { pressed: true })).toBeInTheDocument();

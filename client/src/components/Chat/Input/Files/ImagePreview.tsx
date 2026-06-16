@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@librechat/client';
 import { Maximize2, X } from 'lucide-react';
-import { FileSources } from 'librechat-data-provider';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import ProgressCircle from './ProgressCircle';
-import SourceIcon from './SourceIcon';
 import { cn } from '~/utils';
 
 type styleProps = {
@@ -19,14 +17,12 @@ const ImagePreview = ({
   url,
   progress = 1,
   className = '',
-  source,
   alt = 'Preview image',
 }: {
   imageBase64?: string;
   url?: string;
   progress?: number;
   className?: string;
-  source?: FileSources;
   alt?: string;
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -152,7 +148,6 @@ const ImagePreview = ({
             />
           </div>
         )}
-        <SourceIcon source={source} aria-label={source ? `Source: ${source}` : undefined} />
       </button>
 
       <DialogPrimitive.Root open={isModalOpen} onOpenChange={handleOpenChange}>
