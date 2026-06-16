@@ -1,11 +1,9 @@
 import { Link } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useLocalize, useNavigateToConvo } from '~/hooks';
-import { conversationCacheService } from '~/data-provider';
-import store from '~/store';
+import { useConversationCache } from '~/data-provider';
 export default function SearchButtons({ message }) {
     const localize = useLocalize();
-    const queryClient = useQueryClient();
+    const cache = useConversationCache();
     const { navigateToConvo } = useNavigateToConvo();
     const conversationId = message.conversationId ?? '';
     const clickHandler = async (event) => {
@@ -14,7 +12,10 @@ export default function SearchButtons({ message }) {
             return;
         }
         let title = message.title ?? '';
-        const cachedConvo = conversationCacheService.findConversation(queryClient, conversationId);
+        let cachedConvo = cache.getSingleConversation(conversationId);
+        if (!cachedConvo) {
+            cachedConvo = cache.findConversation(conversationId);
+        }
         if (!title) {
             title = cachedConvo?.title ?? '';
         }

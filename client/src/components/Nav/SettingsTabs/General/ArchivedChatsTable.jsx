@@ -25,7 +25,7 @@ export default function ArchivedChatsTable({ onOpenChange, }) {
     const isSmallScreen = useMediaQuery('(max-width: 768px)');
     const [queryParams, setQueryParams] = useState(DEFAULT_PARAMS);
     const [deleteConversation, setDeleteConversation] = useState(null);
-    const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, isLoading } = useConversationsInfiniteQuery(queryParams, {
+    const { conversations, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, isLoading } = useConversationsInfiniteQuery(queryParams, {
         staleTime: 0,
         cacheTime: 5 * 60 * 1000,
         refetchOnWindowFocus: false,
@@ -44,12 +44,7 @@ export default function ArchivedChatsTable({ onOpenChange, }) {
             debouncedFilterChange.cancel();
         };
     }, [debouncedFilterChange]);
-    const allConversations = useMemo(() => {
-        if (!data?.pages) {
-            return [];
-        }
-        return data.pages.flatMap((page) => page?.conversations?.filter(Boolean) ?? []);
-    }, [data?.pages]);
+    const allConversations = conversations.filter(Boolean);
     const deleteMutation = useDeleteConversationMutation({
         onSuccess: async () => {
             setIsDeleteOpen(false);

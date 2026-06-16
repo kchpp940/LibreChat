@@ -1,23 +1,8 @@
-import { QueryClient, InfiniteData } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { QueryKeys, dataService } from 'librechat-data-provider';
-import type {
-  ConversationListParams,
-  ConversationListResponse,
-  ConversationData,
-} from 'librechat-data-provider';
-import type { TConversation, TConversationTag } from 'librechat-data-provider';
-
-export type ConversationListQueryKey = [
-  typeof QueryKeys.allConversations | typeof QueryKeys.archivedConversations,
-  ConversationListParams,
-];
-
-export type ConversationSingleQueryKey = [typeof QueryKeys.conversation, string];
-
-export type ConversationQueryKey = ConversationListQueryKey | ConversationSingleQueryKey;
 
 export const convoQueryKeys = {
-  list: (params: ConversationListParams = {}): ConversationListQueryKey => [
+  list: (params = {}) => [
     params.isArchived ? QueryKeys.archivedConversations : QueryKeys.allConversations,
     {
       isArchived: params.isArchived,
@@ -29,34 +14,26 @@ export const convoQueryKeys = {
     },
   ],
 
-  single: (conversationId: string): ConversationSingleQueryKey => [
-    QueryKeys.conversation,
-    conversationId,
-  ],
+  single: (conversationId) => [QueryKeys.conversation, conversationId],
 
-  allLists: (): [typeof QueryKeys.allConversations] => [QueryKeys.allConversations],
+  allLists: () => [QueryKeys.allConversations],
 
-  allArchived: (): [typeof QueryKeys.archivedConversations] => [QueryKeys.archivedConversations],
+  allArchived: () => [QueryKeys.archivedConversations],
 
-  allConversations: (): [typeof QueryKeys.allConversations | typeof QueryKeys.archivedConversations] => [
-    QueryKeys.allConversations,
-  ],
+  allConversations: () => [QueryKeys.allConversations],
 
-  tags: (): [typeof QueryKeys.conversationTags] => [QueryKeys.conversationTags],
-} as const;
+  tags: () => [QueryKeys.conversationTags],
+};
 
-function getConversationQueryProjectId(queryKey: readonly unknown[]): string | undefined {
+function getConversationQueryProjectId(queryKey) {
   const params = queryKey[1];
   if (!params || typeof params !== 'object') {
     return undefined;
   }
-  return (params as { projectId?: string }).projectId;
+  return params.projectId;
 }
 
-function conversationMatchesProjectQuery(
-  queryKey: readonly unknown[],
-  conversation: Pick<TConversation, 'chatProjectId'>,
-): boolean {
+function conversationMatchesProjectQuery(queryKey, conversation) {
   const projectId = getConversationQueryProjectId(queryKey);
   if (!projectId) {
     return true;
@@ -67,30 +44,27 @@ function conversationMatchesProjectQuery(
   return conversation.chatProjectId === projectId;
 }
 
-export function findConversationInData(
-  data: ConversationData | undefined,
-  conversationId: string,
-): TConversation | undefined {
+export function findConversationInData(data, conversationId) {
   if (!data) {
     return undefined;
   }
   for (const page of data.pages) {
     const found = page.conversations.find((c) => c.conversationId === conversationId);
     if (found) {
-      return found as TConversation;
+      return found;
     }
   }
   return undefined;
 }
 
-export function flattenConversations(data: ConversationData | undefined): TConversation[] {
+export function flattenConversations(data) {
   if (!data?.pages) {
     return [];
   }
-  return data.pages.flatMap((page) => (page.conversations as TConversation[]) ?? []);
+  return data.pages.flatMap((page) => page.conversations ?? []);
 }
 
-export function hasNextPage(data: ConversationData | undefined): boolean {
+export function hasNextPage(data) {
   if (!data?.pages || data.pages.length === 0) {
     return false;
   }
@@ -98,11 +72,7 @@ export function hasNextPage(data: ConversationData | undefined): boolean {
   return lastPage?.nextCursor !== null && lastPage?.nextCursor !== undefined;
 }
 
-function updateInfiniteConvoPage(
-  data: ConversationData | undefined,
-  conversationId: string,
-  updater: (c: TConversation) => TConversation,
-): ConversationData | undefined {
+function updateInfiniteConvoPage(data, conversationId, updater) {
   if (!data) {
     return data;
   }
@@ -111,16 +81,13 @@ function updateInfiniteConvoPage(
     pages: data.pages.map((page) => ({
       ...page,
       conversations: page.conversations.map((c) =>
-        c.conversationId === conversationId ? updater(c as TConversation) : c,
+        c.conversationId === conversationId ? updater(c) : c,
       ),
     })),
   };
 }
 
-function removeFromInfinitePages(
-  data: ConversationData | undefined,
-  conversationId: string,
-): ConversationData | undefined {
+function removeFromInfinitePages(data, conversationId) {
   if (!data) {
     return data;
   }
@@ -135,10 +102,7 @@ function removeFromInfinitePages(
   };
 }
 
-function addToInfinitePages(
-  data: ConversationData | undefined,
-  newConversation: TConversation,
-): ConversationData {
+function addToInfinitePages(data, newConversation) {
   if (!data) {
     return {
       pageParams: [undefined],
@@ -160,11 +124,7 @@ function addToInfinitePages(
   };
 }
 
-function upsertAndBumpToTop(
-  data: ConversationData | undefined,
-  nextConvo: TConversation,
-  moveToTop = true,
-): ConversationData | undefined {
+function upsertAndBumpToTop(data, nextConvo, moveToTop = true) {
   if (!nextConvo.conversationId) {
     return data;
   }
@@ -207,7 +167,7 @@ function upsertAndBumpToTop(
     };
   }
 
-  const found = data.pages[pageIdx].conversations[convoIdx] as TConversation;
+  const found = data.pages[pageIdx].conversations[convoIdx];
   const updated = {
     ...found,
     ...nextConvo,
@@ -248,16 +208,12 @@ function upsertAndBumpToTop(
   return { ...data, pages };
 }
 
-export type OptimisticUpdateContext<TData = unknown> = {
-  previousData: Map<unknown[], unknown>;
-  rollback: () => void;
-  data?: TData;
-};
-
 export class ConversationCacheService {
-  constructor(private queryClient: QueryClient) {}
+  constructor(queryClient) {
+    this.queryClient = queryClient;
+  }
 
-  findAllListQueries(isArchived?: boolean): Array<{ queryKey: ConversationListQueryKey }> {
+  findAllListQueries(isArchived) {
     const baseKey =
       isArchived === true
         ? QueryKeys.archivedConversations
@@ -269,7 +225,7 @@ export class ConversationCacheService {
       .getQueryCache()
       .findAll([baseKey], { exact: false })
       .filter((q) => {
-        const key = q.queryKey as ConversationListQueryKey;
+        const key = q.queryKey;
         if (key[0] !== QueryKeys.allConversations && key[0] !== QueryKeys.archivedConversations) {
           return false;
         }
@@ -282,11 +238,11 @@ export class ConversationCacheService {
         return true;
       });
 
-    return queries as unknown as Array<{ queryKey: ConversationListQueryKey }>;
+    return queries;
   }
 
-  findConversation(conversationId: string): TConversation | undefined {
-    const singleQueryData = this.queryClient.getQueryData<TConversation>(
+  findConversation(conversationId) {
+    const singleQueryData = this.queryClient.getQueryData(
       convoQueryKeys.single(conversationId),
     );
     if (singleQueryData) {
@@ -295,7 +251,7 @@ export class ConversationCacheService {
 
     const allQueries = this.findAllListQueries();
     for (const { queryKey } of allQueries) {
-      const data = this.queryClient.getQueryData<ConversationData>(queryKey);
+      const data = this.queryClient.getQueryData(queryKey);
       const found = findConversationInData(data, conversationId);
       if (found) {
         return found;
@@ -305,14 +261,14 @@ export class ConversationCacheService {
     return undefined;
   }
 
-  addConversation(conversation: TConversation, isArchived = false): void {
+  addConversation(conversation, isArchived = false) {
     const queries = this.findAllListQueries(isArchived);
 
     for (const { queryKey } of queries) {
       if (!conversationMatchesProjectQuery(queryKey, conversation)) {
         continue;
       }
-      this.queryClient.setQueryData<ConversationData>(queryKey, (old) =>
+      this.queryClient.setQueryData(queryKey, (old) =>
         addToInfinitePages(old, conversation),
       );
     }
@@ -322,16 +278,12 @@ export class ConversationCacheService {
     }
   }
 
-  updateConversation(
-    conversationId: string,
-    updater: (c: TConversation) => TConversation,
-    options: { moveToTop?: boolean; isArchived?: boolean } = {},
-  ): void {
+  updateConversation(conversationId, updater, options = {}) {
     const { moveToTop = false, isArchived } = options;
     const queries = this.findAllListQueries(isArchived);
 
     for (const { queryKey } of queries) {
-      this.queryClient.setQueryData<ConversationData>(queryKey, (oldData) => {
+      this.queryClient.setQueryData(queryKey, (oldData) => {
         if (!oldData) {
           return oldData;
         }
@@ -351,17 +303,17 @@ export class ConversationCacheService {
     }
 
     const singleKey = convoQueryKeys.single(conversationId);
-    const current = this.queryClient.getQueryData<TConversation>(singleKey);
+    const current = this.queryClient.getQueryData(singleKey);
     if (current) {
       this.queryClient.setQueryData(singleKey, updater(current));
     }
   }
 
-  removeConversation(conversationId: string, isArchived?: boolean): void {
+  removeConversation(conversationId, isArchived) {
     const queries = this.findAllListQueries(isArchived);
 
     for (const { queryKey } of queries) {
-      this.queryClient.setQueryData<ConversationData>(queryKey, (old) =>
+      this.queryClient.setQueryData(queryKey, (old) =>
         removeFromInfinitePages(old, conversationId),
       );
     }
@@ -373,24 +325,24 @@ export class ConversationCacheService {
   }
 
   moveConversationBetweenLists(
-    conversationId: string,
-    fromArchived: boolean,
-    toArchived: boolean,
-    updatedConvo: TConversation,
-  ): void {
+    conversationId,
+    fromArchived,
+    toArchived,
+    updatedConvo,
+  ) {
     this.removeConversation(conversationId, fromArchived);
     this.addConversation(updatedConvo, toArchived);
   }
 
-  updateTags(conversationId: string, tags: string[]): void {
-    this.updateConversation(conversationId, (c) => ({ ...c, tags }) as TConversation);
+  updateTags(conversationId, tags) {
+    this.updateConversation(conversationId, (c) => ({ ...c, tags }));
   }
 
-  replaceTagInAllConversations(oldTag: string, newTag: string): void {
+  replaceTagInAllConversations(oldTag, newTag) {
     const queries = this.findAllListQueries();
 
     for (const { queryKey } of queries) {
-      this.queryClient.setQueryData<ConversationData>(queryKey, (oldData) => {
+      this.queryClient.setQueryData(queryKey, (oldData) => {
         if (!oldData) {
           return oldData;
         }
@@ -399,11 +351,10 @@ export class ConversationCacheService {
           pages: oldData.pages.map((page) => ({
             ...page,
             conversations: page.conversations.map((c) => {
-              const convo = c as TConversation;
-              if (convo.tags?.includes(oldTag)) {
+              if (c.tags?.includes(oldTag)) {
                 return {
-                  ...convo,
-                  tags: convo.tags.map((t) => (t === oldTag ? newTag : t)),
+                  ...c,
+                  tags: c.tags.map((t) => (t === oldTag ? newTag : t)),
                 };
               }
               return c;
@@ -418,11 +369,11 @@ export class ConversationCacheService {
       .findAll([QueryKeys.conversation], { exact: false });
 
     for (const query of allSingleQueries) {
-      const key = query.queryKey as ConversationSingleQueryKey;
+      const key = query.queryKey;
       if (key[0] !== QueryKeys.conversation || typeof key[1] !== 'string') {
         continue;
       }
-      const convo = this.queryClient.getQueryData<TConversation>(key);
+      const convo = this.queryClient.getQueryData(key);
       if (convo?.tags?.includes(oldTag)) {
         this.queryClient.setQueryData(key, {
           ...convo,
@@ -432,12 +383,12 @@ export class ConversationCacheService {
     }
   }
 
-  removeTagFromAllConversations(tagToRemove: string): string[] {
-    const updatedIds: string[] = [];
+  removeTagFromAllConversations(tagToRemove) {
+    const updatedIds = [];
     const queries = this.findAllListQueries();
 
     for (const { queryKey } of queries) {
-      this.queryClient.setQueryData<ConversationData>(queryKey, (oldData) => {
+      this.queryClient.setQueryData(queryKey, (oldData) => {
         if (!oldData) {
           return oldData;
         }
@@ -446,12 +397,11 @@ export class ConversationCacheService {
           pages: oldData.pages.map((page) => ({
             ...page,
             conversations: page.conversations.map((c) => {
-              const convo = c as TConversation;
-              if (convo.tags?.includes(tagToRemove)) {
-                updatedIds.push(convo.conversationId ?? '');
+              if (c.tags?.includes(tagToRemove)) {
+                updatedIds.push(c.conversationId ?? '');
                 return {
-                  ...convo,
-                  tags: convo.tags.filter((t) => t !== tagToRemove),
+                  ...c,
+                  tags: c.tags.filter((t) => t !== tagToRemove),
                 };
               }
               return c;
@@ -464,7 +414,7 @@ export class ConversationCacheService {
     const uniqueIds = [...new Set(updatedIds)];
     for (const id of uniqueIds) {
       const key = convoQueryKeys.single(id);
-      const convo = this.queryClient.getQueryData<TConversation>(key);
+      const convo = this.queryClient.getQueryData(key);
       if (convo?.tags?.includes(tagToRemove)) {
         this.queryClient.setQueryData(key, {
           ...convo,
@@ -476,12 +426,8 @@ export class ConversationCacheService {
     return uniqueIds;
   }
 
-  async optimisticUpdate<TResult = unknown>(
-    conversationId: string,
-    updateFn: (cache: ConversationCacheService) => TResult | Promise<TResult>,
-    options: { isArchived?: boolean } = {},
-  ): Promise<OptimisticUpdateContext<TResult>> {
-    const previousData = new Map<unknown[], unknown>();
+  async optimisticUpdate(conversationId, updateFn, options = {}) {
+    const previousData = new Map();
 
     const { isArchived } = options;
 
@@ -498,12 +444,12 @@ export class ConversationCacheService {
     for (const { queryKey } of queries) {
       previousData.set(
         queryKey,
-        this.queryClient.getQueryData<ConversationData>(queryKey),
+        this.queryClient.getQueryData(queryKey),
       );
     }
 
     const singleKey = convoQueryKeys.single(conversationId);
-    const singleData = this.queryClient.getQueryData<TConversation>(singleKey);
+    const singleData = this.queryClient.getQueryData(singleKey);
     if (singleData) {
       previousData.set(singleKey, singleData);
     }
@@ -512,20 +458,18 @@ export class ConversationCacheService {
 
     const rollback = () => {
       previousData.forEach((prevData, key) => {
-        this.queryClient.setQueryData(key as unknown[], prevData);
+        this.queryClient.setQueryData(key, prevData);
       });
     };
 
     return { previousData, rollback, data };
   }
 
-  invalidateLists(
-    options: { isArchived?: boolean; refetchFirstPageOnly?: boolean; includeProjects?: boolean } = {},
-  ): void {
+  invalidateLists(options = {}) {
     const { isArchived, refetchFirstPageOnly = true, includeProjects = true } = options;
 
     const invalidateOptions = refetchFirstPageOnly
-      ? { refetchPage: (_: unknown, index: number) => index === 0 }
+      ? { refetchPage: (_, index) => index === 0 }
       : undefined;
 
     if (isArchived === true || isArchived === undefined) {
@@ -548,52 +492,44 @@ export class ConversationCacheService {
     }
   }
 
-  invalidateProject(projectId?: string | null): void {
+  invalidateProject(projectId) {
     if (projectId) {
       this.queryClient.invalidateQueries([QueryKeys.project, projectId]);
     }
   }
 
-  invalidateTags(): void {
+  invalidateTags() {
     this.queryClient.invalidateQueries(convoQueryKeys.tags());
   }
 
-  getTags(): TConversationTag[] | undefined {
-    return this.queryClient.getQueryData<TConversationTag[]>(convoQueryKeys.tags());
+  getTags() {
+    return this.queryClient.getQueryData(convoQueryKeys.tags());
   }
 
-  async fetchConversation(conversationId: string): Promise<TConversation> {
+  async fetchConversation(conversationId) {
     return this.queryClient.fetchQuery({
       queryKey: convoQueryKeys.single(conversationId),
       queryFn: () => dataService.getConversationById(conversationId),
     });
   }
 
-  getSingleConversation(conversationId: string): TConversation | undefined {
-    return this.queryClient.getQueryData<TConversation>(convoQueryKeys.single(conversationId));
+  getSingleConversation(conversationId) {
+    return this.queryClient.getQueryData(convoQueryKeys.single(conversationId));
   }
 
-  setSingleConversation(
-    conversationId: string,
-    updater: TConversation | ((prev: TConversation | undefined) => TConversation | undefined),
-  ): void {
+  setSingleConversation(conversationId, updater) {
     if (typeof updater === 'function') {
-      this.queryClient.setQueryData<TConversation>(
-        convoQueryKeys.single(conversationId),
-        updater as (prev: TConversation | undefined) => TConversation | undefined,
-      );
+      this.queryClient.setQueryData(convoQueryKeys.single(conversationId), updater);
     } else {
-      this.queryClient.setQueryData<TConversation>(convoQueryKeys.single(conversationId), updater);
+      this.queryClient.setQueryData(convoQueryKeys.single(conversationId), updater);
     }
   }
 
-  removeSingleConversation(conversationId: string): void {
+  removeSingleConversation(conversationId) {
     this.queryClient.removeQueries({ queryKey: convoQueryKeys.single(conversationId) });
   }
 }
 
-export function useConversationCacheService(
-  queryClient: QueryClient,
-): ConversationCacheService {
+export function useConversationCacheService(queryClient) {
   return new ConversationCacheService(queryClient);
 }

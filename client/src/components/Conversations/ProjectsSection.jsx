@@ -113,10 +113,8 @@ const ProjectChatsInline = memo(function ProjectChatsInline({ projectId, toggleN
     const localize = useLocalize();
     const { data: activeJobsData } = useActiveJobs();
     const activeJobIds = useMemo(() => new Set(activeJobsData?.activeJobIds ?? []), [activeJobsData?.activeJobIds]);
-    const { data, isLoading } = useConversationsInfiniteQuery({ projectId, sortBy: 'updatedAt', sortDirection: 'desc' }, { staleTime: 30000, cacheTime: 300000 });
-    const conversations = useMemo(() => (data?.pages.flatMap((page) => page.conversations) ?? []).filter(Boolean), [data?.pages]);
-    const hasMore = conversations.length > INLINE_CHAT_LIMIT ||
-        (data?.pages[data.pages.length - 1]?.nextCursor ?? null) != null;
+    const { conversations, hasNext, isLoading } = useConversationsInfiniteQuery({ projectId, sortBy: 'updatedAt', sortDirection: 'desc' }, { staleTime: 30000, cacheTime: 300000 });
+    const hasMore = conversations.length > INLINE_CHAT_LIMIT || hasNext;
     const visible = conversations.slice(0, INLINE_CHAT_LIMIT);
     if (isLoading && conversations.length === 0) {
         return (<div className="flex justify-start py-1.5 pl-2">

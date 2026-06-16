@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { LocalStorageKeys } from 'librechat-data-provider';
+import { LocalStorageKeys, QueryKeys } from 'librechat-data-provider';
 import {
   format,
   isToday,
@@ -12,7 +12,7 @@ import {
 } from 'date-fns';
 import type { TConversation, GroupedConversations } from 'librechat-data-provider';
 import type { InfiniteData } from '@tanstack/react-query';
-import { conversationCacheService } from '~/data-provider';
+import { ConversationCacheService } from '~/data-provider/Conversations';
 
 // Date group helpers
 export const dateKeys = {
@@ -236,14 +236,38 @@ export function addConversationToInfinitePages(
   };
 }
 
-/**
- * @deprecated Use conversationCacheService.addConversationToAllQueries from '~/data-provider' instead
- */
 export function addConversationToAllConversationsQueries(
   queryClient: QueryClient,
   newConversation: TConversation,
 ) {
-  conversationCacheService.addConversationToAllQueries(queryClient, newConversation);
+  // Find all keys that start with QueryKeys.allConversations
+  const queries = queryClient
+    .getQueryCache()
+    .findAll([QueryKeys.allConversations], { exact: false });
+
+  for (const query of queries) {
+    if (!conversationMatchesProjectQuery(query.queryKey, newConversation)) {
+      continue;
+    }
+    queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (old) => {
+      if (
+        !old ||
+        old.pages[0].conversations.some((c) => c.conversationId === newConversation.conversationId)
+      ) {
+        return old;
+      }
+      return {
+        ...old,
+        pages: [
+          {
+            ...old.pages[0],
+            conversations: [newConversation, ...old.pages[0].conversations],
+          },
+          ...old.pages.slice(1),
+        ],
+      };
+    });
+  }
 }
 
 export function removeConvoFromInfinitePages(
@@ -333,25 +357,42 @@ export function storeEndpointSettings(conversation: TConversation | null) {
 }
 
 /**
- * @deprecated Use conversationCacheService.addConversation from '~/data-provider' instead
+ * @deprecated Use `useConversationCache().addConversation()` instead.
+ * This compatibility wrapper will be removed in a future release.
  */
 export function addConvoToAllQueries(queryClient: QueryClient, newConvo: TConversation) {
-  conversationCacheService.addConversation(queryClient, newConvo);
+  const cache = new ConversationCacheService(queryClient);
+  cache.addConversation(newConvo);
 }
 
 /**
- * @deprecated Use conversationCacheService.upsertConversation from '~/data-provider' instead
+ * @deprecated Use `useConversationCache()` with `findConversation`, `updateConversation`, or `addConversation` instead.
+ * This compatibility wrapper will be removed in a future release.
  */
 export function upsertConvoInAllQueries(
   queryClient: QueryClient,
   nextConvo: TConversation,
   moveToTop = true,
 ) {
-  conversationCacheService.upsertConversation(queryClient, nextConvo, moveToTop);
+  if (!nextConvo.conversationId) {
+    return;
+  }
+  const cache = new ConversationCacheService(queryClient);
+  const existing = cache.findConversation(nextConvo.conversationId);
+  if (existing) {
+    cache.updateConversation(
+      nextConvo.conversationId,
+      (c) => ({ ...c, ...nextConvo }),
+      { moveToTop },
+    );
+  } else {
+    cache.addConversation(nextConvo);
+  }
 }
 
 /**
- * @deprecated Use conversationCacheService.updateConversation from '~/data-provider' instead
+ * @deprecated Use `useConversationCache().updateConversation()` instead.
+ * This compatibility wrapper will be removed in a future release.
  */
 export function updateConvoInAllQueries(
   queryClient: QueryClient,
@@ -359,12 +400,15 @@ export function updateConvoInAllQueries(
   updater: (c: TConversation) => TConversation,
   moveToTop = false,
 ) {
-  conversationCacheService.updateConversationInAllQueries(queryClient, conversationId, updater, moveToTop);
+  const cache = new ConversationCacheService(queryClient);
+  cache.updateConversation(conversationId, updater, { moveToTop });
 }
 
 /**
- * @deprecated Use conversationCacheService.removeConversationFromAllQueries from '~/data-provider' instead
+ * @deprecated Use `useConversationCache().removeConversation()` instead.
+ * This compatibility wrapper will be removed in a future release.
  */
 export function removeConvoFromAllQueries(queryClient: QueryClient, conversationId: string) {
-  conversationCacheService.removeConversationFromAllQueries(queryClient, conversationId);
+  const cache = new ConversationCacheService(queryClient);
+  cache.removeConversation(conversationId);
 }

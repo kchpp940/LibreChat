@@ -3,8 +3,8 @@ import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { request, Constants, QueryKeys, ErrorTypes, StepEvents, apiBaseUrl, createPayload, ViolationTypes, removeNullishValues, } from 'librechat-data-provider';
-import { clearAllDrafts, markStreamStartFailedMetadata } from '~/utils';
-import { conversationCacheService, useGetUserBalance, useGetStartupConfig, queueTitleGeneration, streamStatusQueryKey, } from '~/data-provider';
+import { clearAllDrafts, removeConvoFromAllQueries, markStreamStartFailedMetadata, } from '~/utils';
+import { useGetUserBalance, useGetStartupConfig, queueTitleGeneration, streamStatusQueryKey, useConversationCache, } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store, { useChatStreamDispatch } from '~/store';
@@ -222,9 +222,10 @@ const mergeResumeMessages = (messages, userMessage, responseMessage) => {
  */
 export default function useResumableSSE(submission, chatHelpers, isAddedRequest = false, runIndex = 0) {
     const queryClient = useQueryClient();
+    const cache = useConversationCache();
     const chatStreamDispatch = useChatStreamDispatch(runIndex);
     const { token, isAuthenticated } = useAuthContext();
-    const { setMessages, getMessages, setConversation, newConversation } = chatHelpers;
+    const { setMessages, getMessages, setConversation, setIsSubmitting, newConversation, setShowStopButton } = chatHelpers;
     /**
      * Optimistically add a job ID to the active jobs cache.
      * Called when generation starts.
@@ -249,18 +250,21 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         }
         const optimisticConversation = buildOptimisticConversation(currentSubmission, conversationId);
         const optimisticMessages = getOptimisticMessages(currentSubmission, conversationId, getMessages());
-        const currentConversation = conversationCacheService.getConversation(queryClient, conversationId);
-        if (!currentConversation) {
-            conversationCacheService.setConversation(queryClient, conversationId, optimisticConversation);
-        }
+        cache.setSingleConversation(
+            conversationId,
+            (current) => current ?? optimisticConversation,
+        );
+        cache.addConversation(optimisticConversation);
         queryClient.setQueryData([QueryKeys.messages, conversationId], optimisticMessages);
         queryClient.setQueryData([QueryKeys.messages, Constants.NEW_CONVO], optimisticMessages);
-        conversationCacheService.upsertConversation(queryClient, optimisticConversation);
         return hydrateSubmissionMessages(currentSubmission, conversationId);
-    }, [getMessages, queryClient]);
+    }, [getMessages, cache, queryClient]);
     const [_completed, setCompleted] = useState(new Set());
     const [streamId, setStreamId] = useState(null);
+    const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
+    const setAbortScroll = useSetRecoilState(store.abortScrollFamily(runIndex));
     const setSubmission = useSetRecoilState(store.submissionByIndex(runIndex));
+    const setShowStopButtonState = useSetRecoilState(store.showStopButtonByIndex(runIndex));
     const sseRef = useRef(null);
     const reconnectAttemptRef = useRef(0);
     const reconnectTimeoutRef = useRef(null);
@@ -273,8 +277,9 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         setCompleted,
         isAddedRequest,
         setConversation,
+        setIsSubmitting,
         newConversation,
-        runIndex,
+        setShowStopButton,
     });
     const { data: startupConfig } = useGetStartupConfig();
     const balanceQuery = useGetUserBalance({
@@ -308,7 +313,11 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         sseRef.current = sse;
         sse.addEventListener('open', () => {
             console.log('[ResumableSSE] Stream connected');
+            setAbortScroll(false);
             chatStreamDispatch({ type: 'STREAM_OPEN' });
+            // Restore UI state on successful connection (including reconnection)
+            setIsSubmitting(true);
+            setShowStopButtonState(true);
             reconnectAttemptRef.current = 0;
         });
         sse.addEventListener('message', (e) => {
@@ -347,6 +356,8 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                         conversationId: data.message?.conversationId,
                     });
                     createdStreamIdsRef.current.add(currentStreamId);
+                    const runId = v4();
+                    setActiveRunId(runId);
                     userMessage = {
                         ...userMessage,
                         ...data.message,
@@ -396,6 +407,9 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                         runSteps: data.resumeState?.runSteps?.length ?? 0,
                         pendingEvents: data.pendingEvents?.length ?? 0,
                     });
+
+                    const runId = v4();
+                    setActiveRunId(runId);
                     const resumeSubmission = buildResumeEventSubmission(currentSubmission, userMessage, data.resumeState);
                     currentSubmission = resumeSubmission;
                     submissionRef.current = resumeSubmission;
@@ -539,8 +553,10 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 }
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+                    removeConvoFromAllQueries(queryClient, currentStreamId);
                 }
+                setIsSubmitting(false);
+                setShowStopButtonState(false);
                 setStreamId(null);
                 optimisticStreamIdsRef.current.delete(currentStreamId);
                 createdStreamIdsRef.current.delete(currentStreamId);
@@ -579,7 +595,7 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 removeActiveJob(currentStreamId);
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+                    removeConvoFromAllQueries(queryClient, currentStreamId);
                 }
                 try {
                     const errorData = JSON.parse(e.data);
@@ -613,6 +629,8 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                         submission: currentSubmission,
                     });
                 }
+                setIsSubmitting(false);
+                setShowStopButtonState(false);
                 setStreamId(null);
                 optimisticStreamIdsRef.current.delete(currentStreamId);
                 createdStreamIdsRef.current.delete(currentStreamId);
@@ -649,8 +667,10 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
                 removeActiveJob(currentStreamId);
                 if (!createdStreamIdsRef.current.has(currentStreamId) &&
                     optimisticStreamIdsRef.current.has(currentStreamId)) {
-                    conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+                    removeConvoFromAllQueries(queryClient, currentStreamId);
                 }
+                setIsSubmitting(false);
+                setShowStopButtonState(false);
                 setStreamId(null);
                 optimisticStreamIdsRef.current.delete(currentStreamId);
                 createdStreamIdsRef.current.delete(currentStreamId);
@@ -696,6 +716,9 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         }
     }, [
         token,
+        setAbortScroll,
+        setActiveRunId,
+        setShowStopButton,
         finalHandler,
         createdHandler,
         attachmentHandler,
@@ -707,6 +730,7 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
         clearStepMaps,
         messageHandler,
         errorHandler,
+        setIsSubmitting,
         getMessages,
         setMessages,
         startupConfig?.balance?.enabled,
@@ -785,9 +809,11 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
             data: getStreamStartFailureData(errorData),
             submission: currentSubmission,
         });
+        setShowStopButtonState(false);
+        setIsSubmitting(false);
         setSubmission(null);
         return null;
-    }, [clearStepMaps, errorHandler, setSubmission]);
+    }, [clearStepMaps, errorHandler, setIsSubmitting, setShowStopButtonState, setSubmission]);
     useEffect(() => {
         if (!submission || Object.keys(submission).length === 0) {
             console.log('[ResumableSSE] No submission, cleaning up');
@@ -820,6 +846,9 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
             if (signal.aborted) {
                 return;
             }
+
+            setIsSubmitting(true);
+            setShowStopButtonState(true);
             chatStreamDispatch({
                 type: 'SUBMIT_START',
                 payload: {
@@ -892,6 +921,9 @@ export default function useResumableSSE(submission, chatHelpers, isAddedRequest 
             }
             // Clear handler maps to prevent memory leaks and stale state
             clearStepMaps();
+            // Reset UI state on cleanup - useResumeOnLoad will restore if needed
+            setIsSubmitting(false);
+            setShowStopButtonState(false);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [submission]);

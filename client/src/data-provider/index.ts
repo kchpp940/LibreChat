@@ -1,6 +1,5 @@
 export * from './Auth';
 export * from './Agents';
-export * from './Conversations';
 export * from './Endpoints';
 export * from './Skills';
 export * from './Files';
@@ -12,6 +11,7 @@ export * from './Projects';
 export * from './Tools';
 export * from './connection';
 export * from './Favorites';
+export * from './Conversations';
 export * from './mutations';
 export * from './prompts';
 export * from './queries';

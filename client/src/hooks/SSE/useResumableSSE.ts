@@ -27,6 +27,7 @@ import type { ActiveJobsResponse } from '~/data-provider';
 import type { TResData } from '~/common';
 import {
   clearAllDrafts,
+  removeConvoFromAllQueries,
   markStreamStartFailedMetadata,
 } from '~/utils';
 import {
@@ -34,7 +35,7 @@ import {
   useGetStartupConfig,
   queueTitleGeneration,
   streamStatusQueryKey,
-  conversationCacheService,
+  useConversationCache,
 } from '~/data-provider';
 import useEventHandlers, { buildCreatedInitialResponse } from './useEventHandlers';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -369,6 +370,7 @@ export default function useResumableSSE(
   runIndex = 0,
 ) {
   const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
 
   const { token, isAuthenticated } = useAuthContext();
@@ -414,10 +416,11 @@ export default function useResumableSSE(
         getMessages(),
       );
 
-      const currentConversation = conversationCacheService.getConversation(queryClient, conversationId);
-      if (!currentConversation) {
-        conversationCacheService.setConversation(queryClient, conversationId, optimisticConversation);
-      }
+      cache.setSingleConversation(
+        conversationId,
+        (current) => current ?? optimisticConversation,
+      );
+      cache.addConversation(optimisticConversation);
       queryClient.setQueryData<TMessage[]>(
         [QueryKeys.messages, conversationId],
         optimisticMessages,
@@ -426,11 +429,10 @@ export default function useResumableSSE(
         [QueryKeys.messages, Constants.NEW_CONVO],
         optimisticMessages,
       );
-      conversationCacheService.upsertConversation(queryClient, optimisticConversation);
 
       return hydrateSubmissionMessages(currentSubmission, conversationId);
     },
-    [getMessages, queryClient],
+    [getMessages, cache, queryClient],
   );
   const [_completed, setCompleted] = useState(new Set());
   const [streamId, setStreamId] = useState<string | null>(null);
@@ -779,7 +781,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+            removeConvoFromAllQueries(queryClient, currentStreamId);
           }
           setIsSubmitting(false);
           setShowStopButton(false);
@@ -824,7 +826,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+            removeConvoFromAllQueries(queryClient, currentStreamId);
           }
 
           try {
@@ -909,7 +911,7 @@ export default function useResumableSSE(
             !createdStreamIdsRef.current.has(currentStreamId) &&
             optimisticStreamIdsRef.current.has(currentStreamId)
           ) {
-            conversationCacheService.removeConversationFromAllQueries(queryClient, currentStreamId);
+            removeConvoFromAllQueries(queryClient, currentStreamId);
           }
           setIsSubmitting(false);
           setShowStopButton(false);

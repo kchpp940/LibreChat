@@ -2,14 +2,12 @@ import { useState, useId, useCallback, useMemo, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
 import { BookmarkPlusIcon } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Constants } from 'librechat-data-provider';
 import { BookmarkFilledIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { DropdownPopup, TooltipAnchor, Spinner, useToastContext } from '@librechat/client';
-import type { TConversationTag } from 'librechat-data-provider';
 import type { FC } from 'react';
 import type * as t from '~/common';
-import { useConversationTagsQuery, useTagConversationMutation, conversationCacheService } from '~/data-provider';
+import { useConversationTagsQuery, useTagConversationMutation, useConversationCache } from '~/data-provider';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
 import { BookmarkEditDialog } from '~/components/Bookmarks';
 import { useBookmarkSuccess, useLocalize } from '~/hooks';
@@ -19,7 +17,7 @@ import store from '~/store';
 
 const BookmarkMenu: FC = () => {
   const localize = useLocalize();
-  const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const { showToast } = useToastContext();
 
   const conversation = useRecoilValue(store.conversationByIndex(0)) || undefined;
@@ -76,7 +74,7 @@ const BookmarkMenu: FC = () => {
 
       logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags before setting', tags);
 
-      const allTags = conversationCacheService.getConversationTags(queryClient);
+      const allTags = cache.getTags() ?? [];
       const existingTags = allTags.map((t) => t.tag);
       const filteredTags = tags?.filter((t) => existingTags.includes(t));
 
@@ -92,7 +90,7 @@ const BookmarkMenu: FC = () => {
         tag,
       });
     },
-    [tags, conversationId, mutation, queryClient, showToast],
+    [tags, conversationId, mutation, cache, showToast],
   );
 
   const newBookmarkRef = useRef<HTMLButtonElement>(null);

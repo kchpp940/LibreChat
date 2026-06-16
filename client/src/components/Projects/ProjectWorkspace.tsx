@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowUpDown, Check, Folder, Plus } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QueryKeys } from 'librechat-data-provider';
-import type { ConversationListResponse } from 'librechat-data-provider';
 import { Spinner, DropdownPopup } from '@librechat/client';
 import type { MenuItemProps, RenderProp } from '~/common';
 import { useConversationsInfiniteQuery, useProjectQuery } from '~/data-provider';
@@ -69,7 +68,8 @@ export default function ProjectWorkspace() {
   );
 
   const {
-    data,
+    conversations,
+    hasNext: hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
     isLoading: isConversationsLoading,
@@ -85,20 +85,6 @@ export default function ProjectWorkspace() {
       cacheTime: 300000,
     },
   );
-
-  const conversations = useMemo(
-    () => data?.pages.flatMap((page) => page.conversations) ?? [],
-    [data?.pages],
-  );
-
-  const hasNextPage = useMemo(() => {
-    const pages = data?.pages;
-    if (!pages?.length) {
-      return false;
-    }
-    const lastPage: ConversationListResponse = pages[pages.length - 1];
-    return lastPage.nextCursor !== null;
-  }, [data?.pages]);
 
   const startProjectChat = useCallback(() => {
     if (!activeProjectId) {

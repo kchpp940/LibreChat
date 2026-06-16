@@ -3,7 +3,7 @@ import { useSetRecoilState, useRecoilValue } from 'recoil';
 import { useMediaQuery } from '@librechat/client';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
-import type { ConversationListResponse } from 'librechat-data-provider';
+import type { ConversationListResponse, ConversationData } from 'librechat-data-provider';
 import type { List } from 'react-virtualized';
 import {
   useLocalize,
@@ -39,7 +39,7 @@ const ConversationsSection = memo(() => {
 
   const search = useRecoilValue(store.search);
 
-  const { data, fetchNextPage, isFetchingNextPage, isLoading, isFetching } =
+  const { conversations, hasNext, fetchNextPage, isFetchingNextPage, isLoading, isFetching } =
     useConversationsInfiniteQuery(
       {
         tags: tags.length === 0 ? undefined : tags,
@@ -52,30 +52,18 @@ const ConversationsSection = memo(() => {
       },
     );
 
-  const computedHasNextPage = useMemo(() => {
-    if (data?.pages && data.pages.length > 0) {
-      const lastPage: ConversationListResponse = data.pages[data.pages.length - 1];
-      return lastPage.nextCursor !== null;
-    }
-    return false;
-  }, [data?.pages]);
-
   const conversationsRef = useRef<List | null>(null);
 
   const { moveToTop } = useNavScrolling<ConversationListResponse>({
     setShowLoading,
     fetchNextPage: async (options?) => {
-      if (computedHasNextPage) {
+      if (hasNext) {
         return fetchNextPage(options);
       }
       return Promise.resolve({} as InfiniteQueryObserverResult<ConversationListResponse, unknown>);
     },
     isFetchingNext: isFetchingNextPage,
   });
-
-  const conversations = useMemo(() => {
-    return data ? data.pages.flatMap((page) => page.conversations) : [];
-  }, [data]);
 
   const toggleNav = useCallback(() => {
     if (isSmallScreen) {
@@ -84,11 +72,11 @@ const ConversationsSection = memo(() => {
   }, [isSmallScreen, setSidebarExpanded]);
 
   const loadMoreConversations = useCallback(() => {
-    if (isFetchingNextPage || !computedHasNextPage) {
+    if (isFetchingNextPage || !hasNext) {
       return;
     }
     fetchNextPage();
-  }, [isFetchingNextPage, computedHasNextPage, fetchNextPage]);
+  }, [isFetchingNextPage, hasNext, fetchNextPage]);
 
   const [isSearchLoading, setIsSearchLoading] = useState(
     !!search.query && (search.isTyping || isLoading || isFetching),

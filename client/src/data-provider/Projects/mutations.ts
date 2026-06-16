@@ -12,7 +12,7 @@ import type {
   TAssignConversationToProjectResponse,
 } from 'librechat-data-provider';
 import store from '~/store';
-import { conversationCacheService } from '../Conversations/cacheService';
+import { useConversationCache } from '../Conversations';
 
 export const useCreateProjectMutation = (): UseMutationResult<
   TChatProject,
@@ -44,12 +44,12 @@ export const useUpdateProjectMutation = (): UseMutationResult<
 };
 
 export const useDeleteProjectMutation = (): UseMutationResult<
-  TDeleteChatProjectResponse,
   unknown,
-  string,
-  unknown
+  unknown,
+  string
 > => {
   const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const clearActiveConversationProject = useRecoilCallback(
     ({ snapshot, set }) =>
       async (projectId: string) => {
@@ -74,7 +74,7 @@ export const useDeleteProjectMutation = (): UseMutationResult<
       // refetches (→ not-found) rather than rendering stale cache within `cacheTime`.
       queryClient.removeQueries([QueryKeys.project, projectId], { type: 'inactive' });
       queryClient.invalidateQueries([QueryKeys.projects]);
-      conversationCacheService.invalidateConversations(queryClient, 'all');
+      cache.invalidateLists({ refetchFirstPageOnly: false });
     },
   });
 };
@@ -86,6 +86,7 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
   unknown
 > => {
   const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const updateActiveConversation = useRecoilCallback(
     ({ set }) =>
       (conversation: TConversation) => {
@@ -104,30 +105,40 @@ export const useAssignConversationToProjectMutation = (): UseMutationResult<
     (payload: TAssignConversationToProjectRequest) =>
       dataService.assignConversationToProject(payload),
     {
+      onMutate: async (payload) => {
+        const context = await cache.optimisticUpdate(
+          payload.conversationId,
+          (c) => {
+            c.updateConversation(
+              payload.conversationId,
+              (convo) => ({ ...convo, chatProjectId: payload.projectId }),
+              { moveToTop: true },
+            );
+          },
+        );
+        return context;
+      },
+      onError: (_err, _vars, context) => {
+        if (context?.rollback) {
+          context.rollback();
+        }
+      },
       onSuccess: (result) => {
         updateActiveConversation(result.conversation);
-        const convoId = result.conversation.conversationId ?? '';
-        if (convoId) {
-          conversationCacheService.setConversation(
-            queryClient,
-            convoId,
-            result.conversation,
-          );
-          conversationCacheService.updateConversation(
-            queryClient,
-            convoId,
+        if (result.conversation.conversationId) {
+          cache.updateConversation(
+            result.conversation.conversationId,
             () => result.conversation,
-            false,
+            { moveToTop: true },
           );
         }
         [result.previousProjectId, result.projectId].forEach((projectId) => {
           if (projectId) {
-            queryClient.invalidateQueries([QueryKeys.project, projectId]);
+            cache.invalidateProject(projectId);
           }
         });
         queryClient.invalidateQueries([QueryKeys.projects]);
-        conversationCacheService.invalidateConversations(queryClient, 'all');
-        conversationCacheService.invalidateProjectConversations(queryClient);
+        cache.invalidateLists({ refetchFirstPageOnly: true, includeProjects: true });
       },
     },
   );

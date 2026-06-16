@@ -1,14 +1,11 @@
 import { Link } from 'lucide-react';
-import { useRecoilValue } from 'recoil';
-import { useQueryClient } from '@tanstack/react-query';
 import type { TMessage, TConversation } from 'librechat-data-provider';
 import { useLocalize, useNavigateToConvo } from '~/hooks';
-import { conversationCacheService } from '~/data-provider';
-import store from '~/store';
+import { useConversationCache } from '~/data-provider';
 
 export default function SearchButtons({ message }: { message: TMessage }) {
   const localize = useLocalize();
-  const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const { navigateToConvo } = useNavigateToConvo();
   const conversationId = message.conversationId ?? '';
 
@@ -19,7 +16,10 @@ export default function SearchButtons({ message }: { message: TMessage }) {
     }
 
     let title = message.title ?? '';
-    const cachedConvo = conversationCacheService.findConversation(queryClient, conversationId);
+    let cachedConvo = cache.getSingleConversation(conversationId);
+    if (!cachedConvo) {
+      cachedConvo = cache.findConversation(conversationId);
+    }
     if (!title) {
       title = cachedConvo?.title ?? '';
     }

@@ -2,11 +2,10 @@ import { useState, useId, useCallback, useMemo, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
 import { BookmarkPlusIcon } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Constants } from 'librechat-data-provider';
 import { BookmarkFilledIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { DropdownPopup, TooltipAnchor, Spinner, useToastContext } from '@librechat/client';
-import { useConversationTagsQuery, useTagConversationMutation, conversationCacheService } from '~/data-provider';
+import { useConversationTagsQuery, useTagConversationMutation, useConversationCache } from '~/data-provider';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
 import { BookmarkEditDialog } from '~/components/Bookmarks';
 import { useBookmarkSuccess, useLocalize } from '~/hooks';
@@ -15,7 +14,7 @@ import { cn, isTemporaryConversation, logger } from '~/utils';
 import store from '~/store';
 const BookmarkMenu = () => {
     const localize = useLocalize();
-    const queryClient = useQueryClient();
+    const cache = useConversationCache();
     const { showToast } = useToastContext();
     const conversation = useRecoilValue(store.conversationByIndex(0)) || undefined;
     const conversationId = conversation?.conversationId ?? '';
@@ -62,7 +61,7 @@ const BookmarkMenu = () => {
             return;
         }
         logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags before setting', tags);
-        const allTags = conversationCacheService.getConversationTags(queryClient);
+        const allTags = cache.getTags() ?? [];
         const existingTags = allTags.map((t) => t.tag);
         const filteredTags = tags?.filter((t) => existingTags.includes(t));
         logger.log('tag_mutation', 'BookmarkMenu - handleSubmit: tags after filtering', filteredTags);
@@ -74,7 +73,7 @@ const BookmarkMenu = () => {
             tags: newTags,
             tag,
         });
-    }, [tags, conversationId, mutation, queryClient, showToast]);
+    }, [tags, conversationId, mutation, cache, showToast]);
     const newBookmarkRef = useRef(null);
     const tagsCount = tags?.length ?? 0;
     const hasBookmarks = tagsCount > 0;

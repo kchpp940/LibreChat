@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   QueryKeys,
   Constants,
+  dataService,
   getEndpointField,
   getDefaultParamsEndpoint,
 } from 'librechat-data-provider';
@@ -22,12 +23,13 @@ import {
   logger,
 } from '~/utils';
 import { useApplyModelSpecEffects } from '~/hooks/Agents';
-import { startupConfigKey, conversationCacheService } from '~/data-provider';
+import { startupConfigKey, useConversationCache } from '~/data-provider';
 import store from '~/store';
 
 const useNavigateToConvo = (index = 0) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const cache = useConversationCache();
   const clearAllConversations = store.useClearConvoState();
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const setSubmission = useSetRecoilState(store.submissionByIndex(index));
@@ -56,7 +58,7 @@ const useNavigateToConvo = (index = 0) => {
       return;
     }
     try {
-      const data = await conversationCacheService.fetchConversation(queryClient, conversationId);
+      const data = await cache.fetchConversation(conversationId);
       logger.log('conversation', 'Fetched fresh conversation data', data);
 
       const convoData = { ...data };
@@ -124,7 +126,7 @@ const useNavigateToConvo = (index = 0) => {
        * request when navigating in from a non-chat route (e.g. /projects).
        */
       queryClient.removeQueries([QueryKeys.messages, convo.conversationId]);
-      conversationCacheService.invalidateConversationDetail(queryClient, convo.conversationId);
+      cache.invalidateLists();
       fetchFreshData(convo);
     } else {
       setConversation(convo);

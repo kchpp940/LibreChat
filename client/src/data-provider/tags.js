@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { dataService } from 'librechat-data-provider';
-import { conversationCacheService } from './Conversations/cacheService';
+import { convoQueryKeys } from './Conversations';
 export const useGetConversationTags = (config) => {
-    return useQuery(conversationCacheService.getTagsQueryKey(), () => dataService.getConversationTags(), {
+    return useQuery(convoQueryKeys.tags(), () => dataService.getConversationTags(), {
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         refetchOnMount: false,
